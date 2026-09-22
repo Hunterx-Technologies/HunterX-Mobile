@@ -69,7 +69,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-
       <Tabs.Screen
         name="leaderboard"
         options={{
