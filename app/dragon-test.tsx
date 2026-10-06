@@ -37,7 +37,7 @@ export default function DragonTestScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView bounces={false} overScrollMode="never" contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Dragon Egg Reveal Sandbox</Text>
         <Text style={styles.subtitle}>
           Configure parameters and trigger the AAA reward animation sequence.

@@ -32,7 +32,7 @@ export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
             >
               {isActive ? (
                 <LinearGradient
-                  colors={['#CE1A24', '#8C0E15', '#380508']}
+                  colors={['#FE5B01', '#C44100', '#5C1D00']}
                   start={{ x: 0.5, y: 0 }}
                   end={{ x: 0.5, y: 1 }}
                   style={styles.activePillGradient}
@@ -71,14 +71,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  /* Active Glowing Red Pill */
+  /* Active Glowing Orange Pill */
   activePillGradient: {
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1.2,
-    borderColor: '#FF333E',
-    shadowColor: '#F12730',
+    borderColor: '#FE5B01',
+    shadowColor: '#FE5B01',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.75,
     shadowRadius: 8,

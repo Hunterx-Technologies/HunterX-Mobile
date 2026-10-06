@@ -140,6 +140,8 @@ export function AvatarSelectionModal({
               <Text style={styles.noAvatarsText}>No avatars available</Text>
             ) : (
               <ScrollView
+                bounces={false}
+                overScrollMode="never"
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.avatarCarouselContent}

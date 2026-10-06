@@ -7,7 +7,7 @@ export const palette = {
   hunterRed: '#F12730',
   textWhite: '#F4F5F6',
   textSecondary: '#8D98A3',
-  gold: '#F3AF72',
+  gold: '#FE5B01',
   silver: '#B8C6D1',
   bronze: '#C87852',
 
@@ -24,9 +24,9 @@ export const palette = {
 
   blue: '#5B8CFF',
   purple: '#9D4EDD',
-  orange: '#F12730',
-  orangeMuted: 'rgba(241, 39, 48, 0.65)',
-  goldMuted: 'rgba(243, 175, 114, 0.65)',
+  orange: '#FE5B01',
+  orangeMuted: 'rgba(254, 91, 1, 0.65)',
+  goldMuted: 'rgba(254, 91, 1, 0.65)',
   red: '#F12730',
   green: '#3DDC97',
 } as const;
@@ -41,25 +41,25 @@ export const colors = {
   textSecondary: palette.textSecondary,
   textMuted: palette.slate500,
 
-  accentPrimary: palette.hunterRed,
+  accentPrimary: palette.orange,
   accentSecondary: palette.purple,
-  accentOrange: palette.hunterRed,
-  accentGold: palette.gold,
-  accentGoldMuted: palette.goldMuted,
+  accentOrange: palette.orange,
+  accentGold: palette.orange,
+  accentGoldMuted: palette.orangeMuted,
 
   hunterRed: palette.hunterRed,
   surfaceRed: palette.surfaceRed,
 
   success: palette.green,
   danger: palette.hunterRed,
-  warning: palette.gold,
+  warning: palette.orange,
 
   // Loot / achievement rarity tiers
   rarity: {
     common: palette.textSecondary,
     rare: palette.blue,
     epic: palette.purple,
-    legendary: palette.gold,
+    legendary: palette.orange,
   },
 } as const;
 

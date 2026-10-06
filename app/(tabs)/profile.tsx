@@ -46,7 +46,7 @@ import { SystemSettingsModal } from '@/components/profile/SystemSettingsModal';
 import { WeeklyProgressCard } from '@/components/features/streaks/WeeklyProgressCard';
 
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { getCurrentUser, updateProfile, updateUserAvatar, type UpdateProfilePayload } from '@/services/api/auth.service';
+import { getCurrentUser, refreshAccessToken, updateProfile, updateUserAvatar, type UpdateProfilePayload } from '@/services/api/auth.service';
 import { getUserSettings } from '@/services/api/settings.service';
 import { useAvatarsReady } from '@/services/api/avatar.service';
 
@@ -148,6 +148,10 @@ export default function ProfileScreen() {
 
   const handleSaveProfileForm = async (updatedForm: EditProfileFormData) => {
     if (user && updatedForm.name.trim()) {
+      const initialGenderNormalized = (user.gender || '').trim().toUpperCase();
+      const updatedGenderNormalized = (updatedForm.gender || '').trim().toUpperCase();
+      const isGenderChanged = initialGenderNormalized !== updatedGenderNormalized;
+
       let heightInCm = 181;
       const heightVal = parseFloat(updatedForm.height);
       if (!isNaN(heightVal)) {
@@ -198,6 +202,15 @@ export default function ProfileScreen() {
       try {
         const updatedUserFromPatch = await updateProfile(payload);
         setUser(updatedUserFromPatch);
+
+        // Refresh access token if and only if gender changed, so new JWT claims update downstream (e.g. homepage avatar/images)
+        if (isGenderChanged) {
+          try {
+            await refreshAccessToken();
+          } catch (refreshErr) {
+            console.warn('[Profile] Failed to refresh access token after gender change:', refreshErr);
+          }
+        }
 
         // Fetch fresh user data from /auth/me to refresh UI state completely
         try {
@@ -397,6 +410,8 @@ export default function ProfileScreen() {
   return (
     <Screen style={styles.screen}>
       <ScrollView
+        bounces={false}
+        overScrollMode="never"
         ref={scrollRef}
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}

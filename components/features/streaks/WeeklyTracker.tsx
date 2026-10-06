@@ -10,6 +10,7 @@ import { getAvatarSource } from '@/app/(tabs)/profile';
 import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
 import type { WeekStatus } from '@/types/user';
 import { WeeklyProgressCard } from './WeeklyProgressCard';
+import { StreakBadgesCarousel, UserBadgeData } from './StreakBadgesCarousel';
 
 export type DayStatus = 'completed' | 'today' | 'missed' | 'locked' | 'freeze';
 
@@ -33,6 +34,7 @@ interface WeeklyTrackerProps {
   characterImageSource?: any;
   avatarUrl?: string | null;
   avatarId?: string | number | null;
+  userBadges?: UserBadgeData[];
   showBottomCard?: boolean;
   onDayPress?: (day: DayTrackerItem) => void;
 }
@@ -234,7 +236,8 @@ export function WeeklyTracker({
   characterImageSource = DEFAULT_CHARACTER_IMAGE,
   avatarUrl,
   avatarId,
-  showBottomCard = false,
+  userBadges,
+  showBottomCard = true,
   onDayPress,
 }: WeeklyTrackerProps) {
   const activeDays = useMemo(() => {
@@ -415,17 +418,8 @@ export function WeeklyTracker({
         </View>
       </View>
 
-      {showBottomCard && (
-        <WeeklyProgressCard
-          days={days}
-          weekStatus={weekStatus}
-          completedDaysCount={completedDaysCount}
-          totalDaysCount={totalDaysCount}
-          characterImageSource={characterImageSource}
-          avatarUrl={avatarUrl}
-          avatarId={avatarId}
-        />
-      )}
+      {/* STREAK BADGES CAROUSEL (7 BADGES, 4 IN VIEW RESPONSIVE) */}
+      <StreakBadgesCarousel currentStreak={streakDays} userBadges={userBadges} />
 
 
 

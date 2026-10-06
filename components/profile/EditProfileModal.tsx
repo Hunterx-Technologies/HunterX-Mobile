@@ -328,6 +328,8 @@ export function EditProfileModal({
         </View>
 
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           contentContainerStyle={styles.editProfileContainer}
           showsVerticalScrollIndicator={false}
         >
@@ -829,6 +831,8 @@ export function EditProfileModal({
 
               {pickerMode === 'YEAR' && (
                 <ScrollView
+                  bounces={false}
+                  overScrollMode="never"
                   style={styles.yearsScrollContainer}
                   contentContainerStyle={styles.yearsGrid}
                   showsVerticalScrollIndicator={false}

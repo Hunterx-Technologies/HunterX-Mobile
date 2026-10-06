@@ -335,6 +335,8 @@ export default function RewardsScreen() {
 
         {/* 2-COLUMN GPAY CARD GRID */}
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           ref={scrollRef}
           contentContainerStyle={styles.scrollGridContent}
           showsVerticalScrollIndicator={false}

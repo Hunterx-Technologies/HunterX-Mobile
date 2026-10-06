@@ -144,10 +144,11 @@ export default function LoginScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           ref={scrollRef}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          bounces={false}
         >
           {/* Hero Banner Header */}
           <View style={styles.heroBackground}>

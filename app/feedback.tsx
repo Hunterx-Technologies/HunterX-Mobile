@@ -384,6 +384,8 @@ export default function FeedbackScreen() {
         </View>
 
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           ref={scrollRef}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}

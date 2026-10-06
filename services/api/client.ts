@@ -55,26 +55,53 @@ apiClient.interceptors.request.use(async (config) => {
 
 let refreshPromise: Promise<string | null> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = await tokenStorage.getRefreshToken();
-  if (!refreshToken) return null;
+export async function refreshAccessToken(): Promise<string | null> {
+  const currentRefreshToken = await tokenStorage.getRefreshToken();
+  if (!currentRefreshToken) return null;
 
   try {
-    const { data } = await axios.post<ApiResponse<{ accessToken: string; refreshToken: string }>>(
-      `${env.apiUrl}/auth/refresh`,
-      { refreshToken }
-    );
-    if (!data.success) return null;
+    let res;
+    try {
+      res = await axios.post<ApiResponse<{ accessToken?: string; refreshToken?: string; access_token?: string; refresh_token?: string }>>(
+        `${env.apiUrl}/auth/refresh`,
+        { refreshToken: currentRefreshToken, refresh_token: currentRefreshToken }
+      );
+    } catch (err: any) {
+      if (err?.response?.status === 404 || err?.message?.includes('404')) {
+        res = await axios.post<ApiResponse<{ accessToken?: string; refreshToken?: string; access_token?: string; refresh_token?: string }>>(
+          `${env.apiUrl}/api/auth/refresh`,
+          { refreshToken: currentRefreshToken, refresh_token: currentRefreshToken }
+        );
+      } else {
+        throw err;
+      }
+    }
 
-    const accessToken = (data.data as any).access_token || (data.data as any).accessToken;
-    const refToken = (data.data as any).refresh_token || (data.data as any).refreshToken;
-    if (accessToken && refToken) {
-      await tokenStorage.setTokens(accessToken, refToken);
+    const resData = res.data;
+    if (resData && typeof resData === 'object' && 'success' in resData && resData.success === false) {
+      return null;
+    }
+
+    const accessToken =
+      (resData as any)?.data?.access_token ||
+      (resData as any)?.data?.accessToken ||
+      (resData as any)?.access_token ||
+      (resData as any)?.accessToken;
+
+    const newRefreshToken =
+      (resData as any)?.data?.refresh_token ||
+      (resData as any)?.data?.refreshToken ||
+      (resData as any)?.refresh_token ||
+      (resData as any)?.refreshToken ||
+      currentRefreshToken;
+
+    if (accessToken) {
+      await tokenStorage.setTokens(accessToken, newRefreshToken);
       return accessToken;
     }
     return null;
-  } catch {
-    await tokenStorage.clearTokens();
+  } catch (err) {
+    console.warn('[refreshAccessToken] Failed to refresh token:', err);
     return null;
   }
 }

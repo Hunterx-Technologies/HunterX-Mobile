@@ -1,21 +1,27 @@
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { fontFamilies } from '@/theme/typography';
 
-import { getAvatarSource } from '@/components/profile/AvatarSelectionModal';
+// Server-side thumbnail (see leaderboard.service.ts) is already a
+// Cloudinary derivative sized for this exact use — rendered as-is, with
+// a static fallback when a user has no avatar set, rather than routing
+// through getAvatarSource()/optimizeCloudinaryUrl() which would insert
+// a second, redundant transform segment on top of the one the backend
+// already applied.
+const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
+const BLURHASH = 'L6PZfSi_.AyE_3t7t7R**0o#DgR4';
 
 export interface LeaderboardHunter {
   id: string;
-  rank: number;
+  rank: number | null;
   displayName: string;
   score: number;
   level: number;
-  avatarUrl: string;
-  quote: string;
-  gender?: 'Male' | 'Female' | 'Other';
+  avatarUrl: string | null;
   isCurrentUser?: boolean;
 }
 
@@ -24,7 +30,7 @@ interface LeaderboardHunterRowProps {
   onPress?: (hunter: LeaderboardHunter) => void;
 }
 
-export const LeaderboardHunterRow: React.FC<LeaderboardHunterRowProps> = ({
+const LeaderboardHunterRowComponent: React.FC<LeaderboardHunterRowProps> = ({
   hunter,
   onPress,
 }) => {
@@ -32,48 +38,48 @@ export const LeaderboardHunterRow: React.FC<LeaderboardHunterRowProps> = ({
     return val.toLocaleString('en-US');
   };
 
-  const isTop3 = hunter.rank >= 1 && hunter.rank <= 3;
+  const isTop3 = hunter.rank !== null && hunter.rank >= 1 && hunter.rank <= 3;
   const isCurrentUser = hunter.isCurrentUser;
 
   // Themes for Top 3 Cards
   const getRankTheme = () => {
     if (hunter.rank === 1) {
       return {
-        accent: '#F59E0B',
-        border: 'rgba(245, 158, 11, 0.75)',
-        shadow: '#F59E0B',
-        gradient: ['rgba(217, 130, 15, 0.42)', 'rgba(80, 45, 10, 0.25)', '#0A0604', '#070402'] as const,
-        glowGradient: ['rgba(245, 158, 11, 0.38)', 'rgba(245, 158, 11, 0.1)', 'transparent'] as const,
-        levelBg: 'rgba(255, 255, 255, 0.04)',
-        levelBorder: 'rgba(255, 255, 255, 0.18)',
-        quoteColor: '#94A3B8',
-        chevronColor: '#CBD5E1',
+        accent: '#FFD700',
+        border: 'rgba(255, 215, 0, 0.85)',
+        shadow: '#FFD700',
+        gradient: ['rgba(255, 215, 0, 0.38)', 'rgba(160, 110, 0, 0.22)', '#0E0B04', '#080602'] as const,
+        glowGradient: ['rgba(255, 215, 0, 0.35)', 'rgba(255, 215, 0, 0.08)', 'transparent'] as const,
+        levelBg: 'rgba(255, 215, 0, 0.08)',
+        levelBorder: 'rgba(255, 215, 0, 0.30)',
+        quoteColor: '#FFD700',
+        chevronColor: '#FFD700',
       };
     }
     if (hunter.rank === 2) {
       return {
-        accent: '#CBD5E1',
-        border: 'rgba(180, 200, 225, 0.65)',
+        accent: '#E2E8F0',
+        border: 'rgba(226, 232, 240, 0.70)',
         shadow: '#94A3B8',
-        gradient: ['rgba(140, 175, 215, 0.38)', 'rgba(40, 60, 85, 0.22)', '#07090D', '#040508'] as const,
-        glowGradient: ['rgba(180, 210, 245, 0.35)', 'rgba(180, 210, 245, 0.08)', 'transparent'] as const,
+        gradient: ['rgba(148, 163, 184, 0.35)', 'rgba(51, 65, 85, 0.20)', '#07090D', '#040508'] as const,
+        glowGradient: ['rgba(226, 232, 240, 0.35)', 'rgba(226, 232, 240, 0.08)', 'transparent'] as const,
         levelBg: 'rgba(255, 255, 255, 0.04)',
-        levelBorder: 'rgba(255, 255, 255, 0.18)',
-        quoteColor: '#94A3B8',
+        levelBorder: 'rgba(226, 232, 240, 0.30)',
+        quoteColor: '#CBD5E1',
         chevronColor: '#CBD5E1',
       };
     }
     if (hunter.rank === 3) {
       return {
-        accent: '#D97706',
-        border: 'rgba(217, 119, 6, 0.75)',
-        shadow: '#D97706',
-        gradient: ['rgba(217, 100, 15, 0.42)', 'rgba(85, 35, 10, 0.25)', '#090503', '#060302'] as const,
-        glowGradient: ['rgba(234, 88, 12, 0.38)', 'rgba(217, 119, 6, 0.1)', 'transparent'] as const,
+        accent: '#CD7F32',
+        border: 'rgba(205, 127, 50, 0.75)',
+        shadow: '#CD7F32',
+        gradient: ['rgba(205, 127, 50, 0.38)', 'rgba(95, 50, 15, 0.22)', '#090503', '#060302'] as const,
+        glowGradient: ['rgba(205, 127, 50, 0.35)', 'rgba(205, 127, 50, 0.08)', 'transparent'] as const,
         levelBg: 'rgba(255, 255, 255, 0.04)',
-        levelBorder: 'rgba(255, 255, 255, 0.18)',
-        quoteColor: '#94A3B8',
-        chevronColor: '#CBD5E1',
+        levelBorder: 'rgba(205, 127, 50, 0.30)',
+        quoteColor: '#CD7F32',
+        chevronColor: '#CD7F32',
       };
     }
     return {
@@ -91,88 +97,7 @@ export const LeaderboardHunterRow: React.FC<LeaderboardHunterRowProps> = ({
 
   const rankTheme = getRankTheme();
 
-  // 1. CURRENT USER HIGHLIGHTED CARD (Rank 12)
-  if (isCurrentUser) {
-    const CardContent = (
-      <LinearGradient
-        colors={['rgba(180, 18, 30, 0.48)', 'rgba(80, 10, 18, 0.25)', '#0A0407', '#050204']}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={styles.currentUserCard}
-      >
-        {/* Left Atmospheric Ambient Glow Overlay */}
-        <LinearGradient
-          colors={['rgba(239, 68, 68, 0.42)', 'rgba(239, 68, 68, 0.1)', 'transparent']}
-          start={{ x: 0, y: 0.1 }}
-          end={{ x: 0.6, y: 0.9 }}
-          style={StyleSheet.absoluteFillObject}
-          pointerEvents="none"
-        />
-
-        {/* Rank Number (Italic Warm Gold) */}
-        <View style={styles.rankCol}>
-          <Text style={styles.currentUserRankText}>{hunter.rank}</Text>
-        </View>
-
-        {/* Avatar with Gold Glowing Ring */}
-        <View style={styles.avatarCol}>
-          <Image
-            source={getAvatarSource(hunter.avatarUrl)}
-            style={[styles.avatarImage, styles.currentUserAvatarBorder]}
-            resizeMode="cover"
-          />
-        </View>
-
-        {/* Name & Score */}
-        <View style={styles.hunterInfoCol}>
-          <Text style={styles.currentUserDisplayNameText} numberOfLines={1}>
-            {hunter.displayName}
-          </Text>
-          <View style={styles.scoreRow}>
-            <Text style={styles.fireIcon}>🔥</Text>
-            <Text style={styles.currentUserScoreText}>{formatScore(hunter.score)}</Text>
-          </View>
-        </View>
-
-        {/* Level Pill */}
-        <View style={styles.levelCol}>
-          <View style={styles.currentUserLevelPill}>
-            <Text style={styles.currentUserLevelText} numberOfLines={1}>
-              Lv. {hunter.level}
-            </Text>
-          </View>
-        </View>
-
-        {/* Quote / Tagline (Red "KEEP HUNTING") */}
-        <View style={styles.quoteCol}>
-          <Text style={styles.currentUserQuoteText} numberOfLines={2}>
-            {hunter.quote || 'KEEP\nHUNTING'}
-          </Text>
-        </View>
-
-        {/* Chevron (Clean White) */}
-        <View style={styles.chevronCol}>
-          <Ionicons name="chevron-forward" size={19} color="#FFFFFF" />
-        </View>
-      </LinearGradient>
-    );
-
-    if (onPress) {
-      return (
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => onPress(hunter)}
-          style={styles.cardWrapper}
-        >
-          {CardContent}
-        </TouchableOpacity>
-      );
-    }
-
-    return <View style={styles.cardWrapper}>{CardContent}</View>;
-  }
-
-  // 2. TOP 3 FEATURED CARDS (Ranks 1, 2, 3)
+  // 1. TOP 3 FEATURED CARDS (Ranks 1, 2, 3) - ALWAYS styled in Gold, Silver, Bronze
   if (isTop3) {
     const Top3Content = (
       <LinearGradient
@@ -196,58 +121,56 @@ export const LeaderboardHunterRow: React.FC<LeaderboardHunterRowProps> = ({
           pointerEvents="none"
         />
 
-        {/* Crown + Rank Number Column */}
+        {/* Icon + Rank Number Column */}
         <View style={styles.rankCol}>
-          <FontAwesome5 name="crown" size={15} color={rankTheme.accent} />
+          {hunter.rank === 1 ? (
+            <FontAwesome5 name="crown" size={15} color={rankTheme.accent} />
+          ) : hunter.rank === 2 ? (
+            <FontAwesome5 name="medal" size={15} color={rankTheme.accent} />
+          ) : (
+            <FontAwesome5 name="award" size={15} color={rankTheme.accent} />
+          )}
           <Text style={[styles.topRankText, { color: rankTheme.accent }]}>
-            {hunter.rank}
+            {hunter.rank ?? "–"}
           </Text>
         </View>
 
-        {/* Avatar with colored glowing border */}
-        <View style={styles.avatarCol}>
-          <Image
-            source={getAvatarSource(hunter.avatarUrl)}
+        {/* User Column (Avatar + Display Name) */}
+        <View style={styles.userCol}>
+          <ExpoImage
+            source={{ uri: hunter.avatarUrl || FALLBACK_AVATAR }}
             style={[
               styles.avatarImage,
               { borderColor: rankTheme.accent, borderWidth: 1.8 },
             ]}
-            resizeMode="cover"
+            contentFit="cover"
+            placeholder={{ blurhash: BLURHASH }}
+            cachePolicy="disk"
           />
-        </View>
-
-        {/* Name & Score */}
-        <View style={styles.hunterInfoCol}>
           <Text style={styles.displayNameText} numberOfLines={1}>
             {hunter.displayName}
           </Text>
-          <View style={styles.scoreRow}>
-            <Text style={styles.fireIcon}>🔥</Text>
-            <Text style={styles.top3ScoreText}>{formatScore(hunter.score)}</Text>
-          </View>
         </View>
 
-        {/* Level Pill */}
+        {/* Level Column */}
         <View style={styles.levelCol}>
           <View style={[styles.levelPill, { backgroundColor: rankTheme.levelBg, borderColor: rankTheme.levelBorder }]}>
             <Text style={styles.top3LevelText}>Lv. {hunter.level}</Text>
           </View>
         </View>
 
-        {/* Quote / Slogan */}
-        <View style={styles.quoteCol}>
-          <Text
-            style={[styles.quoteText, { color: rankTheme.quoteColor }]}
-            numberOfLines={2}
-          >
-            {hunter.quote}
-          </Text>
+        {/* XP Column */}
+        <View style={styles.xpCol}>
+          <Text style={[styles.lightningIcon, { color: rankTheme.accent }]}>⚡</Text>
+          <Text style={styles.xpScoreText}>{formatScore(hunter.score)}</Text>
         </View>
 
-        {/* Chevron (Right Forward Arrow) */}
-        <View style={styles.chevronCol}>
-          <Ionicons name="chevron-forward" size={19} color={rankTheme.chevronColor} />
-        </View>
+        {/* Chevron Column — only shown when the row is actually tappable */}
+        {onPress ? (
+          <View style={styles.chevronCol}>
+            <Ionicons name="chevron-forward" size={16} color={rankTheme.chevronColor} />
+          </View>
+        ) : null}
       </LinearGradient>
     );
 
@@ -266,59 +189,155 @@ export const LeaderboardHunterRow: React.FC<LeaderboardHunterRowProps> = ({
     return <View style={styles.cardWrapper}>{Top3Content}</View>;
   }
 
-  // 3. REGULAR HUNTER ROWS (Ranks 4 - 10+)
+  // 2. CURRENT USER HIGHLIGHTED CARD (Ranks 4+)
+  if (isCurrentUser) {
+    const CardContent = (
+      <LinearGradient
+        colors={['#2A1409', '#1C1E2A', '#141622', '#10121A']}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.currentUserCard}
+      >
+
+        {/* Rank Number Column (#) */}
+        <View style={styles.rankCol}>
+          <Text style={styles.currentUserRankText}>{hunter.rank ?? "–"}</Text>
+        </View>
+
+        {/* User Column (Avatar + Display Name) */}
+        <View style={styles.userCol}>
+          <ExpoImage
+            source={{ uri: hunter.avatarUrl || FALLBACK_AVATAR }}
+            style={[styles.avatarImage, styles.currentUserAvatarBorder]}
+            contentFit="cover"
+            placeholder={{ blurhash: BLURHASH }}
+            cachePolicy="disk"
+          />
+          <Text style={styles.currentUserDisplayNameText} numberOfLines={1}>
+            {hunter.displayName}
+          </Text>
+        </View>
+
+        {/* Level Column */}
+        <View style={styles.levelCol}>
+          <View style={styles.currentUserLevelPill}>
+            <Text style={styles.currentUserLevelText} numberOfLines={1}>
+              Lv. {hunter.level}
+            </Text>
+          </View>
+        </View>
+
+        {/* XP Column */}
+        <View style={styles.xpCol}>
+          <Text style={[styles.lightningIcon, { color: '#FE5B01' }]}>⚡</Text>
+          <Text style={styles.currentUserScoreText}>{formatScore(hunter.score)}</Text>
+        </View>
+
+        {/* Chevron Column — only shown when the row is actually tappable */}
+        {onPress ? (
+          <View style={styles.chevronCol}>
+            <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
+          </View>
+        ) : null}
+      </LinearGradient>
+    );
+
+    if (onPress) {
+      return (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => onPress(hunter)}
+          style={styles.cardWrapper}
+        >
+          {CardContent}
+        </TouchableOpacity>
+      );
+    }
+
+    return <View style={styles.cardWrapper}>{CardContent}</View>;
+  }
+
+  // 3. REGULAR & HIGHLIGHTED HUNTER ROWS (Ranks 4 - 10+)
+  const isHighlighted = Boolean(isCurrentUser);
+
   const RowContent = (
-    <View style={styles.regularRowContainer}>
-      {/* Rank Number */}
+    <View
+      style={[
+        styles.regularRowContainer,
+        isHighlighted && styles.highlightedRowContainer,
+      ]}
+    >
+      {/* Rank Number Column (#) */}
       <View style={styles.rankCol}>
-        <Text style={styles.regularRankText}>{hunter.rank}</Text>
+        <Text
+          style={[
+            styles.regularRankText,
+            isHighlighted && styles.highlightedRankText,
+          ]}
+        >
+          {hunter.rank ?? "–"}
+        </Text>
       </View>
 
-      {/* Avatar */}
-      <View style={styles.avatarCol}>
-        <Image
-          source={getAvatarSource(hunter.avatarUrl)}
-          style={styles.avatarImage}
-          resizeMode="cover"
+      {/* User Column (Avatar + Display Name) */}
+      <View style={styles.userCol}>
+        <ExpoImage
+          source={{ uri: hunter.avatarUrl || FALLBACK_AVATAR }}
+          style={[
+            styles.avatarImage,
+            isHighlighted && styles.highlightedAvatarBorder,
+          ]}
+          contentFit="cover"
+          placeholder={{ blurhash: BLURHASH }}
+          cachePolicy="disk"
         />
-      </View>
-
-      {/* Name & Score */}
-      <View style={styles.hunterInfoCol}>
         <Text style={styles.displayNameText} numberOfLines={1}>
           {hunter.displayName}
         </Text>
-        <View style={styles.scoreRow}>
-          <Text style={styles.fireIcon}>🔥</Text>
-          <Text style={styles.scoreText}>{formatScore(hunter.score)}</Text>
-        </View>
       </View>
 
-      {/* Level Pill */}
+      {/* Level Column (Level Pill) */}
       <View style={styles.levelCol}>
-        <View style={styles.levelPill}>
-          <Text style={styles.levelText}>Lv. {hunter.level}</Text>
+        <View
+          style={[
+            styles.levelPill,
+            isHighlighted && styles.highlightedLevelPill,
+          ]}
+        >
+          <Text
+            style={[
+              styles.levelText,
+              isHighlighted && styles.highlightedLevelText,
+            ]}
+          >
+            Lv. {hunter.level}
+          </Text>
         </View>
       </View>
 
-      {/* Quote */}
-      <View style={styles.quoteCol}>
-        <Text style={styles.quoteText} numberOfLines={2}>
-          {hunter.quote}
-        </Text>
+      {/* XP Column (Lightning + Numeric XP Score) */}
+      <View style={styles.xpCol}>
+        <Text style={styles.lightningIcon}>⚡</Text>
+        <Text style={styles.xpScoreText}>{formatScore(hunter.score)}</Text>
       </View>
 
-      {/* Chevron */}
-      <View style={styles.chevronCol}>
-        <Ionicons name="chevron-forward" size={18} color="#71717A" />
-      </View>
+      {/* Chevron Column — only shown when the row is actually tappable */}
+      {onPress ? (
+        <View style={styles.chevronCol}>
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={isHighlighted ? '#FE5B01' : '#71717A'}
+          />
+        </View>
+      ) : null}
     </View>
   );
 
   if (onPress) {
     return (
       <TouchableOpacity
-        activeOpacity={0.75}
+        activeOpacity={0.8}
         onPress={() => onPress(hunter)}
       >
         {RowContent}
@@ -328,6 +347,14 @@ export const LeaderboardHunterRow: React.FC<LeaderboardHunterRowProps> = ({
 
   return RowContent;
 };
+
+// Fixed row height (see REGULAR_ROW_HEIGHT) lets the FlatList in
+// leaderboard.tsx use getItemLayout for smooth scroll/jump-to-offset —
+// this component is only ever virtualized for rank > 3, so this is the
+// one height every virtualized row actually renders at.
+export const REGULAR_ROW_HEIGHT = 70;
+
+export const LeaderboardHunterRow = React.memo(LeaderboardHunterRowComponent);
 
 const styles = StyleSheet.create({
   /* CARD WRAPPER (TOP 3 & CURRENT USER) */
@@ -352,37 +379,51 @@ const styles = StyleSheet.create({
   currentUserCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 12,
-    borderRadius: 20,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#EF4444',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.65,
-    shadowRadius: 12,
-    elevation: 8,
+    borderColor: '#FE5B01',
+    backgroundColor: '#161822',
+    shadowColor: '#FE5B01',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
     overflow: 'hidden',
     position: 'relative',
   },
 
-  /* REGULAR ROW CONTAINER */
+  /* REGULAR ROW CONTAINER & HIGHLIGHTED STATE */
   regularRowContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 9,
-    paddingHorizontal: 28,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
+    marginHorizontal: 16,
+    marginVertical: 4,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: '#0E0E12',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  highlightedRowContainer: {
+    backgroundColor: '#161822',
+    borderColor: '#FE5B01',
+    borderWidth: 1.5,
+    shadowColor: '#FE5B01',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
   },
 
-  /* UNIFORM GRID COLUMNS */
+  /* RANK COLUMN (#) */
   rankCol: {
-    width: 26,
+    width: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
-    gap: 3,
+    marginRight: 6,
   },
   topRankText: {
     fontFamily: fontFamilies.bold,
@@ -391,9 +432,13 @@ const styles = StyleSheet.create({
   },
   regularRankText: {
     fontFamily: fontFamilies.bold,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
-    color: '#A1A1AA',
+    color: '#E2E8F0',
+  },
+  highlightedRankText: {
+    color: '#FE5B01',
+    fontWeight: '900',
   },
   currentUserRankText: {
     fontFamily: fontFamilies.boldItalic,
@@ -406,7 +451,17 @@ const styles = StyleSheet.create({
     textShadowRadius: 8,
   },
 
-  /* AVATAR COLUMN */
+  /* USER COLUMN (AVATAR + NAME) */
+  userCol: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  hunterInfoCol: {
+    width: 98,
+    justifyContent: 'center',
+  },
   avatarCol: {
     width: 44,
     height: 44,
@@ -415,30 +470,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 1.2,
     borderColor: '#242428',
     backgroundColor: '#16161A',
+    marginRight: 10,
+  },
+  highlightedAvatarBorder: {
+    borderColor: '#FE5B01',
+    borderWidth: 1.5,
   },
   currentUserAvatarBorder: {
     borderColor: '#F59E0B',
     borderWidth: 1.8,
   },
-
-  /* HUNTER INFO COLUMN (NAME + SCORE) */
-  hunterInfoCol: {
-    width: 98,
-    justifyContent: 'center',
-  },
   displayNameText: {
     fontFamily: fontFamilies.bold,
-    fontSize: 13.5,
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.2,
-    marginBottom: 2,
+    flexShrink: 1,
   },
   currentUserDisplayNameText: {
     fontFamily: fontFamilies.bold,
@@ -447,6 +501,81 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: 0.2,
     marginBottom: 2,
+  },
+
+  /* LEVEL COLUMN */
+  levelCol: {
+    width: 62,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  levelPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  highlightedLevelPill: {
+    backgroundColor: 'rgba(254, 91, 1, 0.2)',
+    borderColor: 'rgba(254, 91, 1, 0.4)',
+  },
+  currentUserLevelPill: {
+    backgroundColor: 'rgba(25, 12, 5, 0.75)',
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: 12,
+    borderWidth: 1.2,
+    borderColor: 'rgba(254, 91, 1, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 11,
+    color: '#CBD5E1',
+    fontWeight: '600',
+  },
+  highlightedLevelText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  top3LevelText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 10,
+    color: '#CBD5E1',
+    fontWeight: '600',
+  },
+  currentUserLevelText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 11.5,
+    color: '#E4E4E7',
+    fontWeight: '600',
+  },
+
+  /* XP COLUMN */
+  xpCol: {
+    width: 95,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginRight: 6,
+  },
+  lightningIcon: {
+    fontSize: 13,
+    color: '#F59E0B',
+  },
+  xpScoreText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   scoreRow: {
     flexDirection: 'row',
@@ -478,52 +607,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  /* LEVEL PILL COLUMN */
-  levelCol: {
-    width: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 4,
-  },
-  levelPill: {
-    backgroundColor: '#16161A',
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#242428',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  currentUserLevelPill: {
-    backgroundColor: 'rgba(25, 12, 16, 0.75)',
-    paddingHorizontal: 9,
-    paddingVertical: 3.5,
-    borderRadius: 12,
-    borderWidth: 1.2,
-    borderColor: 'rgba(239, 68, 68, 0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  levelText: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 10,
-    color: '#A1A1AA',
-    fontWeight: '500',
-  },
-  top3LevelText: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 10,
-    color: '#CBD5E1',
-    fontWeight: '600',
-  },
-  currentUserLevelText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 11.5,
-    color: '#E4E4E7',
-    fontWeight: '600',
-  },
-
   /* QUOTE COLUMN */
   quoteCol: {
     flex: 1,
@@ -545,7 +628,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     fontSize: 9,
     fontWeight: '800',
-    color: '#EF4444',
+    color: '#FE5B01',
     letterSpacing: 0.7,
     lineHeight: 12,
     textTransform: 'uppercase',
@@ -554,7 +637,7 @@ const styles = StyleSheet.create({
 
   /* CHEVRON COLUMN */
   chevronCol: {
-    width: 20,
+    width: 18,
     alignItems: 'flex-end',
     justifyContent: 'center',
   },

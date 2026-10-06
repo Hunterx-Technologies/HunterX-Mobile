@@ -318,6 +318,8 @@ export default function PhysicalProfileScreen() {
 
       {/* ─── Scrollable Content ─── */}
       <ScrollView
+        bounces={false}
+        overScrollMode="never"
         ref={mainScrollRef}
         scrollEnabled={scrollEnabled}
         contentContainerStyle={styles.scrollContent}
@@ -384,6 +386,8 @@ export default function PhysicalProfileScreen() {
 
             {/* Smooth ScrollView Ruler */}
             <ScrollView
+              bounces={false}
+              overScrollMode="never"
               ref={rulerScrollRef}
               horizontal
               onScrollBeginDrag={() => setScrollEnabled(false)}

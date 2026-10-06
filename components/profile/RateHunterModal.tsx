@@ -194,6 +194,8 @@ export function RateHunterModal({ visible, onClose }: RateHunterModalProps) {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <ScrollView
+            bounces={false}
+            overScrollMode="never"
             ref={scrollRef}
             contentContainerStyle={styles.rateScrollContent}
             showsVerticalScrollIndicator={false}

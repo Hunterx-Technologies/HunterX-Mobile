@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   Dimensions,
   Image,
@@ -16,43 +16,71 @@ import {
 import { Feather, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import ViewShot from '@/components/common/ViewShotCompat';
+import type { ViewShotHandle } from '@/types/viewShot';
+import RNShare from '@/services/share/RNShare';
 import { fontFamilies } from '@/theme/typography';
-import { useAuth } from '@/hooks/useAuth';
-import { getAvatarSource } from '@/components/profile/AvatarSelectionModal';
+import type { LeaderboardMe } from '@/types/leaderboard';
 
 const TOP5_BG = require('@/assets/images/top5bg.jpg');
-const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
+const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface LeaderboardTop5ModalProps {
   visible: boolean;
   onClose: () => void;
+  me: LeaderboardMe | null;
+}
+
+// Ranks 1-3 get their exact number, 4-5 round up to "Top 5", and
+// everything past that rounds up to the nearest 10% bracket (7% -> "Top
+// 10%", 24% -> "Top 30%") rather than an oddly-precise percentage.
+function topBracketLabel(rank: number | null | undefined, topPercent: number | null | undefined): string {
+  if (rank == null) return 'Ranked';
+  if (rank <= 3) return `Top ${rank}`;
+  if (rank <= 5) return 'Top 5';
+  if (topPercent != null) {
+    const bracket = Math.max(10, Math.ceil(topPercent / 10) * 10);
+    return `Top ${bracket}%`;
+  }
+  return `Rank #${rank}`;
 }
 
 export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
   visible,
   onClose,
+  me,
 }) => {
-  const { user } = useAuth();
-  const userAny = user as any;
-
-  const progression = userAny?.user_progression || user?.user_progression || {};
-  const totalXp = progression?.total_xp ?? user?.xp ?? 218540;
-  const userLevel = progression?.current_level ?? user?.level ?? 25;
-  const userRank = userAny?.rank ?? 3;
-  const avatarUrl = user?.avatarUrl || FALLBACK_AVATAR;
+  // Only ever opened from the "You" card while me.status === 'ranked',
+  // but guard anyway rather than crash if that ever changes.
+  const totalXp = me?.totalXp ?? 0;
+  const userLevel = me?.level ?? 1;
+  const userRank = me?.rank;
+  const avatarUrl = me?.avatarThumbUrl || FALLBACK_AVATAR;
+  const bracketLabel = topBracketLabel(me?.rank, me?.topPercent);
+  const shareCardRef = useRef<ViewShotHandle>(null);
 
   const formatScore = (val: number) => {
     return val.toLocaleString('en-US');
   };
 
   const handleShare = async () => {
+    const shareMessage = `🔥 I just reached ${bracketLabel} on HunterX! Discipline today, a stronger you tomorrow. Check out your rank on HunterX!`;
+
     try {
-      await Share.share({
-        message:
-          '🔥 I just reached Top 5 on HunterX! Discipline today, a stronger you tomorrow. Check out your rank on HunterX!',
+      const cardImageUri = await shareCardRef.current?.capture?.();
+      await RNShare.open({
+        title: 'HunterX',
+        message: shareMessage,
+        url: cardImageUri,
+        failOnCancel: false,
       });
-    } catch {}
+    } catch (error: any) {
+      if (error?.message === 'User did not share') return;
+      try {
+        await Share.share({ message: shareMessage, title: 'HunterX' });
+      } catch {}
+    }
   };
 
   return (
@@ -107,8 +135,7 @@ export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
             </TouchableOpacity>
 
             <Text style={styles.headerTitle}>
-              <Text style={styles.headerTitleWhite}>You • </Text>
-              <Text style={styles.headerTitleRed}>Top 5</Text>
+              <Text style={styles.headerTitleWhite}>You</Text>
             </Text>
 
             {/* Close 'X' Button on Right */}
@@ -123,10 +150,23 @@ export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
           </View>
 
           <ScrollView
+            bounces={false}
+            overScrollMode="never"
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
+            {/* Everything from here down is what gets captured and shared
+                as the card image — the header bar's share/close buttons
+                stay outside it. Has its own background since the big
+                artwork image above is a sibling, not an ancestor, of this
+                subtree. */}
+            <ViewShot
+              ref={shareCardRef}
+              options={{ format: 'png', quality: 1 }}
+              style={styles.shareCaptureWrapper}
+            >
+
             {/* TOP BRANDING ROW */}
             <View style={styles.topBrandingRow}>
               {/* Left Brand Info */}
@@ -136,7 +176,7 @@ export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
                   <Text style={styles.brandTitleRed}>X</Text>
                 </Text>
                 <Text style={styles.brandSubtitle}>
-                  TRACK. IMPROVE. GO FURTHER.
+                  AWAKEN. HUNT. ASCEND.
                 </Text>
               </View>
             </View>
@@ -148,17 +188,17 @@ export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
                 <FontAwesome5
                   name="crown"
                   size={18}
-                  color="#F12730"
+                  color="#FE5B01"
                   style={styles.crownIcon}
                 />
-                <Text style={styles.top5TitleText}>TOP 5</Text>
+                <Text style={styles.top5TitleText}>{bracketLabel.toUpperCase()}</Text>
               </View>
 
-              {/* Circular Avatar with Floating #3 Rank Tag */}
+              {/* Circular Avatar with Floating Rank Tag */}
               <View style={styles.avatarWrap}>
                 <View style={styles.avatarGlowRing}>
                   <Image
-                    source={getAvatarSource(avatarUrl)}
+                    source={{ uri: avatarUrl }}
                     style={styles.avatarImage}
                     resizeMode="cover"
                   />
@@ -166,7 +206,7 @@ export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
 
                 {/* Rank Tag Badge */}
                 <View style={styles.rankBadgePill}>
-                  <Text style={styles.rankBadgeText}>#{userRank}</Text>
+                  <Text style={styles.rankBadgeText}>#{userRank ?? '—'}</Text>
                 </View>
               </View>
 
@@ -185,17 +225,17 @@ export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
 
             {/* BOTTOM QUOTE CARD */}
             <View style={styles.quoteCard}>
-              {/* Left & Right Red Quote Marks */}
+              {/* Left & Right Orange Quote Marks */}
               <FontAwesome5
                 name="quote-left"
                 size={16}
-                color="#F12730"
+                color="#FE5B01"
                 style={styles.quoteIconLeft}
               />
               <FontAwesome5
                 name="quote-right"
                 size={16}
-                color="#F12730"
+                color="#FE5B01"
                 style={styles.quoteIconRight}
               />
 
@@ -209,6 +249,7 @@ export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
                 <Text style={styles.quoteAuthor}>— HunterX</Text>
               </View>
             </View>
+            </ViewShot>
           </ScrollView>
         </View>
       </View>
@@ -232,9 +273,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#020203',
     borderRadius: 24,
     borderWidth: 1.2,
-    borderColor: 'rgba(241, 39, 48, 0.50)',
+    borderColor: 'rgba(254, 91, 1, 0.50)',
     overflow: 'hidden',
-    shadowColor: '#F12730',
+    shadowColor: '#FE5B01',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.45,
     shadowRadius: 24,
@@ -251,6 +292,13 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 16,
   },
+  shareCaptureWrapper: {
+    backgroundColor: 'transparent',
+    paddingTop: 4,
+    paddingBottom: 8,
+    position: 'relative',
+    overflow: 'hidden',
+  },
 
   /* HEADER BAR */
   headerBar: {
@@ -260,8 +308,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     zIndex: 30,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(241, 39, 48, 0.15)',
   },
   closeBtn: {
     width: 38,
@@ -279,7 +325,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   headerTitleRed: {
-    color: '#F12730',
+    color: '#FE5B01',
   },
   shareBtn: {
     width: 38,
@@ -310,7 +356,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   brandTitleRed: {
-    color: '#F12730',
+    color: '#FE5B01',
   },
   brandSubtitle: {
     fontFamily: fontFamilies.bold,
@@ -329,14 +375,14 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     fontSize: 11,
     fontWeight: '800',
-    color: '#F12730',
+    color: '#FE5B01',
     lineHeight: 14,
     letterSpacing: 0.8,
   },
   sloganUnderline: {
     width: 30,
     height: 2,
-    backgroundColor: '#F12730',
+    backgroundColor: '#FE5B01',
     borderRadius: 1,
     marginTop: 2,
   },
@@ -347,11 +393,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(13, 17, 20, 0.85)',
     borderRadius: 18,
     borderWidth: 1.1,
-    borderColor: 'rgba(241, 39, 48, 0.45)',
+    borderColor: 'rgba(254, 91, 1, 0.45)',
     paddingVertical: 14,
     paddingHorizontal: 16,
     alignItems: 'center',
-    shadowColor: '#F12730',
+    shadowColor: '#FE5B01',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.35,
     shadowRadius: 14,
@@ -387,11 +433,11 @@ const styles = StyleSheet.create({
     height: 86,
     borderRadius: 43,
     borderWidth: 1.8,
-    borderColor: '#F12730',
+    borderColor: '#FE5B01',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0D1114',
-    shadowColor: '#F12730',
+    shadowColor: '#FE5B01',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 8,
@@ -408,12 +454,12 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#18090A',
+    backgroundColor: '#180A04',
     borderWidth: 1.2,
-    borderColor: '#F12730',
+    borderColor: '#FE5B01',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#F12730',
+    shadowColor: '#FE5B01',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 5,
@@ -443,7 +489,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     fontSize: 14.5,
     fontWeight: '800',
-    color: '#F12730',
+    color: '#FE5B01',
     letterSpacing: 0.5,
   },
 
@@ -452,10 +498,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(24, 9, 10, 0.75)',
+    backgroundColor: 'rgba(24, 10, 4, 0.75)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(241, 39, 48, 0.55)',
+    borderColor: 'rgba(254, 91, 1, 0.55)',
     paddingHorizontal: 14,
     paddingVertical: 4,
     marginTop: 8,
@@ -480,11 +526,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(13, 17, 20, 0.85)',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(241, 39, 48, 0.35)',
+    borderColor: 'rgba(254, 91, 1, 0.35)',
     paddingVertical: 14,
     paddingHorizontal: 16,
     position: 'relative',
-    shadowColor: '#F12730',
+    shadowColor: '#FE5B01',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
@@ -515,7 +561,7 @@ const styles = StyleSheet.create({
   },
   quoteHighlight: {
     fontFamily: fontFamilies.bold,
-    color: '#F12730',
+    color: '#FE5B01',
     fontWeight: '800',
   },
   quoteAuthor: {

@@ -204,9 +204,10 @@ export default function ResetPasswordScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           contentContainerStyle={[styles.scroll, { paddingTop: cardTopOffset }]}
           showsVerticalScrollIndicator={false}
-          bounces={false}
           keyboardShouldPersistTaps="handled"
         >
           {/* ── Card ──────────────────────────────────────────────────── */}

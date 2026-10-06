@@ -88,6 +88,7 @@ export function SystemSettingsModal({
     notify_level_up: true,
     notify_reward_ready: true,
     notify_announcements: true,
+    leaderboard_visible: true,
   });
 
   const [isFetchingAccountSettings, setIsFetchingAccountSettings] = useState(false);
@@ -285,6 +286,8 @@ export function SystemSettingsModal({
         </View>
 
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
@@ -473,6 +476,27 @@ export function SystemSettingsModal({
                   </Text>
                 </TouchableOpacity>
               </View>
+            </View>
+
+            <View style={styles.settingItemDivider} />
+
+            {/* Leaderboard Visibility */}
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeftGroup}>
+                <View style={styles.settingIconBox}>
+                  <Ionicons name="podium-outline" size={18} color="#FE5B01" />
+                </View>
+                <View style={styles.settingTextGroup}>
+                  <Text style={styles.settingTitle}>Show me on leaderboards</Text>
+                  <Text style={styles.settingSubtitle}>
+                    Let other hunters see your rank on Global & Gen Z
+                  </Text>
+                </View>
+              </View>
+              <HunterSwitch
+                value={accountSettings.leaderboard_visible}
+                onValueChange={(val) => handleToggleAccountSetting('leaderboard_visible', val)}
+              />
             </View>
           </View>
 

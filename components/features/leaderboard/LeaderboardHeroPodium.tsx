@@ -302,10 +302,10 @@ export const LeaderboardHeroPodium: React.FC<LeaderboardHeroPodiumProps> = ({
               {rank2.displayName}
             </Text>
 
-            {/* Flame & Score */}
+            {/* XP & Score */}
             <View style={styles.scoreLine}>
-              <Text style={styles.fireEmoji}>🔥</Text>
-              <Text style={styles.scoreText}>{formatScore(rank2.score)}</Text>
+              <Text style={styles.fireEmoji}>⚡</Text>
+              <Text style={styles.scoreText}>{formatScore(rank2.score)} XP</Text>
             </View>
 
             {/* Level Pill */}
@@ -350,11 +350,11 @@ export const LeaderboardHeroPodium: React.FC<LeaderboardHeroPodiumProps> = ({
               {rank1.displayName}
             </Text>
 
-            {/* Flame & Score */}
+            {/* XP & Score */}
             <View style={styles.scoreLine}>
-              <Text style={styles.fireEmoji}>🔥</Text>
+              <Text style={styles.fireEmoji}>⚡</Text>
               <Text style={[styles.scoreText, styles.scoreTextCenter]}>
-                {formatScore(rank1.score)}
+                {formatScore(rank1.score)} XP
               </Text>
             </View>
 
@@ -382,10 +382,10 @@ export const LeaderboardHeroPodium: React.FC<LeaderboardHeroPodiumProps> = ({
               {rank3.displayName}
             </Text>
 
-            {/* Flame & Score */}
+            {/* XP & Score */}
             <View style={styles.scoreLine}>
-              <Text style={styles.fireEmoji}>🔥</Text>
-              <Text style={styles.scoreText}>{formatScore(rank3.score)}</Text>
+              <Text style={styles.fireEmoji}>⚡</Text>
+              <Text style={styles.scoreText}>{formatScore(rank3.score)} XP</Text>
             </View>
 
             {/* Level Pill */}

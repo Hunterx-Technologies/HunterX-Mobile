@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
-  RefreshControl,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -156,7 +155,7 @@ function mapTaskToQuest(item: TaskItem, type: 'daily' | 'weekly'): QuestItem {
     } else if (unit === 'hours' || unit === 'hour') {
       unit = 'hrs';
     }
-    
+
     if (unit === 'hrs' || unit === 'g' || unit === 'L') {
       targetValue = `${item.target_value}${unit}`;
     } else {
@@ -192,11 +191,7 @@ export default function MissionsHomeScreen() {
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
 
-  useFocusEffect(
-    useCallback(() => {
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
-    }, [])
-  );
+
 
   // Re-renders once the avatar catalog loads so the header avatar reflects
   // the user's actual avatar_id instead of the generic fallback image.
@@ -233,7 +228,6 @@ export default function MissionsHomeScreen() {
   questsRef.current = quests;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   const [selectedQuest, setSelectedQuest] = useState<QuestItem | null>(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
@@ -254,7 +248,7 @@ export default function MissionsHomeScreen() {
   // fetches the user once at app boot, so re-fetching it here too on every
   // plain mount would just duplicate that request. Callers that need fresh
   // XP/streak/level after something actually changed it server-side (a
-  // manual pull-to-refresh, or after completeTask/reopenTask) pass true.
+  // screen focus, or after completeTask/reopenTask) pass true.
   const loadTasks = useCallback(async (options?: { refreshUser?: boolean }) => {
     try {
       setError(null);
@@ -276,7 +270,7 @@ export default function MissionsHomeScreen() {
       // <ExpoImage> itself, so this never blocks the task list from showing.
       mapped.forEach((quest) => {
         if (quest.image?.uri) {
-          ExpoImage.prefetch(quest.image.uri, 'memory-disk').catch(() => {});
+          ExpoImage.prefetch(quest.image.uri, 'memory-disk').catch(() => { });
         }
       });
     } catch (err: any) {
@@ -287,15 +281,16 @@ export default function MissionsHomeScreen() {
     }
   }, []);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadTasks({ refreshUser: true });
-    setRefreshing(false);
-  }, [loadTasks]);
+  useFocusEffect(
+    useCallback(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      loadTasks({ refreshUser: true });
+    }, [loadTasks])
+  );
 
   useEffect(() => {
     loadTasks();
-  }, [loadTasks]);
+  }, [loadTasks, user?.gender]);
 
   const displayName = user?.displayName ? user.displayName.toUpperCase() : 'SEYMEN';
   const displayXP = (user?.xp ?? 1240).toLocaleString();
@@ -332,7 +327,7 @@ export default function MissionsHomeScreen() {
       AsyncStorage.getItem(storageKey)
         .then((hasShown) => {
           if (!hasShown) {
-            AsyncStorage.setItem(storageKey, 'true').catch(() => {});
+            AsyncStorage.setItem(storageKey, 'true').catch(() => { });
             const timer = setTimeout(() => {
               setDayCompleteModalVisible(true);
             }, 350);
@@ -387,10 +382,10 @@ export default function MissionsHomeScreen() {
       prev.map((q) =>
         q.id === questId
           ? {
-              ...q,
-              status: mappedStatus,
-              earnedXp: actionStatus === 'PENDING' ? undefined : optimisticEarnedXp,
-            }
+            ...q,
+            status: mappedStatus,
+            earnedXp: actionStatus === 'PENDING' ? undefined : optimisticEarnedXp,
+          }
           : q
       )
     );
@@ -434,10 +429,10 @@ export default function MissionsHomeScreen() {
         prev.map((q) =>
           q.id === questId
             ? {
-                ...q,
-                status: serverStatus,
-                earnedXp: data.status === 'PENDING' ? undefined : data.xp_earned,
-              }
+              ...q,
+              status: serverStatus,
+              earnedXp: data.status === 'PENDING' ? undefined : data.xp_earned,
+            }
             : q
         )
       );
@@ -530,17 +525,11 @@ export default function MissionsHomeScreen() {
   return (
     <Screen style={styles.screen}>
       <ScrollView
+        bounces={false}
+        overScrollMode="never"
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#E5A93C"
-            colors={["#E5A93C"]}
-          />
-        }
       >
         {/* TOP HEADER */}
         <View style={styles.topHeader}>
@@ -589,6 +578,7 @@ export default function MissionsHomeScreen() {
           completedDaysCount={completedDays}
           avatarUrl={user?.avatarUrl}
           avatarId={(user as any)?.avatar_id}
+          userBadges={(user as any)?.badges}
         />
 
         {/* FILTER TABS ROW */}
@@ -694,7 +684,7 @@ export default function MissionsHomeScreen() {
         </View>
 
         {/* CONDITIONALLY RENDER CONTENT BASED ON ACTIVE FILTER TAB */}
-        {loading && !refreshing ? (
+        {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#E5A93C" />
           </View>
@@ -767,133 +757,133 @@ export default function MissionsHomeScreen() {
                       </>
                     ) : null}
 
-                {/* WEEKLY QUESTS Section */}
-                {weeklyTodoQuests.length > 0 && (
-                  <>
-                    <Text style={[styles.sectionMonoLabel, { marginTop: 24 }]}>WEEKLY QUESTS</Text>
-                    {weeklyTodoQuests.map((quest) => (
-                      <QuestListCard
-                        key={quest.id}
-                        quest={quest}
-                        variant="todo"
-                        proteinGoal={user?.daily_protein_goal}
-                        onComplete={handleOpenQuestActions}
-                        onSkip={handleDirectSkip}
-                        onReset={handleResetQuest}
-                      />
-                    ))}
+                    {/* WEEKLY QUESTS Section */}
+                    {weeklyTodoQuests.length > 0 && (
+                      <>
+                        <Text style={[styles.sectionMonoLabel, { marginTop: 24 }]}>WEEKLY QUESTS</Text>
+                        {weeklyTodoQuests.map((quest) => (
+                          <QuestListCard
+                            key={quest.id}
+                            quest={quest}
+                            variant="todo"
+                            proteinGoal={user?.daily_protein_goal}
+                            onComplete={handleOpenQuestActions}
+                            onSkip={handleDirectSkip}
+                            onReset={handleResetQuest}
+                          />
+                        ))}
+                      </>
+                    )}
                   </>
                 )}
               </>
             )}
-          </>
-        )}
 
-        {/* DONE TAB */}
-        {activeTab === 'done' && (
-          <>
-            {doneQuests.length === 0 ? (
-              <View style={styles.emptyStateCard}>
-                <ExactMedalIcon size={56} color="#71717A" />
-                <Text style={styles.emptyStateTitle}>Nothing Completed Yet</Text>
-                <Text style={styles.emptyStateSubtext}>
-                  Tap the tick box on any quest to update its status.
-                </Text>
-              </View>
-            ) : (
+            {/* DONE TAB */}
+            {activeTab === 'done' && (
               <>
-                {/* DAILY QUESTS Section */}
-                {dailyDoneQuests.length > 0 && (
+                {doneQuests.length === 0 ? (
+                  <View style={styles.emptyStateCard}>
+                    <ExactMedalIcon size={56} color="#71717A" />
+                    <Text style={styles.emptyStateTitle}>Nothing Completed Yet</Text>
+                    <Text style={styles.emptyStateSubtext}>
+                      Tap the tick box on any quest to update its status.
+                    </Text>
+                  </View>
+                ) : (
                   <>
-                    <Text style={styles.sectionMonoLabel}>DAILY QUESTS</Text>
-                    {dailyDoneQuests.map((quest) => (
-                      <QuestListCard
-                        key={quest.id}
-                        quest={quest}
-                        variant="done"
-                        proteinGoal={user?.daily_protein_goal}
-                        onComplete={handleOpenQuestActions}
-                        onSkip={handleDirectSkip}
-                        onReset={handleResetQuest}
-                      />
-                    ))}
-                  </>
-                )}
+                    {/* DAILY QUESTS Section */}
+                    {dailyDoneQuests.length > 0 && (
+                      <>
+                        <Text style={styles.sectionMonoLabel}>DAILY QUESTS</Text>
+                        {dailyDoneQuests.map((quest) => (
+                          <QuestListCard
+                            key={quest.id}
+                            quest={quest}
+                            variant="done"
+                            proteinGoal={user?.daily_protein_goal}
+                            onComplete={handleOpenQuestActions}
+                            onSkip={handleDirectSkip}
+                            onReset={handleResetQuest}
+                          />
+                        ))}
+                      </>
+                    )}
 
-                {/* WEEKLY QUESTS Section */}
-                {weeklyDoneQuests.length > 0 && (
-                  <>
-                    <Text style={[styles.sectionMonoLabel, { marginTop: dailyDoneQuests.length > 0 ? 24 : 0 }]}>WEEKLY QUESTS</Text>
-                    {weeklyDoneQuests.map((quest) => (
-                      <QuestListCard
-                        key={quest.id}
-                        quest={quest}
-                        variant="done"
-                        proteinGoal={user?.daily_protein_goal}
-                        onComplete={handleOpenQuestActions}
-                        onSkip={handleDirectSkip}
-                        onReset={handleResetQuest}
-                      />
-                    ))}
+                    {/* WEEKLY QUESTS Section */}
+                    {weeklyDoneQuests.length > 0 && (
+                      <>
+                        <Text style={[styles.sectionMonoLabel, { marginTop: dailyDoneQuests.length > 0 ? 24 : 0 }]}>WEEKLY QUESTS</Text>
+                        {weeklyDoneQuests.map((quest) => (
+                          <QuestListCard
+                            key={quest.id}
+                            quest={quest}
+                            variant="done"
+                            proteinGoal={user?.daily_protein_goal}
+                            onComplete={handleOpenQuestActions}
+                            onSkip={handleDirectSkip}
+                            onReset={handleResetQuest}
+                          />
+                        ))}
+                      </>
+                    )}
                   </>
                 )}
               </>
             )}
-          </>
-        )}
 
-        {/* SKIPPED TAB */}
-        {activeTab === 'skipped' && (
-          <>
-            {skippedQuests.length === 0 ? (
-              <View style={styles.emptyStateCard}>
-                <Ionicons name="ban-outline" size={54} color="#71717A" />
-                <Text style={styles.emptyStateTitle}>No Skipped Quests</Text>
-                <Text style={styles.emptyStateSubtext}>
-                  You haven't skipped any quests today.
-                </Text>
-              </View>
-            ) : (
+            {/* SKIPPED TAB */}
+            {activeTab === 'skipped' && (
               <>
-                {/* DAILY QUESTS Section */}
-                {dailySkippedQuests.length > 0 && (
+                {skippedQuests.length === 0 ? (
+                  <View style={styles.emptyStateCard}>
+                    <Ionicons name="ban-outline" size={54} color="#71717A" />
+                    <Text style={styles.emptyStateTitle}>No Skipped Quests</Text>
+                    <Text style={styles.emptyStateSubtext}>
+                      You haven't skipped any quests today.
+                    </Text>
+                  </View>
+                ) : (
                   <>
-                    <Text style={styles.sectionMonoLabel}>DAILY QUESTS</Text>
-                    {dailySkippedQuests.map((quest) => (
-                      <QuestListCard
-                        key={quest.id}
-                        quest={quest}
-                        variant="skipped"
-                        proteinGoal={user?.daily_protein_goal}
-                        onComplete={handleOpenQuestActions}
-                        onSkip={handleDirectSkip}
-                        onReset={handleResetQuest}
-                      />
-                    ))}
-                  </>
-                )}
+                    {/* DAILY QUESTS Section */}
+                    {dailySkippedQuests.length > 0 && (
+                      <>
+                        <Text style={styles.sectionMonoLabel}>DAILY QUESTS</Text>
+                        {dailySkippedQuests.map((quest) => (
+                          <QuestListCard
+                            key={quest.id}
+                            quest={quest}
+                            variant="skipped"
+                            proteinGoal={user?.daily_protein_goal}
+                            onComplete={handleOpenQuestActions}
+                            onSkip={handleDirectSkip}
+                            onReset={handleResetQuest}
+                          />
+                        ))}
+                      </>
+                    )}
 
-                {/* WEEKLY QUESTS Section */}
-                {weeklySkippedQuests.length > 0 && (
-                  <>
-                    <Text style={[styles.sectionMonoLabel, { marginTop: dailySkippedQuests.length > 0 ? 24 : 0 }]}>WEEKLY QUESTS</Text>
-                    {weeklySkippedQuests.map((quest) => (
-                      <QuestListCard
-                        key={quest.id}
-                        quest={quest}
-                        variant="skipped"
-                        proteinGoal={user?.daily_protein_goal}
-                        onComplete={handleOpenQuestActions}
-                        onSkip={handleDirectSkip}
-                        onReset={handleResetQuest}
-                      />
-                    ))}
+                    {/* WEEKLY QUESTS Section */}
+                    {weeklySkippedQuests.length > 0 && (
+                      <>
+                        <Text style={[styles.sectionMonoLabel, { marginTop: dailySkippedQuests.length > 0 ? 24 : 0 }]}>WEEKLY QUESTS</Text>
+                        {weeklySkippedQuests.map((quest) => (
+                          <QuestListCard
+                            key={quest.id}
+                            quest={quest}
+                            variant="skipped"
+                            proteinGoal={user?.daily_protein_goal}
+                            onComplete={handleOpenQuestActions}
+                            onSkip={handleDirectSkip}
+                            onReset={handleResetQuest}
+                          />
+                        ))}
+                      </>
+                    )}
                   </>
                 )}
               </>
             )}
-          </>
-        )}
           </>
         )}
 

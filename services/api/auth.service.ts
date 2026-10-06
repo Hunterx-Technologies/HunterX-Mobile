@@ -424,11 +424,18 @@ export type UpdateProfilePayload = {
   avatar_id?: number | string;
 };
 
+export { refreshAccessToken } from './client';
+
 export async function updateProfile(payload: UpdateProfilePayload): Promise<User> {
   try {
     const { data } = await apiClient.patch<ApiResponse<{ user: User } | User>>('/auth/profile', payload);
     if (data && typeof data === 'object' && 'success' in data && data.success === false) {
       throw new Error((data as any).error?.message || 'Failed to update profile');
+    }
+    const accessToken = (data as any)?.data?.access_token || (data as any)?.data?.accessToken || (data as any)?.access_token || (data as any)?.accessToken;
+    const refreshToken = (data as any)?.data?.refresh_token || (data as any)?.data?.refreshToken || (data as any)?.refresh_token || (data as any)?.refreshToken;
+    if (accessToken && refreshToken) {
+      await tokenStorage.setTokens(accessToken, refreshToken);
     }
     const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
     return mapBackendUserToUser(rawUser);
@@ -439,6 +446,11 @@ export async function updateProfile(payload: UpdateProfilePayload): Promise<User
         const { data } = await apiClient.patch<ApiResponse<{ user: User } | User>>('/api/auth/profile', payload);
         if (data && typeof data === 'object' && 'success' in data && data.success === false) {
           throw new Error((data as any).error?.message || 'Failed to update profile');
+        }
+        const accessToken = (data as any)?.data?.access_token || (data as any)?.data?.accessToken || (data as any)?.access_token || (data as any)?.accessToken;
+        const refreshToken = (data as any)?.data?.refresh_token || (data as any)?.data?.refreshToken || (data as any)?.refresh_token || (data as any)?.refreshToken;
+        if (accessToken && refreshToken) {
+          await tokenStorage.setTokens(accessToken, refreshToken);
         }
         const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
         return mapBackendUserToUser(rawUser);

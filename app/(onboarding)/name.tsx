@@ -107,6 +107,8 @@ export default function OnboardingNameScreen() {
 
                 {/* ─── Scrollable Content ─── */}
                 <ScrollView
+                    bounces={false}
+                    overScrollMode="never"
                     ref={scrollRef}
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"

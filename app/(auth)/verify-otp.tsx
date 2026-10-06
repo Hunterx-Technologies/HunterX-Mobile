@@ -178,6 +178,8 @@ export default function VerifyOtpScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 12 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}

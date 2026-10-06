@@ -14,6 +14,7 @@ export interface UserSettings {
   notify_level_up: boolean;
   notify_reward_ready: boolean;
   notify_announcements: boolean;
+  leaderboard_visible: boolean;
   created_at?: string;
   updated_at?: string;
 }

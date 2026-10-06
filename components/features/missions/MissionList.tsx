@@ -36,6 +36,8 @@ export function MissionList({ missions, isLoading, onComplete }: MissionListProp
 
   return (
     <FlatList
+      bounces={false}
+      overScrollMode="never"
       data={missions}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}

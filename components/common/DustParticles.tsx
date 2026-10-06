@@ -3,6 +3,7 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 type DustParticlesProps = {
   count?: number;
+  color?: string;
 };
 
 type ParticleData = {
@@ -15,7 +16,7 @@ type ParticleData = {
   initialProgress: number;
 };
 
-function DustParticlesComponent({ count = 20 }: DustParticlesProps) {
+function DustParticlesComponent({ count = 20, color = '#FFFFFF' }: DustParticlesProps) {
   // Generate random configuration for continuous floating dust particles
   const particlesConfig = useRef<ParticleData[]>(
     Array.from({ length: count }, () => ({
@@ -100,6 +101,8 @@ function DustParticlesComponent({ count = 20 }: DustParticlesProps) {
             style={[
               styles.particle,
               {
+                backgroundColor: color,
+                shadowColor: color,
                 left: `${p.xPct}%`,
                 top: `${p.startYPct}%`,
                 width: p.size,

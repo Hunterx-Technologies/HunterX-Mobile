@@ -4,7 +4,6 @@ import {
   FlatList,
   Modal,
   Platform,
-  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -39,7 +38,6 @@ export function RecentActivityModal({
   const [pagination, setPagination] = useState<UserActivityPagination | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadInitialActivity = useCallback(async () => {
     setIsLoading(true);
@@ -61,22 +59,8 @@ export function RecentActivityModal({
     }
   }, [visible, loadInitialActivity]);
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
-      const data = await fetchUserActivity(1, 10);
-      setSummary(data.summary);
-      setLogs(data.logs || []);
-      setPagination(data.pagination);
-    } catch (err) {
-      console.warn('[RecentActivityModal] Error refreshing activity:', err);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
   const handleLoadMore = async () => {
-    if (isLoadingMore || isLoading || isRefreshing) return;
+    if (isLoadingMore || isLoading) return;
     if (!pagination || !pagination.has_next_page) return;
 
     const nextPage = pagination.page + 1;
@@ -313,6 +297,8 @@ function formatDateBadge(item: UserActivityLog): { month: string; day: string } 
           </View>
         ) : (
           <FlatList
+            bounces={false}
+            overScrollMode="never"
             data={logs}
             keyExtractor={(item, index) => `${item.id}-${index}`}
             renderItem={renderLogItem}
@@ -321,14 +307,6 @@ function formatDateBadge(item: UserActivityLog): { month: string; day: string } 
             ListEmptyComponent={renderEmptyState}
             onEndReached={handleLoadMore}
             onEndReachedThreshold={0.3}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                tintColor="#FE5B01"
-                colors={['#FE5B01']}
-              />
-            }
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />

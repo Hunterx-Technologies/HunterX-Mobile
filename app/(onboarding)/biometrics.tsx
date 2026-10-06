@@ -216,6 +216,8 @@ export default function BiometricsScreen() {
 
       {/* ─── Scrollable Content ─── */}
       <ScrollView
+        bounces={false}
+        overScrollMode="never"
         ref={mainScrollRef}
         scrollEnabled={scrollEnabled}
         contentContainerStyle={styles.scrollContent}
@@ -314,6 +316,8 @@ export default function BiometricsScreen() {
 
               {/* Smooth ScrollView Ruler */}
               <ScrollView
+                bounces={false}
+                overScrollMode="never"
                 ref={ageScrollRef}
                 horizontal
                 onScrollBeginDrag={() => setScrollEnabled(false)}

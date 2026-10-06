@@ -153,6 +153,8 @@ export function MetricsDashboardView({
       </View>
 
       <ScrollView
+        bounces={false}
+        overScrollMode="never"
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: insets.bottom + 24 },

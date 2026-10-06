@@ -41,49 +41,49 @@ export const LeaderboardMotivationBanner: React.FC = () => {
             </Text>
           </View>
 
-          {/* Right Red Hunter "X" Logo Slash */}
+          {/* Right Orange Hunter "X" Logo Slash */}
           <View style={styles.xLogoContainer}>
             <Svg width={46} height={46} viewBox="0 0 100 100" fill="none">
-              {/* Red brush slash stroke 1 */}
+              {/* Orange brush slash stroke 1 */}
               <Path
                 d="M18 16 L82 84 M12 24 L76 92"
-                stroke="#991B1B"
+                stroke="#C2410C"
                 strokeWidth="13"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <Path
                 d="M18 16 L82 84"
-                stroke="#DC2626"
+                stroke="#FE5B01"
                 strokeWidth="11"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <Path
                 d="M32 30 L68 70"
-                stroke="#EF4444"
+                stroke="#FF9800"
                 strokeWidth="5"
                 strokeLinecap="round"
               />
 
-              {/* Red brush slash stroke 2 */}
+              {/* Orange brush slash stroke 2 */}
               <Path
                 d="M82 16 L18 84 M88 24 L24 92"
-                stroke="#991B1B"
+                stroke="#C2410C"
                 strokeWidth="13"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <Path
                 d="M82 16 L18 84"
-                stroke="#E5383B"
+                stroke="#FE5B01"
                 strokeWidth="11"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <Path
                 d="M68 30 L32 70"
-                stroke="#FCA5A5"
+                stroke="#FFB74D"
                 strokeWidth="4"
                 strokeLinecap="round"
               />
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#EF4444',
+    shadowColor: '#FE5B01',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 8,

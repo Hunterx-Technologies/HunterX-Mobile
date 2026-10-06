@@ -142,6 +142,8 @@ export default function TimeScreen() {
 
             {/* ─── Scrollable Content ─── */}
             <ScrollView
+                bounces={false}
+                overScrollMode="never"
                 ref={scrollRef}
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"

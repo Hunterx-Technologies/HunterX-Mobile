@@ -70,8 +70,14 @@ export function ConnectHealthView({
   }, []);
 
   const [selectedProvider, setSelectedProvider] = useState<
-    'apple_health' | 'health_connect'
-  >('apple_health');
+    'apple_health' | 'health_connect' | null
+  >(isHealthConnected ? connectedProvider : null);
+
+  useEffect(() => {
+    if (isHealthConnected && connectedProvider) {
+      setSelectedProvider(connectedProvider);
+    }
+  }, [isHealthConnected, connectedProvider]);
 
   const [connectingProvider, setConnectingProvider] = useState<
     'apple_health' | 'health_connect' | null
@@ -130,7 +136,6 @@ export function ConnectHealthView({
       style={[
         styles.container,
         {
-          paddingTop: isModal ? insets.top : Math.max(insets.top, 16),
           paddingBottom: insets.bottom,
         },
       ]}
@@ -138,25 +143,30 @@ export function ConnectHealthView({
       {/* Background Topographic Contours, Crimson Aura & Mountain Backdrop */}
       <HealthBackgroundDecor />
 
-      {/* Header Bar */}
-      {hasBack ? (
-        <View style={styles.headerBar}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={onBack}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        bounces={false}
+        overScrollMode="never"
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: isModal ? insets.top + 8 : Math.max(insets.top, 12),
+          },
+        ]}
         showsVerticalScrollIndicator={false}
-        bounces={true}
       >
+        {/* Header Bar */}
+        {hasBack ? (
+          <View style={styles.headerBar}>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={onBack}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
         {/* Prominent Concentric Orbital Graphic */}
         <OrbitalHealthGraphic />
 
@@ -315,11 +325,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#050608',
   },
   headerBar: {
-    height: 52,
+    height: 40,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    justifyContent: 'flex-start',
+    marginBottom: 4,
     zIndex: 10,
   },
   headerBarNoBack: {

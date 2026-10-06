@@ -155,6 +155,8 @@ export function InviteFriendsModal({
         </View>
 
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           contentContainerStyle={styles.inviteScrollContent}
           showsVerticalScrollIndicator={false}
         >
@@ -232,21 +234,6 @@ export function InviteFriendsModal({
                   <View style={styles.guestPassCenterTextGroup}>
                     <Text style={styles.guestPassMainTitle}>Guest Pass</Text>
                     <Text style={styles.guestPassSubTitle}>ALL-ACCESS HUNTER PASS</Text>
-
-                    {/* Integrated Awakening Bonus Badge */}
-                    <LinearGradient
-                      colors={['rgba(254, 91, 1, 0.3)', 'rgba(254, 91, 1, 0.08)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.guestPassRewardBadge}
-                    >
-                      <View style={styles.guestPassRewardIconWrap}>
-                        <Ionicons name="sparkles" size={10} color="#FE5B01" />
-                      </View>
-                      <Text style={styles.guestPassRewardText}>
-                        AWAKENING BONUS <Text style={styles.guestPassRewardXp}>+50 XP</Text>
-                      </Text>
-                    </LinearGradient>
                   </View>
 
                   {/* Bottom Row */}
@@ -490,39 +477,6 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
-  },
-  guestPassRewardBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(254, 91, 1, 0.5)',
-    borderRadius: 14,
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(10, 15, 30, 0.7)',
-  },
-  guestPassRewardIconWrap: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: 'rgba(254, 91, 1, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  guestPassRewardText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 9,
-    fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.9)',
-    letterSpacing: 0.5,
-  },
-  guestPassRewardXp: {
-    fontFamily: fontFamilies.bold,
-    fontWeight: '900',
-    color: '#FE5B01',
   },
   guestPassFooterRow: {
     position: 'absolute',

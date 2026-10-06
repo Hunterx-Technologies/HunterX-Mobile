@@ -136,9 +136,10 @@ export default function ForgotPasswordScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          bounces={false}
         >
           {/* Spacer to push form content down below the character — height is dynamic */}
           <View style={{ height: formStartY }} />
