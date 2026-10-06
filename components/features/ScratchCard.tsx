@@ -1,43 +1,60 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   PanResponder,
   GestureResponderEvent,
-  TouchableOpacity,
   Animated,
-  Dimensions,
+  TouchableOpacity,
+  Clipboard,
+  Image,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Circle, Path, Rect, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
+import Svg, {
+  Path,
+  Defs,
+  Mask,
+  Rect,
+  Circle,
+  G,
+  Text as SvgText,
+  LinearGradient as SvgGradient,
+  RadialGradient,
+  Stop,
+} from 'react-native-svg';
 import { fontFamilies } from '../../theme/typography';
-import { ScratchSparkles, SparkPoint } from '../ui/ScratchSparkles';
+import { TopographyPattern } from '../ui/TopographyPattern';
 
 export type ScratchRarity = 'legendary' | 'epic' | 'rare' | 'common';
 
 export interface ScratchCardProps {
   onComplete?: () => void;
+  isScratched?: boolean;
   rewardText?: string;
   rewardSubtitle?: string;
   rewardValue?: string;
+  productName?: string;
+  productCategory?: string;
+  productIcon?: keyof typeof MaterialCommunityIcons.glyphMap;
+  productImageUrl?: string;
+  code?: string;
   rarity?: ScratchRarity;
   iconName?: keyof typeof MaterialCommunityIcons.glyphMap;
   width?: number;
   height?: number;
-  autoRevealThreshold?: number; // 0.0 to 1.0 (e.g. 0.45 = 45%)
+  autoRevealThreshold?: number; // 0.0 to 1.0 (e.g. 0.28 = 28%)
 }
 
-interface TouchPoint {
-  id: string;
+interface Point {
   x: number;
   y: number;
 }
 
 const GRID_COLS = 6;
-const GRID_ROWS = 4;
+const GRID_ROWS = 6;
 const TOTAL_GRID_CELLS = GRID_COLS * GRID_ROWS;
 
 const RARITY_THEMES: Record<
@@ -52,154 +69,66 @@ const RARITY_THEMES: Record<
   }
 > = {
   legendary: {
-    borderColor: '#F59E0B',
-    glowColor: 'rgba(245, 158, 11, 0.4)',
-    badgeBg: 'rgba(245, 158, 11, 0.2)',
-    textColor: '#FBBF24',
-    gradientColors: ['#2A1A04', '#1A1002', '#0A0601'],
+    borderColor: '#F66F28',
+    glowColor: 'rgba(246, 111, 40, 0.45)',
+    badgeBg: 'rgba(246, 111, 40, 0.18)',
+    textColor: '#F66F28',
+    gradientColors: ['#16181C', '#121316', '#0E0F12'],
     badgeLabel: 'LEGENDARY LOOT',
   },
   epic: {
     borderColor: '#C084FC',
-    glowColor: 'rgba(192, 132, 252, 0.4)',
-    badgeBg: 'rgba(192, 132, 252, 0.2)',
+    glowColor: 'rgba(192, 132, 252, 0.45)',
+    badgeBg: 'rgba(192, 132, 252, 0.18)',
     textColor: '#E9D5FF',
-    gradientColors: ['#231138', '#160A24', '#090310'],
+    gradientColors: ['#16181C', '#141318', '#0E0F12'],
     badgeLabel: 'EPIC DROP',
   },
   rare: {
     borderColor: '#38BDF8',
-    glowColor: 'rgba(56, 189, 248, 0.4)',
-    badgeBg: 'rgba(56, 189, 248, 0.2)',
+    glowColor: 'rgba(56, 189, 248, 0.45)',
+    badgeBg: 'rgba(56, 189, 248, 0.18)',
     textColor: '#BAE6FD',
-    gradientColors: ['#0A2540', '#061729', '#020912'],
+    gradientColors: ['#16181C', '#10141A', '#0E0F12'],
     badgeLabel: 'RARE REWARD',
   },
   common: {
     borderColor: '#34D399',
-    glowColor: 'rgba(52, 211, 153, 0.3)',
+    glowColor: 'rgba(52, 211, 153, 0.35)',
     badgeBg: 'rgba(52, 211, 153, 0.15)',
     textColor: '#A7F3D0',
-    gradientColors: ['#062A1E', '#031912', '#010B08'],
-    badgeLabel: 'STREAK REWARD',
+    gradientColors: ['#16181C', '#101815', '#0E0F12'],
+    badgeLabel: 'HUNTER LOOT',
   },
 };
 
 export const ScratchCard: React.FC<ScratchCardProps> = ({
   onComplete,
-  rewardText = '+100 EXP',
-  rewardSubtitle = 'Hunter Rank XP Booster',
-  rewardValue = 'EXP +100',
+  isScratched = false,
+  rewardText = '$25 AMAZON VOUCHER',
+  rewardSubtitle = 'Claim on Amazon Fitness & Gym Store',
+  productName = 'Pro Resistance Bands Set',
+  productCategory = 'Strength & Mobility Kit',
+  productIcon = 'dumbbell',
+  productImageUrl,
+  code = 'AMZ-BAND-25',
   rarity = 'legendary',
-  iconName = 'trophy-award',
-  width = 330,
-  height = 170,
-  autoRevealThreshold = 0.45,
+  width = 300,
+  height = 460,
+  autoRevealThreshold = 0.28,
 }) => {
-  const [touchPoints, setTouchPoints] = useState<TouchPoint[]>([]);
-  const [sparkList, setSparkList] = useState<SparkPoint[]>([]);
-  const [isRevealed, setIsRevealed] = useState(false);
-  const [scratchedPercent, setScratchedPercent] = useState(0);
+  const [paths, setPaths] = useState<string[]>([]);
+  const [points, setPoints] = useState<Point[]>([]);
+  const [isRevealed, setIsRevealed] = useState(isScratched);
+  const [copied, setCopied] = useState(false);
 
-  const revealAnim = useRef(new Animated.Value(1)).current;
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
+  const currentPathRef = useRef<string>('');
+  const revealAnim = useRef(new Animated.Value(isScratched ? 0 : 1)).current;
   const gridCellsRef = useRef<Set<number>>(new Set());
-  const isRevealedRef = useRef(false);
+  const isRevealedRef = useRef(isScratched);
 
   const theme = RARITY_THEMES[rarity] || RARITY_THEMES.legendary;
-
-  useEffect(() => {
-    // Pulse animation on the scratch CTA pill
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.05,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulseLoop.start();
-
-    // Shimmer highlight effect on metallic foil
-    const shimmerLoop = Animated.loop(
-      Animated.timing(shimmerAnim, {
-        toValue: 1,
-        duration: 2200,
-        useNativeDriver: true,
-      })
-    );
-    shimmerLoop.start();
-
-    return () => {
-      pulseLoop.stop();
-      shimmerLoop.stop();
-    };
-  }, []);
-
-  const triggerSparks = (x: number, y: number) => {
-    const newSparks: SparkPoint[] = Array.from({ length: 4 }).map((_, i) => ({
-      id: `${Date.now()}-${i}-${Math.random()}`,
-      x: x + (Math.random() - 0.5) * 24,
-      y: y + (Math.random() - 0.5) * 24,
-      size: Math.random() * 5 + 3,
-      color: i % 2 === 0 ? theme.borderColor : '#FFFFFF',
-      opacity: 0.9,
-    }));
-
-    setSparkList((prev) => [...prev.slice(-15), ...newSparks]);
-
-    // Clean up old sparks
-    setTimeout(() => {
-      setSparkList((prev) => prev.filter((s) => !newSparks.includes(s)));
-    }, 450);
-  };
-
-  const handleTouch = (evt: GestureResponderEvent) => {
-    if (isRevealedRef.current) return;
-
-    const { locationX, locationY } = evt.nativeEvent;
-    const clampedX = Math.max(0, Math.min(width, locationX));
-    const clampedY = Math.max(0, Math.min(height, locationY));
-
-    const newPoint = {
-      id: `${Date.now()}-${Math.random()}`,
-      x: clampedX,
-      y: clampedY,
-    };
-
-    setTouchPoints((prev) => [...prev.slice(-45), newPoint]);
-    triggerSparks(clampedX, clampedY);
-
-    // Calculate grid cell touch
-    const colWidth = width / GRID_COLS;
-    const rowHeight = height / GRID_ROWS;
-    const col = Math.floor(clampedX / colWidth);
-    const row = Math.floor(clampedY / rowHeight);
-    const cellId = Math.min(TOTAL_GRID_CELLS - 1, row * GRID_COLS + col);
-
-    if (!gridCellsRef.current.has(cellId)) {
-      gridCellsRef.current.add(cellId);
-      const clearedRatio = gridCellsRef.current.size / TOTAL_GRID_CELLS;
-      const currentPercent = Math.min(100, Math.round(clearedRatio * 100));
-      setScratchedPercent(currentPercent);
-
-      // Light haptic tick on new area scratched
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-
-      if (clearedRatio >= autoRevealThreshold && !isRevealedRef.current) {
-        triggerReveal();
-      }
-    }
-  };
+  const emblemSize = Math.min(width * 0.46, 120);
 
   const triggerReveal = () => {
     if (isRevealedRef.current) return;
@@ -208,290 +137,469 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
-    // Pop scale animation
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 1.04,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Fade out foil coating
+    // Clean fade out of remaining foil coating
     Animated.timing(revealAnim, {
       toValue: 0,
-      duration: 400,
+      duration: 250,
       useNativeDriver: true,
     }).start(() => {
       if (onComplete) onComplete();
     });
   };
 
+  const checkGridCell = (x: number, y: number) => {
+    const colWidth = width / GRID_COLS;
+    const rowHeight = height / GRID_ROWS;
+    const col = Math.floor(x / colWidth);
+    const row = Math.floor(y / rowHeight);
+    const cellId = Math.min(TOTAL_GRID_CELLS - 1, Math.max(0, row * GRID_COLS + col));
+
+    if (!gridCellsRef.current.has(cellId)) {
+      gridCellsRef.current.add(cellId);
+      const clearedRatio = gridCellsRef.current.size / TOTAL_GRID_CELLS;
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+      if (clearedRatio >= autoRevealThreshold && !isRevealedRef.current) {
+        triggerReveal();
+      }
+    }
+  };
+
+  const handleTouchStart = (evt: GestureResponderEvent) => {
+    if (isRevealedRef.current) return;
+
+    const { locationX, locationY } = evt.nativeEvent;
+    const clampedX = Math.max(0, Math.min(width, locationX));
+    const clampedY = Math.max(0, Math.min(height, locationY));
+
+    currentPathRef.current = `M ${clampedX.toFixed(1)} ${clampedY.toFixed(1)}`;
+
+    setPaths((prev) => [...prev, currentPathRef.current]);
+    setPoints((prev) => [...prev.slice(-80), { x: clampedX, y: clampedY }]);
+
+    checkGridCell(clampedX, clampedY);
+  };
+
+  const handleTouchMove = (evt: GestureResponderEvent) => {
+    if (isRevealedRef.current) return;
+
+    const { locationX, locationY } = evt.nativeEvent;
+    const clampedX = Math.max(0, Math.min(width, locationX));
+    const clampedY = Math.max(0, Math.min(height, locationY));
+
+    currentPathRef.current += ` L ${clampedX.toFixed(1)} ${clampedY.toFixed(1)}`;
+
+    setPaths((prev) => {
+      if (prev.length === 0) return [currentPathRef.current];
+      const next = [...prev];
+      next[next.length - 1] = currentPathRef.current;
+      return next;
+    });
+
+    setPoints((prev) => [...prev.slice(-80), { x: clampedX, y: clampedY }]);
+    checkGridCell(clampedX, clampedY);
+  };
+
+  const handleTouchEnd = () => {
+    if (gridCellsRef.current.size >= 4 && !isRevealedRef.current) {
+      const clearedRatio = gridCellsRef.current.size / TOTAL_GRID_CELLS;
+      if (clearedRatio >= 0.2) {
+        triggerReveal();
+      }
+    }
+  };
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: handleTouch,
-      onPanResponderMove: handleTouch,
-      onPanResponderRelease: () => {
-        if (gridCellsRef.current.size >= 3 && !isRevealedRef.current) {
-          if (scratchedPercent >= 30) {
-            triggerReveal();
-          }
-        }
-      },
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: handleTouchStart,
+      onPanResponderMove: handleTouchMove,
+      onPanResponderRelease: handleTouchEnd,
     })
   ).current;
 
-  const shimmerTranslateX = shimmerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-width, width * 1.5],
-  });
+  const handleCopy = () => {
+    if (!code) return;
+    Clipboard.setString(code);
+    setCopied(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setTimeout(() => setCopied(false), 2200);
+  };
 
   return (
-    <Animated.View
+    <View
       style={[
         styles.cardOuterFrame,
         {
           width,
           height,
-          transform: [{ scale: scaleAnim }],
-          borderColor: theme.borderColor,
-          shadowColor: theme.borderColor,
+          borderColor: '#F66F28',
         },
       ]}
     >
       <View style={[styles.cardContainer, { width, height }]}>
-        {/* REVEALED REWARD SURFACE */}
+        {/* REVEALED REWARD SURFACE: MATCHING GOOGLE PAY REFERENCE SCREENSHOT */}
         <View style={styles.revealedSurface}>
-          <LinearGradient colors={theme.gradientColors} style={styles.revealedGradient}>
-            {/* Rarity Tag */}
-            <View style={[styles.rarityBadge, { backgroundColor: theme.badgeBg, borderColor: theme.borderColor }]}>
-              <Ionicons name="sparkles" size={12} color={theme.textColor} style={{ marginRight: 4 }} />
-              <Text style={[styles.rarityBadgeText, { color: theme.textColor }]}>{theme.badgeLabel}</Text>
+          <View style={styles.revealedContainer}>
+            {/* 1. TOP HALF: HERO PRODUCT IMAGE */}
+            <View style={styles.topImageSection}>
+              {productImageUrl ? (
+                <Image
+                  source={{ uri: productImageUrl }}
+                  style={styles.heroProductImg}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.heroIconFallback}>
+                  <MaterialCommunityIcons name={productIcon} size={48} color="#FF9900" />
+                </View>
+              )}
+
+              {/* Top-Left Circular Brand Badge (Amazon) */}
+              <View style={styles.brandCircleBadge}>
+                <FontAwesome5 name="amazon" size={15} color="#0D0F12" />
+              </View>
+
+              {/* Top-Right Tag Badge */}
+              <View style={styles.topRightTagBadge}>
+                <Text style={styles.topRightTagText}>New</Text>
+              </View>
             </View>
 
-            {/* Reward Icon */}
-            <View style={[styles.rewardIconBadge, { borderColor: theme.borderColor, backgroundColor: theme.badgeBg }]}>
-              <MaterialCommunityIcons name={iconName} size={36} color={theme.textColor} />
-            </View>
+            {/* 2. BOTTOM HALF: CLEAN DARK OFFER DETAILS */}
+            <View style={styles.bottomInfoSection}>
+              <View>
+                <Text style={styles.offerMainHeading} numberOfLines={1}>
+                  {rewardText}
+                </Text>
+                <Text style={styles.offerSubtext} numberOfLines={1}>
+                  on Amazon Fitness orders above ₹800
+                </Text>
+                <Text style={styles.productNameText} numberOfLines={1}>
+                  {productName}
+                </Text>
+              </View>
 
-            {/* Reward Texts */}
-            <Text style={[styles.rewardText, { color: theme.textColor }]}>{rewardText}</Text>
-            <Text style={styles.rewardSubtext}>{rewardSubtitle}</Text>
-
-            {/* Unlocked Checkmark */}
-            <View style={styles.unlockedRow}>
-              <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-              <Text style={styles.unlockedText}>REWARD REVEALED</Text>
+              {/* Code Snippet Box */}
+              {code && (
+                <TouchableOpacity
+                  style={styles.codeSnippetBox}
+                  onPress={handleCopy}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.codeTextCol}>
+                    <Text style={styles.codeSnippetLabel}>CLAIM CODE</Text>
+                    <Text style={styles.codeSnippetVal}>{code}</Text>
+                  </View>
+                  <View style={styles.copyPillBtn}>
+                    <MaterialCommunityIcons
+                      name={copied ? 'check' : 'content-copy'}
+                      size={12}
+                      color="#0D0F12"
+                    />
+                    <Text style={styles.copyPillBtnText}>{copied ? 'COPIED' : 'COPY'}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
             </View>
-          </LinearGradient>
+          </View>
         </View>
 
-        {/* UNREVEALED METALLIC FOIL COATING */}
+        {/* TOP FOIL LAYER WITH NATURAL MASK SCRATCH (Clean Google Pay Style) */}
         {!isRevealed && (
-          <Animated.View style={[styles.foilCoating, { opacity: revealAnim }]} {...panResponder.panHandlers}>
-            <LinearGradient colors={['#27272A', '#18181B', '#09090B']} style={styles.foilGradient}>
-              {/* Metallic Rune Pattern & Shimmer */}
-              <Animated.View
-                style={[
-                  styles.shimmerSweep,
-                  {
-                    transform: [{ translateX: shimmerTranslateX }, { rotate: '25deg' }],
-                  },
-                ]}
-              />
+          <Animated.View
+            style={[styles.foilCoating, { opacity: revealAnim }]}
+            {...panResponder.panHandlers}
+          >
+            <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
+              <Defs>
+                {/* Natural Erasing Mask: White shows foil, Black erases/transparent */}
+                <Mask id="scratchFoilMask">
+                  <Rect x={0} y={0} width={width} height={height} fill="#FFFFFF" />
+                  {paths.map((p, index) => (
+                    <Path
+                      key={`p-${index}`}
+                      d={p}
+                      stroke="#000000"
+                      strokeWidth={54}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  ))}
+                  {points.map((pt, index) => (
+                    <Circle
+                      key={`pt-${index}`}
+                      cx={pt.x}
+                      cy={pt.y}
+                      r={27}
+                      fill="#000000"
+                    />
+                  ))}
+                </Mask>
 
-              {/* Scratched Trails (SVG Erase Masks) */}
-              <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
-                <Defs>
-                  <SvgGradient id="scratchGlow" x1="0" y1="0" x2="1" y2="1">
-                    <Stop offset="0%" stopColor={theme.borderColor} stopOpacity="0.4" />
-                    <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.1" />
-                  </SvgGradient>
-                </Defs>
-                {touchPoints.map((pt) => (
-                  <Circle key={pt.id} cx={pt.x} cy={pt.y} r={32} fill="url(#scratchGlow)" />
-                ))}
-              </Svg>
+                {/* Foil Background */}
+                <SvgGradient id="foilBgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <Stop offset="0%" stopColor="#16181C" />
+                  <Stop offset="50%" stopColor="#121316" />
+                  <Stop offset="100%" stopColor="#0E0F12" />
+                </SvgGradient>
 
-              {/* Sparkle Emitter Component */}
-              <ScratchSparkles sparks={sparkList} width={width} height={height} />
+                {/* Subtle top orange reflection */}
+                <SvgGradient id="topOrangeReflection" x1="10%" y1="0%" x2="40%" y2="25%">
+                  <Stop offset="0%" stopColor="#F66F28" stopOpacity="0.05" />
+                  <Stop offset="100%" stopColor="#F66F28" stopOpacity="0" />
+                </SvgGradient>
 
-              {/* Centered CTA Pill */}
-              <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                <TouchableOpacity activeOpacity={0.85} onPress={triggerReveal} style={[styles.scratchButtonPill, { borderColor: theme.borderColor }]}>
-                  <FontAwesome5 name="hand-pointer" size={13} color={theme.textColor} />
-                  <Text style={styles.scratchButtonText}>SCRATCH TO REVEAL</Text>
-                </TouchableOpacity>
-              </Animated.View>
+                {/* Topo line gradients */}
+                <SvgGradient id="topoGreyClean" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <Stop offset="0%" stopColor="#2A2C33" stopOpacity="0.85" />
+                  <Stop offset="50%" stopColor="#212328" stopOpacity="0.7" />
+                  <Stop offset="100%" stopColor="#181A1E" stopOpacity="0.55" />
+                </SvgGradient>
 
-              {/* Progress Indicator */}
-              <View style={styles.foilFooterRow}>
-                <Text style={styles.hintText}>Drag finger or tap to reveal</Text>
-                {scratchedPercent > 0 && (
-                  <View style={styles.progressChip}>
-                    <Text style={[styles.progressChipText, { color: theme.textColor }]}>{scratchedPercent}% CLEARED</Text>
-                  </View>
-                )}
-              </View>
-            </LinearGradient>
+                <SvgGradient id="topoGreySubtle" x1="0%" y1="100%" x2="100%" y2="0%">
+                  <Stop offset="0%" stopColor="#23252A" stopOpacity="0.6" />
+                  <Stop offset="50%" stopColor="#2A2C33" stopOpacity="0.75" />
+                  <Stop offset="100%" stopColor="#1A1C20" stopOpacity="0.5" />
+                </SvgGradient>
+
+                {/* HunterX Emblem Gradients */}
+                <RadialGradient id="xBackAura" cx="50%" cy="50%" r="42%">
+                  <Stop offset="0%" stopColor="#F66F28" stopOpacity="0.22" />
+                  <Stop offset="60%" stopColor="#B94F24" stopOpacity="0.05" />
+                  <Stop offset="100%" stopColor="#000000" stopOpacity="0" />
+                </RadialGradient>
+                <SvgGradient id="gradWingHighlight" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <Stop offset="0%" stopColor="#FFAC66" />
+                  <Stop offset="40%" stopColor="#FF9438" />
+                  <Stop offset="100%" stopColor="#F66F28" />
+                </SvgGradient>
+                <SvgGradient id="gradWingBody" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <Stop offset="0%" stopColor="#F66F28" />
+                  <Stop offset="50%" stopColor="#DF5714" />
+                  <Stop offset="100%" stopColor="#9E350A" />
+                </SvgGradient>
+                <SvgGradient id="gradMainSlash" x1="100%" y1="0%" x2="0%" y2="100%">
+                  <Stop offset="0%" stopColor="#FFAA66" />
+                  <Stop offset="25%" stopColor="#F66F28" />
+                  <Stop offset="65%" stopColor="#E05A18" />
+                  <Stop offset="100%" stopColor="#A6380A" />
+                </SvgGradient>
+                <SvgGradient id="gradSlashShadow" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <Stop offset="0%" stopColor="#E05A18" />
+                  <Stop offset="50%" stopColor="#B94F24" />
+                  <Stop offset="100%" stopColor="#692005" />
+                </SvgGradient>
+                <SvgGradient id="gradFootShadow" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <Stop offset="0%" stopColor="#B94F24" />
+                  <Stop offset="50%" stopColor="#8A2E07" />
+                  <Stop offset="100%" stopColor="#4D1602" />
+                </SvgGradient>
+              </Defs>
+
+              {/* Entire Foil Surface inside Mask */}
+              <G mask="url(#scratchFoilMask)">
+                {/* 1. Dark Grey Background */}
+                <Rect x={0} y={0} width={width} height={height} fill="url(#foilBgGrad)" />
+                <Rect x={0} y={0} width={width} height={height} fill="url(#topOrangeReflection)" />
+
+                {/* 2. Topography Contour Lines */}
+                <G transform={`scale(${width / 240}, ${height / 360})`}>
+                  <Path d="M -20 15 C 20 25, 45 10, 75 35 C 105 60, 95 95, 130 110 C 165 125, 210 100, 260 115" stroke="url(#topoGreyClean)" strokeWidth="1.1" fill="none" />
+                  <Path d="M -20 35 C 25 45, 50 28, 85 52 C 120 76, 110 112, 145 128 C 180 144, 220 120, 260 135" stroke="url(#topoGreyClean)" strokeWidth="1" fill="none" />
+                  <Path d="M -15 60 C 30 70, 60 50, 95 72 C 130 94, 125 130, 160 146 C 195 162, 230 140, 260 155" stroke="url(#topoGreySubtle)" strokeWidth="1" fill="none" />
+                  <Path d="M -10 85 C 35 95, 70 72, 105 92 C 140 112, 140 150, 175 166 C 210 182, 240 160, 260 175" stroke="url(#topoGreyClean)" strokeWidth="1" fill="none" />
+                  <Path d="M 15 130 C 50 140, 80 120, 115 138 C 150 156, 155 190, 190 204 C 225 218, 245 195, 260 210" stroke="url(#topoGreySubtle)" strokeWidth="1" fill="none" />
+                  <Path d="M -10 160 C 35 170, 75 148, 110 165 C 145 182, 160 215, 195 230 C 230 245, 245 225, 260 240" stroke="url(#topoGreyClean)" strokeWidth="1" fill="none" />
+                  <Path d="M 120 155 C 80 145, 60 180, 85 215 C 110 250, 160 240, 175 205 C 190 170, 160 165, 120 155 Z" stroke="url(#topoGreyClean)" strokeWidth="1" fill="none" />
+                  <Path d="M 120 140 C 65 130, 45 190, 75 230 C 105 270, 175 260, 190 215 C 205 170, 175 150, 120 140 Z" stroke="url(#topoGreySubtle)" strokeWidth="1" fill="none" />
+                  <Path d="M 120 125 C 50 115, 30 200, 65 245 C 100 290, 190 280, 205 225 C 220 170, 190 135, 120 125 Z" stroke="url(#topoGreyClean)" strokeWidth="1" fill="none" />
+                  <Path d="M -20 220 C 20 230, 50 210, 85 235 C 120 260, 130 300, 165 315 C 200 330, 235 305, 260 320" stroke="url(#topoGreySubtle)" strokeWidth="1" fill="none" />
+                  <Path d="M -20 250 C 25 260, 60 238, 95 260 C 130 282, 145 320, 180 335 C 215 350, 240 325, 260 340" stroke="url(#topoGreyClean)" strokeWidth="1" fill="none" />
+                  <Path d="M -10 280 C 35 290, 70 268, 105 288 C 140 308, 160 340, 195 355 C 230 370, 245 345, 260 360" stroke="url(#topoGreySubtle)" strokeWidth="1" fill="none" />
+                  <Path d="M 5 310 C 50 320, 85 295, 120 315 C 155 335, 175 365, 210 380" stroke="url(#topoGreyClean)" strokeWidth="1" fill="none" />
+                </G>
+
+                {/* 3. Center 3D HunterX Emblem */}
+                <G
+                  transform={`translate(${(width - emblemSize) / 2}, ${(height - emblemSize) / 2}) scale(${emblemSize / 100})`}
+                >
+                  <Path d="M 5 5 L 95 5 L 95 95 L 5 95 Z" fill="url(#xBackAura)" />
+                  <Path d="M 16 28 L 38 30 L 47 43 L 32 36 Z" fill="url(#gradWingHighlight)" />
+                  <Path d="M 16 28 L 32 36 L 47 43 L 37 55 L 28 38 Z" fill="url(#gradWingBody)" />
+                  <Path d="M 54 55 L 80 80 L 58 78 L 48 66 Z" fill="url(#gradFootShadow)" />
+                  <Path d="M 82 14 L 51 44 L 37 55 L 14 88 L 26 74 L 42 56 L 62 40 Z" fill="url(#gradMainSlash)" />
+                  <Path d="M 82 14 L 62 40 L 42 56 L 54 55 L 43 74 L 38 76 L 14 88 L 26 74 Z" fill="url(#gradSlashShadow)" />
+                </G>
+
+                {/* 4. Bottom "DRAG TO SCRATCH" Footer Text */}
+                <SvgText
+                  x={width / 2}
+                  y={height - 20}
+                  fill="#F2F2F2"
+                  fontSize={7.5}
+                  letterSpacing={1.2}
+                  fontWeight="600"
+                  textAnchor="middle"
+                >
+                  DRAG TO SCRATCH
+                </SvgText>
+              </G>
+            </Svg>
           </Animated.View>
         )}
       </View>
-    </Animated.View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   cardOuterFrame: {
-    alignSelf: 'center',
-    marginVertical: 14,
-    borderRadius: 22,
+    borderRadius: 24,
     borderWidth: 1.5,
-    backgroundColor: '#0D0D10',
-    position: 'relative',
+    backgroundColor: '#16181C',
+    overflow: 'hidden',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    elevation: 8,
+    shadowOpacity: 0.55,
+    shadowRadius: 18,
+    elevation: 10,
   },
   cardContainer: {
-    borderRadius: 20,
+    borderRadius: 22,
     overflow: 'hidden',
     position: 'relative',
   },
   revealedSurface: {
     ...StyleSheet.absoluteFillObject,
   },
-  revealedGradient: {
+  revealedContainer: {
     flex: 1,
+    backgroundColor: '#121316',
+  },
+  topImageSection: {
+    width: '100%',
+    height: '54%',
+    position: 'relative',
+    backgroundColor: '#1A1C20',
+    overflow: 'hidden',
+  },
+  heroProductImg: {
+    width: '100%',
+    height: '100%',
+  },
+  heroIconFallback: {
+    flex: 1,
+    backgroundColor: '#1A1C20',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
   },
-  rarityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  rarityBadgeText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 9,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  rewardIconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1.5,
+  brandCircleBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
+    elevation: 4,
   },
-  rewardText: {
+  topRightTagBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: '#154726',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  topRightTagText: {
     fontFamily: fontFamilies.bold,
-    fontSize: 26,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+    color: '#4ADE80',
+    fontSize: 9.5,
+    letterSpacing: 0.5,
   },
-  rewardSubtext: {
-    fontFamily: fontFamilies.medium,
+  bottomInfoSection: {
+    width: '100%',
+    height: '46%',
+    backgroundColor: '#121316',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    justifyContent: 'space-between',
+  },
+  offerMainHeading: {
+    fontFamily: fontFamilies.bold,
+    color: '#FFFFFF',
+    fontSize: 18,
+    letterSpacing: 0.3,
+  },
+  offerSubtext: {
+    fontFamily: fontFamilies.regular,
     color: '#9CA3AF',
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
     marginTop: 2,
   },
-  unlockedRow: {
+  productNameText: {
+    fontFamily: fontFamilies.semiBold,
+    color: '#FF9900',
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  codeSnippetBox: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1C1E23',
+    borderWidth: 1,
+    borderColor: '#2A2C33',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 4,
+  },
+  codeTextCol: {
+    flex: 1,
+  },
+  codeSnippetLabel: {
+    fontFamily: fontFamilies.bold,
+    color: '#6B7280',
+    fontSize: 7.5,
+    letterSpacing: 0.5,
+  },
+  codeSnippetVal: {
+    fontFamily: fontFamilies.bold,
+    color: '#FFFFFF',
+    fontSize: 12,
+    letterSpacing: 0.8,
+  },
+  copyPillBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 8,
+    backgroundColor: '#F66F28',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  unlockedText: {
+  copyPillBtnText: {
     fontFamily: fontFamilies.bold,
-    color: '#10B981',
-    fontSize: 10,
-    letterSpacing: 1,
+    color: '#0D0F12',
+    fontSize: 9,
+    letterSpacing: 0.5,
   },
   foilCoating: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 10,
   },
-  foilGradient: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    position: 'relative',
-  },
-  shimmerSweep: {
-    position: 'absolute',
-    top: -50,
-    bottom: -50,
-    width: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  scratchButtonPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(24, 24, 27, 0.95)',
-    borderWidth: 1.5,
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  scratchButtonText: {
-    fontFamily: fontFamilies.bold,
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-  },
-  foilFooterRow: {
-    position: 'absolute',
-    bottom: 10,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  hintText: {
-    fontFamily: fontFamilies.regular,
-    color: '#71717A',
-    fontSize: 10,
-    letterSpacing: 0.5,
-  },
-  progressChip: {
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  progressChipText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 9,
-    letterSpacing: 0.8,
-  },
 });
+
