@@ -1,11 +1,21 @@
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ImageSourcePropType,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { fontFamilies } from '@/theme/typography';
-
 import { getAvatarSource } from '@/components/profile/AvatarSelectionModal';
+import { OFFICIAL_HUNTER_AVATARS } from '@/services/api/avatar.service';
+
+const LOCAL_FALLBACK_AVATAR = require('@/assets/images/jinwoo.jpg');
+const DEFAULT_AVATAR = { uri: OFFICIAL_HUNTER_AVATARS[0].image_url };
 
 export interface LeaderboardHunter {
   id: string;
@@ -13,9 +23,12 @@ export interface LeaderboardHunter {
   displayName: string;
   score: number;
   level: number;
-  avatarUrl: string;
-  quote: string;
-  gender?: 'Male' | 'Female' | 'Other';
+  avatarUrl?: string | ImageSourcePropType;
+  quote?: string;
+  tagline?: string;
+  title?: string;
+  streakDays?: number;
+  daysActive?: number;
   isCurrentUser?: boolean;
 }
 
@@ -28,536 +41,576 @@ export const LeaderboardHunterRow: React.FC<LeaderboardHunterRowProps> = ({
   hunter,
   onPress,
 }) => {
-  const formatScore = (val: number) => {
-    return val.toLocaleString('en-US');
+  const isCurrent = !!hunter.isCurrentUser;
+
+  const renderAvatarSource = (source?: string | ImageSourcePropType) => {
+    if (!source || source === '') {
+      return DEFAULT_AVATAR;
+    }
+    if (typeof source === 'string') {
+      if (source.startsWith('http://') || source.startsWith('https://')) {
+        return { uri: source };
+      }
+      return getAvatarSource(source);
+    }
+    return source;
   };
 
-  const isTop3 = hunter.rank >= 1 && hunter.rank <= 3;
-  const isCurrentUser = hunter.isCurrentUser;
-
-  // Themes for Top 3 Cards
-  const getRankTheme = () => {
-    if (hunter.rank === 1) {
-      return {
-        accent: '#F59E0B',
-        border: 'rgba(245, 158, 11, 0.75)',
-        shadow: '#F59E0B',
-        gradient: ['rgba(217, 130, 15, 0.42)', 'rgba(80, 45, 10, 0.25)', '#0A0604', '#070402'] as const,
-        glowGradient: ['rgba(245, 158, 11, 0.38)', 'rgba(245, 158, 11, 0.1)', 'transparent'] as const,
-        levelBg: 'rgba(255, 255, 255, 0.04)',
-        levelBorder: 'rgba(255, 255, 255, 0.18)',
-        quoteColor: '#94A3B8',
-        chevronColor: '#CBD5E1',
-      };
-    }
-    if (hunter.rank === 2) {
-      return {
-        accent: '#CBD5E1',
-        border: 'rgba(180, 200, 225, 0.65)',
-        shadow: '#94A3B8',
-        gradient: ['rgba(140, 175, 215, 0.38)', 'rgba(40, 60, 85, 0.22)', '#07090D', '#040508'] as const,
-        glowGradient: ['rgba(180, 210, 245, 0.35)', 'rgba(180, 210, 245, 0.08)', 'transparent'] as const,
-        levelBg: 'rgba(255, 255, 255, 0.04)',
-        levelBorder: 'rgba(255, 255, 255, 0.18)',
-        quoteColor: '#94A3B8',
-        chevronColor: '#CBD5E1',
-      };
-    }
-    if (hunter.rank === 3) {
-      return {
-        accent: '#D97706',
-        border: 'rgba(217, 119, 6, 0.75)',
-        shadow: '#D97706',
-        gradient: ['rgba(217, 100, 15, 0.42)', 'rgba(85, 35, 10, 0.25)', '#090503', '#060302'] as const,
-        glowGradient: ['rgba(234, 88, 12, 0.38)', 'rgba(217, 119, 6, 0.1)', 'transparent'] as const,
-        levelBg: 'rgba(255, 255, 255, 0.04)',
-        levelBorder: 'rgba(255, 255, 255, 0.18)',
-        quoteColor: '#94A3B8',
-        chevronColor: '#CBD5E1',
-      };
-    }
-    return {
-      accent: '#A1A1AA',
-      border: 'rgba(255, 255, 255, 0.06)',
-      shadow: 'transparent',
-      gradient: ['#141418', '#101014', '#0B0B0E', 'transparent'] as const,
-      glowGradient: ['transparent', 'transparent', 'transparent'] as const,
-      levelBg: '#16161A',
-      levelBorder: '#242428',
-      quoteColor: '#71717A',
-      chevronColor: '#71717A',
-    };
-  };
-
-  const rankTheme = getRankTheme();
-
-  // 1. CURRENT USER HIGHLIGHTED CARD (Rank 12)
-  if (isCurrentUser) {
-    const CardContent = (
-      <LinearGradient
-        colors={['rgba(180, 18, 30, 0.48)', 'rgba(80, 10, 18, 0.25)', '#0A0407', '#050204']}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={styles.currentUserCard}
-      >
-        {/* Left Atmospheric Ambient Glow Overlay */}
-        <LinearGradient
-          colors={['rgba(239, 68, 68, 0.42)', 'rgba(239, 68, 68, 0.1)', 'transparent']}
-          start={{ x: 0, y: 0.1 }}
-          end={{ x: 0.6, y: 0.9 }}
-          style={StyleSheet.absoluteFillObject}
-          pointerEvents="none"
-        />
-
-        {/* Rank Number (Italic Warm Gold) */}
-        <View style={styles.rankCol}>
-          <Text style={styles.currentUserRankText}>{hunter.rank}</Text>
-        </View>
-
-        {/* Avatar with Gold Glowing Ring */}
-        <View style={styles.avatarCol}>
-          <Image
-            source={getAvatarSource(hunter.avatarUrl)}
-            style={[styles.avatarImage, styles.currentUserAvatarBorder]}
-            resizeMode="cover"
-          />
-        </View>
-
-        {/* Name & Score */}
-        <View style={styles.hunterInfoCol}>
-          <Text style={styles.currentUserDisplayNameText} numberOfLines={1}>
-            {hunter.displayName}
-          </Text>
-          <View style={styles.scoreRow}>
-            <Text style={styles.fireIcon}>🔥</Text>
-            <Text style={styles.currentUserScoreText}>{formatScore(hunter.score)}</Text>
-          </View>
-        </View>
-
-        {/* Level Pill */}
-        <View style={styles.levelCol}>
-          <View style={styles.currentUserLevelPill}>
-            <Text style={styles.currentUserLevelText} numberOfLines={1}>
-              Lv. {hunter.level}
-            </Text>
-          </View>
-        </View>
-
-        {/* Quote / Tagline (Red "KEEP HUNTING") */}
-        <View style={styles.quoteCol}>
-          <Text style={styles.currentUserQuoteText} numberOfLines={2}>
-            {hunter.quote || 'KEEP\nHUNTING'}
-          </Text>
-        </View>
-
-        {/* Chevron (Clean White) */}
-        <View style={styles.chevronCol}>
-          <Ionicons name="chevron-forward" size={19} color="#FFFFFF" />
-        </View>
-      </LinearGradient>
-    );
-
-    if (onPress) {
-      return (
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => onPress(hunter)}
-          style={styles.cardWrapper}
-        >
-          {CardContent}
-        </TouchableOpacity>
-      );
-    }
-
-    return <View style={styles.cardWrapper}>{CardContent}</View>;
-  }
-
-  // 2. TOP 3 FEATURED CARDS (Ranks 1, 2, 3)
-  if (isTop3) {
-    const Top3Content = (
-      <LinearGradient
-        colors={rankTheme.gradient}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={[
-          styles.top3Card,
-          {
-            borderColor: rankTheme.border,
-            shadowColor: rankTheme.shadow,
-          },
-        ]}
-      >
-        {/* Left Atmospheric Ambient Glow Overlay */}
-        <LinearGradient
-          colors={rankTheme.glowGradient}
-          start={{ x: 0, y: 0.1 }}
-          end={{ x: 0.6, y: 0.9 }}
-          style={StyleSheet.absoluteFillObject}
-          pointerEvents="none"
-        />
-
-        {/* Crown + Rank Number Column */}
-        <View style={styles.rankCol}>
-          <FontAwesome5 name="crown" size={15} color={rankTheme.accent} />
-          <Text style={[styles.topRankText, { color: rankTheme.accent }]}>
-            {hunter.rank}
-          </Text>
-        </View>
-
-        {/* Avatar with colored glowing border */}
-        <View style={styles.avatarCol}>
-          <Image
-            source={getAvatarSource(hunter.avatarUrl)}
-            style={[
-              styles.avatarImage,
-              { borderColor: rankTheme.accent, borderWidth: 1.8 },
-            ]}
-            resizeMode="cover"
-          />
-        </View>
-
-        {/* Name & Score */}
-        <View style={styles.hunterInfoCol}>
-          <Text style={styles.displayNameText} numberOfLines={1}>
-            {hunter.displayName}
-          </Text>
-          <View style={styles.scoreRow}>
-            <Text style={styles.fireIcon}>🔥</Text>
-            <Text style={styles.top3ScoreText}>{formatScore(hunter.score)}</Text>
-          </View>
-        </View>
-
-        {/* Level Pill */}
-        <View style={styles.levelCol}>
-          <View style={[styles.levelPill, { backgroundColor: rankTheme.levelBg, borderColor: rankTheme.levelBorder }]}>
-            <Text style={styles.top3LevelText}>Lv. {hunter.level}</Text>
-          </View>
-        </View>
-
-        {/* Quote / Slogan */}
-        <View style={styles.quoteCol}>
-          <Text
-            style={[styles.quoteText, { color: rankTheme.quoteColor }]}
-            numberOfLines={2}
-          >
-            {hunter.quote}
-          </Text>
-        </View>
-
-        {/* Chevron (Right Forward Arrow) */}
-        <View style={styles.chevronCol}>
-          <Ionicons name="chevron-forward" size={19} color={rankTheme.chevronColor} />
-        </View>
-      </LinearGradient>
-    );
-
-    if (onPress) {
-      return (
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => onPress(hunter)}
-          style={styles.cardWrapper}
-        >
-          {Top3Content}
-        </TouchableOpacity>
-      );
-    }
-
-    return <View style={styles.cardWrapper}>{Top3Content}</View>;
-  }
-
-  // 3. REGULAR HUNTER ROWS (Ranks 4 - 10+)
-  const RowContent = (
-    <View style={styles.regularRowContainer}>
-      {/* Rank Number */}
-      <View style={styles.rankCol}>
-        <Text style={styles.regularRankText}>{hunter.rank}</Text>
-      </View>
-
-      {/* Avatar */}
-      <View style={styles.avatarCol}>
-        <Image
-          source={getAvatarSource(hunter.avatarUrl)}
-          style={styles.avatarImage}
-          resizeMode="cover"
-        />
-      </View>
-
-      {/* Name & Score */}
-      <View style={styles.hunterInfoCol}>
-        <Text style={styles.displayNameText} numberOfLines={1}>
-          {hunter.displayName}
-        </Text>
-        <View style={styles.scoreRow}>
-          <Text style={styles.fireIcon}>🔥</Text>
-          <Text style={styles.scoreText}>{formatScore(hunter.score)}</Text>
-        </View>
-      </View>
-
-      {/* Level Pill */}
-      <View style={styles.levelCol}>
-        <View style={styles.levelPill}>
-          <Text style={styles.levelText}>Lv. {hunter.level}</Text>
-        </View>
-      </View>
-
-      {/* Quote */}
-      <View style={styles.quoteCol}>
-        <Text style={styles.quoteText} numberOfLines={2}>
-          {hunter.quote}
-        </Text>
-      </View>
-
-      {/* Chevron */}
-      <View style={styles.chevronCol}>
-        <Ionicons name="chevron-forward" size={18} color="#71717A" />
-      </View>
-    </View>
-  );
-
-  if (onPress) {
+  /* -------------------------------------------------------------
+   * 1. CURRENT USER HIGHLIGHTED ROW (Rank 12)
+   * ----------------------------------------------------------- */
+  if (isCurrent) {
     return (
       <TouchableOpacity
-        activeOpacity={0.75}
-        onPress={() => onPress(hunter)}
+        activeOpacity={0.85}
+        onPress={() => onPress?.(hunter)}
+        style={styles.cardContainer}
       >
-        {RowContent}
+        <LinearGradient
+          colors={['#24090C', '#170608', '#0E0405']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.currentUserCard}
+        >
+          {/* Rank Number in Vibrant Red */}
+          <View style={styles.rankCol}>
+            <Text style={styles.currentUserRankNum}>{hunter.rank}</Text>
+          </View>
+
+          {/* Avatar with Red Border Ring */}
+          <View style={styles.currentUserAvatarRing}>
+            <ExpoImage
+              source={renderAvatarSource(hunter.avatarUrl)}
+              style={styles.avatarImg}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              priority="high"
+              transition={150}
+              placeholder={LOCAL_FALLBACK_AVATAR}
+            />
+          </View>
+
+          {/* Details (Name + Flame Score) */}
+          <View style={styles.detailsCol}>
+            <Text style={styles.currentUserName} numberOfLines={1}>
+              {hunter.displayName}
+            </Text>
+            <View style={styles.scoreRow}>
+              <Ionicons name="flame" size={13} color="#EF4444" style={styles.flameIcon} />
+              <Text style={styles.currentUserScoreText}>
+                {hunter.score.toLocaleString()}
+              </Text>
+            </View>
+          </View>
+
+          {/* Level Pill */}
+          <View style={styles.currentUserLevelBadge}>
+            <Text style={styles.currentUserLevelText}>Lv. {hunter.level}</Text>
+          </View>
+
+          {/* Chevron */}
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color="#EF4444"
+            style={styles.chevron}
+          />
+        </LinearGradient>
       </TouchableOpacity>
     );
   }
 
-  return RowContent;
+  /* -------------------------------------------------------------
+   * 2. RANK 1: GOLD GLOW CARD
+   * ----------------------------------------------------------- */
+  if (hunter.rank === 1) {
+    return (
+      <TouchableOpacity
+        activeOpacity={0.82}
+        onPress={() => onPress?.(hunter)}
+        style={styles.cardContainer}
+      >
+        <LinearGradient
+          colors={['#17130A', '#100E07', '#0A0905']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.goldCard}
+        >
+          {/* Rank Col: Gold Crown + "1" */}
+          <View style={styles.rankCol}>
+            <FontAwesome5 name="crown" size={12} color="#F59E0B" style={styles.crownIcon} />
+            <Text style={styles.goldRankNum}>1</Text>
+          </View>
+
+          {/* Avatar with Gold Ring */}
+          <View style={styles.goldAvatarRing}>
+            <ExpoImage
+              source={renderAvatarSource(hunter.avatarUrl)}
+              style={styles.avatarImg}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              priority="high"
+              transition={150}
+              placeholder={LOCAL_FALLBACK_AVATAR}
+            />
+          </View>
+
+          {/* Details */}
+          <View style={styles.detailsCol}>
+            <Text style={styles.hunterName} numberOfLines={1}>
+              {hunter.displayName}
+            </Text>
+            <View style={styles.scoreRow}>
+              <Ionicons name="flame" size={13} color="#EF4444" style={styles.flameIcon} />
+              <Text style={styles.scoreText}>
+                {hunter.score.toLocaleString()}
+              </Text>
+            </View>
+          </View>
+
+          {/* Level Pill */}
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelText}>Lv. {hunter.level}</Text>
+          </View>
+
+          {/* Chevron */}
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color="#A1A1AA"
+            style={styles.chevron}
+          />
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  }
+
+  /* -------------------------------------------------------------
+   * 3. RANK 2: SILVER GLOW CARD
+   * ----------------------------------------------------------- */
+  if (hunter.rank === 2) {
+    return (
+      <TouchableOpacity
+        activeOpacity={0.82}
+        onPress={() => onPress?.(hunter)}
+        style={styles.cardContainer}
+      >
+        <LinearGradient
+          colors={['#111317', '#0B0D10', '#07080B']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.silverCard}
+        >
+          {/* Rank Col: Silver Crown + "2" */}
+          <View style={styles.rankCol}>
+            <FontAwesome5 name="crown" size={12} color="#CBD5E1" style={styles.crownIcon} />
+            <Text style={styles.silverRankNum}>2</Text>
+          </View>
+
+          {/* Avatar with Silver Ring */}
+          <View style={styles.silverAvatarRing}>
+            <ExpoImage
+              source={renderAvatarSource(hunter.avatarUrl)}
+              style={styles.avatarImg}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              priority="high"
+              transition={150}
+              placeholder={LOCAL_FALLBACK_AVATAR}
+            />
+          </View>
+
+          {/* Details */}
+          <View style={styles.detailsCol}>
+            <Text style={styles.hunterName} numberOfLines={1}>
+              {hunter.displayName}
+            </Text>
+            <View style={styles.scoreRow}>
+              <Ionicons name="flame" size={13} color="#EF4444" style={styles.flameIcon} />
+              <Text style={styles.scoreText}>
+                {hunter.score.toLocaleString()}
+              </Text>
+            </View>
+          </View>
+
+          {/* Level Pill */}
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelText}>Lv. {hunter.level}</Text>
+          </View>
+
+          {/* Chevron */}
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color="#A1A1AA"
+            style={styles.chevron}
+          />
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  }
+
+  /* -------------------------------------------------------------
+   * 4. RANK 3: BRONZE GLOW CARD
+   * ----------------------------------------------------------- */
+  if (hunter.rank === 3) {
+    return (
+      <TouchableOpacity
+        activeOpacity={0.82}
+        onPress={() => onPress?.(hunter)}
+        style={styles.cardContainer}
+      >
+        <LinearGradient
+          colors={['#16110A', '#100B07', '#0A0704']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.bronzeCard}
+        >
+          {/* Rank Col: Bronze Crown + "3" */}
+          <View style={styles.rankCol}>
+            <FontAwesome5 name="crown" size={12} color="#D97706" style={styles.crownIcon} />
+            <Text style={styles.bronzeRankNum}>3</Text>
+          </View>
+
+          {/* Avatar with Bronze Ring */}
+          <View style={styles.bronzeAvatarRing}>
+            <ExpoImage
+              source={renderAvatarSource(hunter.avatarUrl)}
+              style={styles.avatarImg}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              priority="high"
+              transition={150}
+              placeholder={LOCAL_FALLBACK_AVATAR}
+            />
+          </View>
+
+          {/* Details */}
+          <View style={styles.detailsCol}>
+            <Text style={styles.hunterName} numberOfLines={1}>
+              {hunter.displayName}
+            </Text>
+            <View style={styles.scoreRow}>
+              <Ionicons name="flame" size={13} color="#EF4444" style={styles.flameIcon} />
+              <Text style={styles.scoreText}>
+                {hunter.score.toLocaleString()}
+              </Text>
+            </View>
+          </View>
+
+          {/* Level Pill */}
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelText}>Lv. {hunter.level}</Text>
+          </View>
+
+          {/* Chevron */}
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color="#A1A1AA"
+            style={styles.chevron}
+          />
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  }
+
+  /* -------------------------------------------------------------
+   * 5. STANDARD CARDS (Ranks 4+)
+   * ----------------------------------------------------------- */
+  return (
+    <TouchableOpacity
+      activeOpacity={0.78}
+      onPress={() => onPress?.(hunter)}
+      style={styles.cardContainer}
+    >
+      <View style={styles.standardCard}>
+        {/* Rank Number */}
+        <View style={styles.rankCol}>
+          <Text style={styles.standardRankNum}>{hunter.rank}</Text>
+        </View>
+
+        {/* Avatar */}
+        <View style={styles.standardAvatarRing}>
+          <ExpoImage
+            source={renderAvatarSource(hunter.avatarUrl)}
+            style={styles.avatarImg}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            priority="high"
+            transition={150}
+            placeholder={LOCAL_FALLBACK_AVATAR}
+          />
+        </View>
+
+        {/* Details */}
+        <View style={styles.detailsCol}>
+          <Text style={styles.hunterName} numberOfLines={1}>
+            {hunter.displayName}
+          </Text>
+          <View style={styles.scoreRow}>
+            <Ionicons name="flame" size={13} color="#EF4444" style={styles.flameIcon} />
+            <Text style={styles.scoreText}>
+              {hunter.score.toLocaleString()}
+            </Text>
+          </View>
+        </View>
+
+        {/* Level Pill */}
+        <View style={styles.levelBadge}>
+          <Text style={styles.levelText}>Lv. {hunter.level}</Text>
+        </View>
+
+        {/* Chevron */}
+        <Ionicons
+          name="chevron-forward"
+          size={16}
+          color="#52525B"
+          style={styles.chevron}
+        />
+      </View>
+    </TouchableOpacity>
+  );
 };
 
 const styles = StyleSheet.create({
-  /* CARD WRAPPER (TOP 3 & CURRENT USER) */
-  cardWrapper: {
+  cardContainer: {
+    width: '100%',
     paddingHorizontal: 16,
-    marginBottom: 10,
-  },
-  top3Card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 18,
-    borderWidth: 1.4,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 10,
-    elevation: 6,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  currentUserCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#EF4444',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.65,
-    shadowRadius: 12,
-    elevation: 8,
-    overflow: 'hidden',
-    position: 'relative',
+    marginVertical: 4,
   },
 
-  /* REGULAR ROW CONTAINER */
-  regularRowContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 9,
-    paddingHorizontal: 28,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
-  },
-
-  /* UNIFORM GRID COLUMNS */
+  /* Rank Col */
   rankCol: {
-    width: 26,
+    width: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
-    gap: 3,
+    marginRight: 6,
   },
-  topRankText: {
+  crownIcon: {
+    marginBottom: 1,
+  },
+  goldRankNum: {
     fontFamily: fontFamilies.bold,
-    fontSize: 13.5,
-    fontWeight: '900',
-  },
-  regularRankText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#A1A1AA',
-  },
-  currentUserRankText: {
-    fontFamily: fontFamilies.boldItalic,
-    fontSize: 19,
-    fontWeight: '900',
+    fontSize: 16,
     color: '#F59E0B',
-    fontStyle: 'italic',
-    textShadowColor: 'rgba(245, 158, 11, 0.45)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
+  },
+  silverRankNum: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 16,
+    color: '#CBD5E1',
+  },
+  bronzeRankNum: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 16,
+    color: '#D97706',
+  },
+  standardRankNum: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 15.5,
+    color: '#8E95A5',
+  },
+  currentUserRankNum: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 17.5,
+    color: '#EF4444',
   },
 
-  /* AVATAR COLUMN */
-  avatarCol: {
-    width: 44,
-    height: 44,
-    marginRight: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+  /* Avatar Rings */
+  avatarImg: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 22,
   },
-  avatarImage: {
+  goldAvatarRing: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    borderWidth: 1.2,
-    borderColor: '#242428',
-    backgroundColor: '#16161A',
-  },
-  currentUserAvatarBorder: {
+    borderWidth: 1.6,
     borderColor: '#F59E0B',
-    borderWidth: 1.8,
+    overflow: 'hidden',
+    backgroundColor: '#18150C',
+    marginRight: 10,
+  },
+  silverAvatarRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.6,
+    borderColor: '#CBD5E1',
+    overflow: 'hidden',
+    backgroundColor: '#101317',
+    marginRight: 10,
+  },
+  bronzeAvatarRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.6,
+    borderColor: '#D97706',
+    overflow: 'hidden',
+    backgroundColor: '#16100B',
+    marginRight: 10,
+  },
+  standardAvatarRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#262734',
+    overflow: 'hidden',
+    backgroundColor: '#14141A',
+    marginRight: 10,
+  },
+  currentUserAvatarRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.6,
+    borderColor: '#EF4444',
+    overflow: 'hidden',
+    backgroundColor: '#1F080B',
+    marginRight: 10,
   },
 
-  /* HUNTER INFO COLUMN (NAME + SCORE) */
-  hunterInfoCol: {
-    width: 98,
+  /* Details Col */
+  detailsCol: {
+    flex: 1,
     justifyContent: 'center',
+    paddingRight: 8,
   },
-  displayNameText: {
+  hunterName: {
     fontFamily: fontFamilies.bold,
-    fontSize: 13.5,
-    fontWeight: '700',
+    fontSize: 14.5,
     color: '#FFFFFF',
-    letterSpacing: 0.2,
     marginBottom: 2,
+    letterSpacing: 0.1,
   },
-  currentUserDisplayNameText: {
+  currentUserName: {
     fontFamily: fontFamilies.bold,
     fontSize: 15,
-    fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.2,
     marginBottom: 2,
+    letterSpacing: 0.1,
   },
   scoreRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
   },
-  fireIcon: {
-    fontSize: 11,
+  flameIcon: {
+    marginRight: 3,
   },
   scoreText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#E4E4E7',
-    letterSpacing: 0.2,
-  },
-  top3ScoreText: {
     fontFamily: fontFamilies.bold,
     fontSize: 12.5,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
+    color: '#E4E4E7',
   },
   currentUserScoreText: {
     fontFamily: fontFamilies.bold,
-    fontSize: 13.5,
-    fontWeight: '800',
+    fontSize: 12.5,
     color: '#FFFFFF',
-    letterSpacing: 0.2,
   },
 
-  /* LEVEL PILL COLUMN */
-  levelCol: {
-    width: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 4,
-  },
-  levelPill: {
-    backgroundColor: '#16161A',
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
-    borderRadius: 10,
+  /* Level Badges */
+  levelBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 1,
-    borderColor: '#242428',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  currentUserLevelPill: {
-    backgroundColor: 'rgba(25, 12, 16, 0.75)',
+    borderColor: '#272834',
+    borderRadius: 10,
     paddingHorizontal: 9,
-    paddingVertical: 3.5,
-    borderRadius: 12,
-    borderWidth: 1.2,
-    borderColor: 'rgba(239, 68, 68, 0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 4,
+    marginRight: 10,
   },
   levelText: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 10,
-    color: '#A1A1AA',
-    fontWeight: '500',
+    fontFamily: fontFamilies.bold,
+    fontSize: 11,
+    color: '#9CA3AF',
   },
-  top3LevelText: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 10,
-    color: '#CBD5E1',
-    fontWeight: '600',
+  currentUserLevelBadge: {
+    backgroundColor: '#200A0D',
+    borderWidth: 1,
+    borderColor: '#7F1D1D',
+    borderRadius: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    marginRight: 10,
   },
   currentUserLevelText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 11.5,
-    color: '#E4E4E7',
-    fontWeight: '600',
+    fontFamily: fontFamilies.bold,
+    fontSize: 11,
+    color: '#F87171',
   },
 
-  /* QUOTE COLUMN */
-  quoteCol: {
-    flex: 1,
+  /* Chevron */
+  chevron: {
+    marginLeft: 2,
+  },
+
+  /* Card Containers */
+  goldCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: 'rgba(245, 158, 11, 0.45)',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 7,
+    elevation: 4,
   },
-  quoteText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#71717A',
-    letterSpacing: 0.5,
-    lineHeight: 11,
-    textTransform: 'uppercase',
-    textAlign: 'center',
+  silverCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: 'rgba(203, 213, 225, 0.35)',
+    shadowColor: '#CBD5E1',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  currentUserQuoteText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#EF4444',
-    letterSpacing: 0.7,
-    lineHeight: 12,
-    textTransform: 'uppercase',
-    textAlign: 'center',
+  bronzeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: 'rgba(217, 119, 6, 0.35)',
+    shadowColor: '#D97706',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 3,
   },
-
-  /* CHEVRON COLUMN */
-  chevronCol: {
-    width: 20,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
+  standardCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: '#0E0E13',
+    borderWidth: 1,
+    borderColor: '#1D1E28',
+  },
+  currentUserCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1.4,
+    borderColor: '#EF4444',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 9,
+    elevation: 5,
   },
 });
-
-

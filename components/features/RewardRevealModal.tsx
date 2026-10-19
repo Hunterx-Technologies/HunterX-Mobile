@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,9 @@ import {
   Share,
   Linking,
   Dimensions,
+  useWindowDimensions,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
@@ -116,11 +119,15 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
   onClose,
   reward,
 }) => {
+  const { width: windowWidth } = useWindowDimensions();
+  const cardWidth = windowWidth - 32;
+
   const [detailsExpanded, setDetailsExpanded] = useState(true);
   const [howToRedeemExpanded, setHowToRedeemExpanded] = useState(false);
   const [termsExpanded, setTermsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const horizontalScrollRef = useRef<ScrollView>(null);
 
   // Combine passed reward with 4 other distinct gym/fitness slides for 5 total slides
   const slides: RewardSlideItem[] = React.useMemo(() => {
@@ -145,9 +152,34 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
     return [firstSlide, ...remainingSlides];
   }, [reward]);
 
+  // Reset slide position on visibility or reward change
+  useEffect(() => {
+    if (visible) {
+      setActiveSlideIndex(0);
+      setCopied(false);
+      horizontalScrollRef.current?.scrollTo({ x: 0, animated: false });
+    }
+  }, [visible, reward?.id]);
+
   if (!reward) return null;
 
   const currentSlide = slides[activeSlideIndex] || slides[0];
+
+  const handleSlideChange = (offsetX: number) => {
+    const width = cardWidth > 0 ? cardWidth : SCREEN_WIDTH - 32;
+    if (width > 0) {
+      const slideIndex = Math.round(offsetX / width);
+      const clamped = Math.max(0, Math.min(slides.length - 1, slideIndex));
+      if (clamped !== activeSlideIndex) {
+        setActiveSlideIndex(clamped);
+        setCopied(false);
+      }
+    }
+  };
+
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    handleSlideChange(e.nativeEvent.contentOffset.x);
+  };
 
   const handleCopyCode = () => {
     Clipboard.setString(currentSlide.code);
@@ -235,22 +267,28 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
             {/* 2. PRODUCT HERO CAROUSEL (5 FITNESS REWARD SLIDES) */}
             <View style={styles.heroCarouselContainer}>
               <ScrollView
+                ref={horizontalScrollRef}
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
+                onScroll={handleScroll}
                 onMomentumScrollEnd={(e) => {
-                  const slideIndex = Math.round(
-                    e.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 32)
-                  );
-                  const clamped = Math.max(0, Math.min(slides.length - 1, slideIndex));
-                  setActiveSlideIndex(clamped);
-                  setCopied(false);
+                  handleSlideChange(e.nativeEvent.contentOffset.x);
+                }}
+                onScrollEndDrag={(e) => {
+                  handleSlideChange(e.nativeEvent.contentOffset.x);
                 }}
                 scrollEventThrottle={16}
+                decelerationRate="fast"
+                snapToInterval={cardWidth}
+                snapToAlignment="center"
                 contentContainerStyle={styles.carouselTrack}
               >
                 {slides.map((slide, index) => (
-                  <View key={slide.id || index} style={styles.heroCardSlide}>
+                  <View
+                    key={slide.id || index}
+                    style={[styles.heroCardSlide, { width: cardWidth }]}
+                  >
                     <Image
                       source={{ uri: slide.imageUrl }}
                       style={styles.heroProductImage}
@@ -679,7 +717,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#F66F28',
+    backgroundColor: '#FFFFFF',
     borderRadius: 28,
     paddingVertical: 14,
   },
@@ -687,7 +725,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     color: '#0D0F12',
     fontSize: 15,
-    fontWeight: '800',
     letterSpacing: 0.4,
   },
 });

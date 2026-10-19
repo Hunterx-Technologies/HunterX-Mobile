@@ -1,17 +1,22 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { fontFamilies } from '@/theme/typography';
 
-export type MainCategoryTab = 'Global' | 'Friends' | 'Gen Z';
+export type MainCategoryTab = 'Global' | 'Friends';
 
 interface TopCategoryFilterBarProps {
   category: MainCategoryTab;
   onSelectCategory: (category: MainCategoryTab) => void;
 }
 
-const CATEGORIES: MainCategoryTab[] = ['Global', 'Friends', 'Gen Z'];
+const CATEGORIES: MainCategoryTab[] = ['Global', 'Friends'];
 
 export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
   category,
@@ -20,28 +25,28 @@ export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
   return (
     <View style={styles.topBarContainer}>
       <View style={styles.filterRow}>
-        {CATEGORIES.map((tab) => {
-          const isActive = category === tab;
+        {CATEGORIES.map((cat) => {
+          const isActive = category === cat;
 
           return (
             <TouchableOpacity
-              key={tab}
-              activeOpacity={0.85}
-              onPress={() => onSelectCategory(tab)}
-              style={styles.tabTouchArea}
+              key={cat}
+              activeOpacity={0.8}
+              onPress={() => onSelectCategory(cat)}
+              style={styles.pillTouch}
             >
               {isActive ? (
                 <LinearGradient
-                  colors={['#CE1A24', '#8C0E15', '#380508']}
-                  start={{ x: 0.5, y: 0 }}
-                  end={{ x: 0.5, y: 1 }}
+                  colors={['#DC2626', '#B91C1C', '#991B1B']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
                   style={styles.activePillGradient}
                 >
-                  <Text style={styles.activePillText}>{tab}</Text>
+                  <Text style={styles.activePillText}>{cat}</Text>
                 </LinearGradient>
               ) : (
                 <View style={styles.inactivePill}>
-                  <Text style={styles.inactivePillText}>{tab}</Text>
+                  <Text style={styles.inactivePillText}>{cat}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -55,61 +60,56 @@ export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
 const styles = StyleSheet.create({
   topBarContainer: {
     width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 8,
+    paddingBottom: 4,
   },
   filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  tabTouchArea: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  pillTouch: {
+    flex: 1,
   },
 
   /* Active Glowing Red Pill */
   activePillGradient: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.2,
-    borderColor: '#FF333E',
-    shadowColor: '#F12730',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.75,
-    shadowRadius: 8,
-    elevation: 6,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9.5,
+    paddingHorizontal: 14,
+    borderRadius: 22,
+    borderWidth: 1.2,
+    borderColor: '#EF4444',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 7,
+    elevation: 4,
   },
   activePillText: {
     fontFamily: fontFamilies.bold,
-    fontSize: 13,
+    fontSize: 13.5,
     color: '#FFFFFF',
-    fontWeight: '700',
     letterSpacing: 0.2,
   },
 
-  /* Inactive Individual Pill */
+  /* Inactive Pill */
   inactivePill: {
-    backgroundColor: '#0D1114',
-    borderWidth: 1,
-    borderColor: '#1C232A',
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#121217',
+    borderWidth: 1,
+    borderColor: '#24242F',
+    borderRadius: 22,
+    paddingVertical: 9.5,
+    paddingHorizontal: 14,
   },
   inactivePillText: {
     fontFamily: fontFamilies.medium,
-    fontSize: 13,
-    color: '#8D98A3',
-    fontWeight: '500',
+    fontSize: 13.5,
+    color: '#9CA3AF',
     letterSpacing: 0.2,
   },
 });

@@ -1,9 +1,10 @@
 import React, { useCallback } from 'react';
 import { Tabs, useFocusEffect, usePathname, useRouter } from 'expo-router';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { BackHandler, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
+import { fontFamilies } from '@/theme/typography';
 import { colors } from '@/theme/colors';
 
 export default function TabsLayout() {
@@ -25,7 +26,7 @@ export default function TabsLayout() {
           return true; // Blocks native back press from returning to onboarding/auth
         }
 
-        // If on another tab (Profile, Battles, Inventory), navigate back to Home tab
+        // If on another tab, navigate back to Home tab
         router.navigate('/(tabs)');
         return true;
       };
@@ -40,64 +41,102 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        // Bar height + bottom padding grow with the device's own inset so the
-        // bar's background actually reaches the bottom edge (home indicator /
-        // gesture bar area) instead of leaving a gap that falls back to the
-        // default system black there.
-        tabBarStyle: [styles.tabBar, { height: 64 + insets.bottom, paddingBottom: 8 + insets.bottom }],
+        tabBarStyle: [
+          styles.tabBar,
+          { height: 62 + insets.bottom, paddingBottom: Math.max(6, insets.bottom) },
+        ],
       }}
     >
+      {/* 1. Home */}
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
           tabBarIcon: ({ focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons name="home-sharp" size={20} color={focused ? '#FFFFFF' : '#71717A'} />
+            <View style={styles.tabItemWrapper}>
+              <Ionicons
+                name={focused ? 'home' : 'home-outline'}
+                size={20}
+                color={focused ? '#FFFFFF' : '#71717A'}
+              />
+              <Text style={[styles.tabLabel, focused && styles.activeTabLabel]}>Home</Text>
             </View>
           ),
         }}
       />
+
+      {/* 2. Analytics */}
       <Tabs.Screen
         name="metrics"
         options={{
-          title: 'Metrics',
+          title: 'Analytics',
           tabBarIcon: ({ focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons name="stats-chart" size={20} color={focused ? '#FE5B01' : '#71717A'} />
+            <View style={styles.tabItemWrapper}>
+              <Ionicons
+                name={focused ? 'stats-chart' : 'stats-chart-outline'}
+                size={20}
+                color={focused ? '#FFFFFF' : '#71717A'}
+              />
+              <Text style={[styles.tabLabel, focused && styles.activeTabLabel]}>Analytics</Text>
             </View>
           ),
         }}
       />
+
+      {/* 3. Leaderboard */}
       <Tabs.Screen
         name="leaderboard"
         options={{
-          title: 'Battles',
+          title: 'Battle',
           tabBarIcon: ({ focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <MaterialCommunityIcons name="sword-cross" size={22} color={focused ? '#FFFFFF' : '#71717A'} />
+            <View style={styles.tabItemWrapper}>
+              <MaterialCommunityIcons
+                name="sword-cross"
+                size={22}
+                color={focused ? '#FFFFFF' : '#71717A'}
+              />
+              <Text
+                style={[styles.tabLabel, focused && styles.activeTabLabel]}
+                numberOfLines={1}
+              >
+                Battle
+              </Text>
             </View>
           ),
         }}
       />
+
+      {/* 4. Rewards / Inventory */}
       <Tabs.Screen
         name="achievements"
         options={{
-          title: 'Inventory',
+          title: 'Rewards',
           tabBarIcon: ({ focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <MaterialCommunityIcons name="package-variant-closed" size={22} color={focused ? '#FFFFFF' : '#71717A'} />
+            <View style={styles.tabItemWrapper}>
+              <MaterialCommunityIcons
+                name={focused ? 'cube' : 'cube-outline'}
+                size={21}
+                color={focused ? '#FFFFFF' : '#71717A'}
+              />
+              <Text style={[styles.tabLabel, focused && styles.activeTabLabel]}>Rewards</Text>
             </View>
           ),
         }}
       />
+
+      {/* 5. Profile */}
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons name="person-outline" size={20} color={focused ? '#FFFFFF' : '#71717A'} />
+            <View style={styles.tabItemWrapper}>
+              <Ionicons
+                name={focused ? 'person' : 'person-outline'}
+                size={20}
+                color={focused ? '#FFFFFF' : '#71717A'}
+              />
+              <Text style={[styles.tabLabel, focused && styles.activeTabLabel]}>Profile</Text>
             </View>
           ),
         }}
@@ -108,26 +147,26 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: colors.background,
+    backgroundColor: '#09090B',
     borderTopColor: '#18181B',
     borderTopWidth: 1,
-    paddingTop: 8,
+    paddingTop: 6,
+    elevation: 8,
   },
-  iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+  tabItemWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 62,
+    height: 48,
   },
-  activeIconContainer: {
-    backgroundColor: '#141418',
-    borderWidth: 1,
-    borderColor: '#3F3F46',
-    shadowColor: '#FFFFFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 3,
+  tabLabel: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 10,
+    color: '#71717A',
+    marginTop: 2,
+  },
+  activeTabLabel: {
+    fontFamily: fontFamilies.bold,
+    color: '#FFFFFF',
   },
 });

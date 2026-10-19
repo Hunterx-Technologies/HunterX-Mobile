@@ -131,12 +131,6 @@ export const LeaderboardHelpModal: React.FC<LeaderboardHelpModalProps> = ({
                         <Text style={styles.tabBold}>Friends</Text> – See how you rank among your friends.
                       </Text>
                     </View>
-                    <View style={styles.tabRow}>
-                      <View style={[styles.bulletDot, { backgroundColor: '#B8C6D1' }]} />
-                      <Text style={styles.tabDesc}>
-                        <Text style={styles.tabBold}>Gen Z</Text> – A special leaderboard for Gen Z Hunters.
-                      </Text>
-                    </View>
                   </View>
                 </View>
               </View>
@@ -312,7 +306,6 @@ const styles = StyleSheet.create({
   guideMainTitle: {
     fontFamily: fontFamilies.bold,
     fontSize: 25,
-    fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.3,
     marginBottom: 4,
@@ -357,7 +350,6 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontFamily: fontFamilies.bold,
     fontSize: 14,
-    fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.2,
     marginBottom: 4,
@@ -391,7 +383,6 @@ const styles = StyleSheet.create({
   },
   tabBold: {
     fontFamily: fontFamilies.bold,
-    fontWeight: '700',
     color: '#FFFFFF',
   },
 
@@ -419,7 +410,6 @@ const styles = StyleSheet.create({
   bottomCreedHandwritten: {
     fontFamily: fontFamilies.bold,
     fontSize: 13,
-    fontWeight: '800',
     color: '#EF4444',
     lineHeight: 16,
     letterSpacing: 1,
@@ -436,7 +426,6 @@ const styles = StyleSheet.create({
   bottomPillarText: {
     fontFamily: fontFamilies.bold,
     fontSize: 7.5,
-    fontWeight: '800',
     color: '#71717A',
     letterSpacing: 1.2,
     lineHeight: 11,

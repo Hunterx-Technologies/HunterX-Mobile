@@ -40,6 +40,7 @@ export type User = {
     total_xp?: number;
     current_level?: number;
     daily_streak?: number;
+    current_streak?: number;
     weekly_streak?: number;
     longest_streak?: number;
     streak_multiplier?: number;

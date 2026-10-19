@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Dimensions,
   Image,
   StyleSheet,
   Text,
@@ -14,7 +13,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { fontFamilies } from '@/theme/typography';
 
 const LEADERBOARD_HERO_BG = require('@/assets/images/leaderboardone.png');
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface LeaderboardHeroHeaderProps {
   onInfoPress?: () => void;
@@ -44,23 +42,35 @@ export const LeaderboardHeroHeader: React.FC<LeaderboardHeroHeaderProps> = ({
 
       {/* Top subtle dark overlay for status bar readability */}
       <LinearGradient
-        colors={['rgba(2, 2, 3, 0.85)', 'rgba(2, 2, 3, 0.3)', 'transparent']}
-        locations={[0, 0.25, 0.45]}
+        colors={['rgba(9, 9, 11, 0.75)', 'rgba(9, 9, 11, 0.2)', 'transparent']}
+        locations={[0, 0.35, 0.6]}
         style={StyleSheet.absoluteFillObject}
         pointerEvents="none"
       />
 
-      {/* Bottom smooth fade to black content canvas */}
+      {/* Bottom smooth fade to canvas black */}
       <LinearGradient
-        colors={['transparent', 'rgba(2, 2, 3, 0.75)', '#020203']}
+        colors={['transparent', 'rgba(9, 9, 11, 0.8)', '#09090B']}
         locations={[0.55, 0.85, 1]}
         style={StyleSheet.absoluteFillObject}
         pointerEvents="none"
       />
 
-      {/* TOP NAVIGATION ROW */}
+      {/* TOP NAVIGATION BAR */}
       <View style={styles.topNavRow}>
-        {/* Left: HunterX Brand Title + Tagline */}
+        {/* Left: Clean Back Button (strictly no background/border per project rules) */}
+        {router.canGoBack() && (
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={handleBack}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+
+        {/* Brand Center/Left */}
         <View style={styles.brandBlock}>
           <View style={styles.brandRow}>
             <Text style={styles.brandHunter}>Hunter</Text>
@@ -69,38 +79,35 @@ export const LeaderboardHeroHeader: React.FC<LeaderboardHeroHeaderProps> = ({
           <Text style={styles.brandSubtitle}>TRACK. IMPROVE. GO FURTHER.</Text>
         </View>
 
-        {/* Right: Clean Question Mark (?) Button */}
+        {/* Right: Info / Help Question Mark Button */}
         <TouchableOpacity
           style={styles.infoBtn}
           onPress={onInfoPress}
           activeOpacity={0.7}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Ionicons name="help-circle-outline" size={28} color="#F4F5F6" />
+          <Ionicons name="help-circle-outline" size={26} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      {/* MIDDLE & BOTTOM SECTION */}
-      <View style={styles.contentSection}>
-        {/* Floating Stylized Red Handwritten Creed on Left Over Mountain Artwork */}
-        <View style={styles.leftCreedCol}>
-          <Text style={styles.creedHandwritten}>SAME</Text>
-          <Text style={styles.creedHandwritten}>GOAL</Text>
-          <Text style={styles.creedHandwritten}>HIGHER</Text>
-          <Text style={styles.creedHandwritten}>HUMANS.</Text>
-        </View>
+      {/* Slanted red graffiti/brush tagline on left mountain slope */}
+      <View style={styles.slantedTaglineBlock} pointerEvents="none">
+        <Text style={styles.slantedTaglineText}>SAME</Text>
+        <Text style={styles.slantedTaglineText}>GOAL</Text>
+        <Text style={styles.slantedTaglineText}>HIGHER</Text>
+        <Text style={styles.slantedTaglineText}>HUMANS.</Text>
+      </View>
 
-        {/* Bottom Row: Large "Leaderboard" Title on Left + "DISCIPLINE BUILDS FREEDOM" on Right */}
-        <View style={styles.bottomRow}>
-          <Text style={styles.screenMainTitle}>Leaderboard</Text>
+      {/* Creed text on the right side under the moon */}
+      <View style={styles.creedCol} pointerEvents="none">
+        <Text style={styles.creedText}>DISCIPLINE</Text>
+        <Text style={styles.creedText}>BUILDS</Text>
+        <Text style={styles.creedText}>FREEDOM</Text>
+      </View>
 
-          {/* Right Pillar Words: DISCIPLINE BUILDS FREEDOM */}
-          <View style={styles.creedPillarsCol}>
-            <Text style={styles.creedPillarText}>DISCIPLINE</Text>
-            <Text style={styles.creedPillarText}>BUILDS</Text>
-            <Text style={styles.creedPillarText}>FREEDOM</Text>
-          </View>
-        </View>
+      {/* HERO TITLE SECTION - Big bold "Leaderboard" */}
+      <View style={styles.bottomTitleBlock}>
+        <Text style={styles.screenMainTitle}>Leaderboard</Text>
       </View>
     </View>
   );
@@ -109,11 +116,11 @@ export const LeaderboardHeroHeader: React.FC<LeaderboardHeroHeaderProps> = ({
 const styles = StyleSheet.create({
   headerContainer: {
     width: '100%',
-    height: 330,
+    height: 275,
     position: 'relative',
     justifyContent: 'space-between',
-    paddingBottom: 8,
-    backgroundColor: '#020203',
+    paddingBottom: 6,
+    backgroundColor: '#09090B',
   },
   backgroundImage: {
     ...StyleSheet.absoluteFillObject,
@@ -122,14 +129,21 @@ const styles = StyleSheet.create({
   },
   topNavRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingTop: 8,
     zIndex: 20,
   },
+  backBtn: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 2,
+  },
   brandBlock: {
-    alignItems: 'flex-start',
+    flex: 1,
   },
   brandRow: {
     flexDirection: 'row',
@@ -137,81 +151,71 @@ const styles = StyleSheet.create({
   },
   brandHunter: {
     fontFamily: fontFamilies.bold,
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#F4F5F6',
+    fontSize: 21,
+    color: '#FFFFFF',
     letterSpacing: 0.2,
   },
   brandX: {
     fontFamily: fontFamilies.bold,
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#F12730',
+    fontSize: 21,
+    color: '#EF4444',
     letterSpacing: 0.2,
   },
   brandSubtitle: {
     fontFamily: fontFamilies.bold,
     fontSize: 8,
-    fontWeight: '800',
-    color: '#8D98A3',
-    letterSpacing: 1.2,
-    marginTop: 2,
+    color: '#9CA3AF',
+    letterSpacing: 1.1,
+    marginTop: 1,
     textTransform: 'uppercase',
   },
   infoBtn: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  /* Middle & Bottom Sections */
-  contentSection: {
+  slantedTaglineBlock: {
+    position: 'absolute',
+    left: 20,
+    top: 86,
+    transform: [{ rotate: '-13deg' }],
+    zIndex: 10,
+  },
+  slantedTaglineText: {
+    fontFamily: fontFamilies.brush,
+    fontSize: 13.5,
+    lineHeight: 16,
+    color: '#EF4444',
+    letterSpacing: 0.6,
+    textShadowColor: 'rgba(239, 68, 68, 0.45)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
+  },
+  creedCol: {
+    position: 'absolute',
+    right: 18,
+    top: 130,
+    alignItems: 'flex-end',
+    zIndex: 10,
+  },
+  creedText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 8.5,
+    color: '#9CA3AF',
+    letterSpacing: 1.1,
+    lineHeight: 12.5,
+    textTransform: 'uppercase',
+  },
+  bottomTitleBlock: {
     paddingHorizontal: 18,
     paddingBottom: 4,
-    zIndex: 15,
-  },
-  leftCreedCol: {
-    alignSelf: 'flex-start',
-    transform: [{ rotate: '-10deg' }],
-    marginBottom: 16,
-    marginLeft: 6,
-  },
-  creedHandwritten: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#F12730',
-    letterSpacing: 1,
-    lineHeight: 18,
-    textShadowColor: 'rgba(241, 39, 48, 0.75)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    zIndex: 10,
   },
   screenMainTitle: {
     fontFamily: fontFamilies.bold,
     fontSize: 32,
-    fontWeight: '800',
-    color: '#F4F5F6',
-    letterSpacing: 0.2,
-  },
-  creedPillarsCol: {
-    alignItems: 'flex-end',
-    paddingBottom: 4,
-  },
-  creedPillarText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#8D98A3',
-    letterSpacing: 1.2,
-    lineHeight: 13,
-    textTransform: 'uppercase',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
   },
 });
-

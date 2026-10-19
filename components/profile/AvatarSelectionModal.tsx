@@ -21,17 +21,28 @@ export const getAvatarSource = (
   const list = getCachedAvatars();
   const firstAvatarUrl = list && list.length > 0 ? list[0].image_url : DEFAULT_FALLBACK_AVATAR;
 
-  if (!avatarUrl && !avatarId) {
-    return { uri: firstAvatarUrl };
-  }
-
+  // 1. If avatarUrl is already a valid remote web URL
   if (avatarUrl && typeof avatarUrl === 'string' && (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
     return { uri: avatarUrl };
   }
 
-  const searchKey = String(avatarId || avatarUrl);
+  // 2. Derive key to search official avatar catalog
+  const rawKey = avatarId !== undefined && avatarId !== null ? String(avatarId) : String(avatarUrl || '');
+  if (!rawKey || rawKey === 'null' || rawKey === 'undefined') {
+    return { uri: firstAvatarUrl };
+  }
+
+  // Strip prefixes like "char_" (e.g. "char_1" -> "1")
+  const cleanId = rawKey.replace(/^char_/, '').trim();
+
   if (list && list.length > 0) {
-    const matched = list.find((a) => String(a.id) === searchKey || a.image_url === searchKey);
+    const matched = list.find(
+      (a) =>
+        String(a.id) === cleanId ||
+        String(a.id) === rawKey ||
+        a.image_url === rawKey ||
+        a.name.toLowerCase() === rawKey.toLowerCase()
+    );
     if (matched && matched.image_url) {
       return { uri: matched.image_url };
     }
@@ -81,9 +92,13 @@ export function AvatarSelectionModal({
   useEffect(() => {
     if (visible && avatars.length > 0) {
       // Find matching avatar by ID or URL, else default to 1st avatar (avatars[0])
-      const searchKey = String(currentAvatarId || currentAvatar || '');
+      const rawKey = String(currentAvatarId || currentAvatar || '');
+      const cleanId = rawKey.replace(/^char_/, '').trim();
       const matched = avatars.find(
-        (a) => String(a.id) === searchKey || a.image_url === searchKey
+        (a) =>
+          String(a.id) === cleanId ||
+          String(a.id) === rawKey ||
+          a.image_url === rawKey
       );
       if (matched) {
         setSelectedAvatarId(matched.id);
