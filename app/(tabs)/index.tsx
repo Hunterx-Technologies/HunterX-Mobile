@@ -11,14 +11,18 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useScrollToTop } from '@react-navigation/native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { fetchTasksToday, completeTask, reopenTask } from '@/services/api/tasks.service';
 import type { TaskItem } from '@/types/task';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
+import { usePushPermissionPrompt } from '@/hooks/usePushPermissionPrompt';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { getCurrentUser } from '@/services/api/auth.service';
 import { optimizeCloudinaryUrl, DEFAULT_BLURHASH } from '@/services/media/cloudinary';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -27,6 +31,7 @@ import { Screen } from '@/components/common/Screen';
 import { ExactMedalIcon } from '@/components/common/ExactMedalIcon';
 import { DayCompleteScreen } from '@/components/features/missions/DayCompleteScreen';
 import { QuestListCard } from '@/components/features/missions/QuestListCard';
+import { PaidTaskPurchaseModal } from '@/components/features/missions/PaidTaskPurchaseModal';
 import { LootDropModal } from '@/components/features/loot/LootDropModal';
 import { QuestActionModal } from '@/components/features/missions/QuestActionModal';
 import { TaskCompletedToast } from '@/components/features/missions/TaskCompletedToast';
@@ -39,16 +44,21 @@ import { useLootDrop } from '@/hooks/useLootDrop';
 import { fontFamilies } from '@/theme/typography';
 import { getAvatarSource } from './profile';
 import { useAvatarsReady } from '@/services/api/avatar.service';
+import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
+import { useStreakBreakWatcher } from '@/hooks/useStreakBreakWatcher';
+import { useStreakBreakStore } from '@/store/useStreakBreakStore';
+import { StreakPillLanding } from '@/components/features/streaks/StreakPillLanding';
 
 export interface QuestItem {
   id: string;
   title: string;
+  description?: string;
   category: string;
   xpReward: number;
   xpPartial?: number;
-  type: 'daily' | 'weekly';
+  type: 'daily' | 'weekly' | 'monthly' | 'locked';
   image: any;
-  status: 'todo' | 'done' | 'partial' | 'skipped';
+  status: 'todo' | 'done' | 'partial' | 'skipped' | 'locked';
   earnedXp?: number;
   showTickButton?: boolean;
   showWrongButton?: boolean;
@@ -57,6 +67,22 @@ export interface QuestItem {
   imageStyle?: any;
   targetValue?: string;
   allows_partial?: boolean;
+  period_start?: string;
+  period_end?: string;
+  end_date?: string;
+  price?: number;
+  currency?: string;
+  is_paid?: boolean;
+}
+
+function addDaysToIso(dateStr: string, days: number): string {
+  try {
+    const d = new Date(dateStr + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().split('T')[0];
+  } catch {
+    return dateStr;
+  }
 }
 
 const LAST_TASK_SHEET_DATE_KEY = '@hunterx_task_sheet_last_shown_date';
@@ -128,7 +154,10 @@ const ANIME_AVATARS = [
   'https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=400&auto=format&fit=crop',
 ];
 
-function mapTaskToQuest(item: TaskItem, type: 'daily' | 'weekly'): QuestItem {
+function mapTaskToQuest(
+  item: TaskItem,
+  type: 'daily' | 'weekly' | 'monthly' | 'locked'
+): QuestItem {
   const tagUpper = item.tag?.toUpperCase() || '';
 
   // Dynamically bind image from the API response, requesting a
@@ -136,13 +165,15 @@ function mapTaskToQuest(item: TaskItem, type: 'daily' | 'weekly'): QuestItem {
   // full-resolution original (see services/media/cloudinary.ts).
   const image = item.image_url ? { uri: optimizeCloudinaryUrl(item.image_url) } : null;
 
-  let status: 'todo' | 'done' | 'partial' | 'skipped' = 'todo';
+  let status: 'todo' | 'done' | 'partial' | 'skipped' | 'locked' = 'todo';
   if (item.status === 'COMPLETED') {
     status = 'done';
   } else if (item.status === 'PARTIAL') {
     status = 'partial';
   } else if (item.status === 'SKIPPED') {
     status = 'skipped';
+  } else if (item.status === 'LOCKED' || type === 'locked') {
+    status = 'locked';
   }
 
   let targetValue: string | undefined = undefined;
@@ -163,20 +194,29 @@ function mapTaskToQuest(item: TaskItem, type: 'daily' | 'weekly'): QuestItem {
     }
   }
 
+  const period_end = item.period_start ? addDaysToIso(item.period_start, 29) : undefined;
+
   return {
     id: item.id,
     title: item.title,
-    category: item.tag || 'QUEST',
+    description: item.description,
+    category: item.tag || (type === 'locked' ? 'PREMIUM' : 'QUEST'),
     xpReward: item.xp_reward,
     xpPartial: item.xp_partial,
     type,
     image,
     status,
     earnedXp: item.xp_earned,
-    showTickButton: item.status !== 'COMPLETED' && item.status !== 'SKIPPED',
-    showWrongButton: item.status !== 'COMPLETED' && item.status !== 'SKIPPED',
+    showTickButton: status !== 'done' && status !== 'skipped' && status !== 'locked',
+    showWrongButton: status !== 'done' && status !== 'skipped' && status !== 'locked',
     targetValue,
     allows_partial: item.allows_partial,
+    period_start: item.period_start,
+    period_end,
+    end_date: item.end_date ? item.end_date.slice(0, 10) : undefined,
+    price: item.price,
+    currency: item.currency || 'INR',
+    is_paid: item.is_paid,
     imageHeight: tagUpper === 'REST' ? 120 : undefined,
     imageStyle: tagUpper === 'NUTRITION' ? { height: 170, top: -25 } : undefined,
   };
@@ -184,12 +224,40 @@ function mapTaskToQuest(item: TaskItem, type: 'daily' | 'weekly'): QuestItem {
 
 export default function MissionsHomeScreen() {
   const { user } = useAuth();
+  // Shows the streak break card when a life was used since the last visit.
+  useStreakBreakWatcher(user);
   const { lastDrop, roll } = useLootDrop();
   const params = useLocalSearchParams<{ fromAscension?: string }>();
   const isFromAscension = params.fromAscension === 'true';
 
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
+
+  // Lets the streak badge popup scroll home to the Badges section.
+  const scrollYRef = useRef(0);
+  useEffect(
+    () =>
+      useStreakBadgeStore.getState().setHomeScroller((dy) => {
+        scrollRef.current?.scrollTo({ y: Math.max(0, scrollYRef.current + dy), animated: true });
+      }),
+    []
+  );
+
+  // Lets the streak break card's flame fly into the header pill.
+  const streakFlameRef = useRef<View>(null);
+  useEffect(
+    () =>
+      useStreakBreakStore.getState().setPillLocator(async () => {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        if (scrollYRef.current > 0) await new Promise((resolve) => setTimeout(resolve, 380));
+        return new Promise((resolve) => {
+          const view = streakFlameRef.current;
+          if (!view) return resolve(null);
+          view.measureInWindow((x, y, width, height) => resolve(width > 0 ? { x, y, width, height } : null));
+        });
+      }),
+    []
+  );
 
 
 
@@ -230,6 +298,8 @@ export default function MissionsHomeScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedQuest, setSelectedQuest] = useState<QuestItem | null>(null);
+  const [selectedBuyQuest, setSelectedBuyQuest] = useState<QuestItem | null>(null);
+  const [buyModalVisible, setBuyModalVisible] = useState(false);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [completedToastVisible, setCompletedToastVisible] = useState(false);
   const [completedToastTitle, setCompletedToastTitle] = useState('Task Completed!');
@@ -258,7 +328,9 @@ export default function MissionsHomeScreen() {
       ]);
       const mappedDaily = (tasksData.daily || []).map((item) => mapTaskToQuest(item, 'daily'));
       const mappedWeekly = (tasksData.weekly || []).map((item) => mapTaskToQuest(item, 'weekly'));
-      const mapped = [...mappedDaily, ...mappedWeekly];
+      const mappedMonthly = (tasksData.monthly || []).map((item) => mapTaskToQuest(item, 'monthly'));
+      const mappedLocked = (tasksData.locked || []).map((item) => mapTaskToQuest(item, 'locked'));
+      const mapped = [...mappedDaily, ...mappedWeekly, ...mappedMonthly, ...mappedLocked];
       setQuests(mapped);
       if (refreshedUser) {
         useAuthStore.getState().setUser(refreshedUser);
@@ -281,16 +353,36 @@ export default function MissionsHomeScreen() {
     }
   }, []);
 
+  const unreadNotifications = useNotificationStore((s) => s.unreadCount);
+  const refreshUnreadNotifications = useNotificationStore((s) => s.refreshUnreadCount);
+
   useFocusEffect(
     useCallback(() => {
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       loadTasks({ refreshUser: true });
-    }, [loadTasks])
+      refreshUnreadNotifications();
+    }, [loadTasks, refreshUnreadNotifications])
   );
 
+  const prevGenderRef = useRef(user?.gender);
   useEffect(() => {
-    loadTasks();
+    if (prevGenderRef.current !== undefined && prevGenderRef.current !== user?.gender) {
+      loadTasks();
+    }
+    prevGenderRef.current = user?.gender;
   }, [loadTasks, user?.gender]);
+
+  // Offer push notifications once the hunter has earned XP — never over
+  // another Home modal or the post-Ascension intro fade.
+  const pushPrompt = usePushPermissionPrompt();
+  const maybeOfferPush = pushPrompt.maybeOffer;
+  const isHomeModalOpen =
+    dropVisible || actionModalVisible || dayCompleteModalVisible || taskBottomSheetVisible || showBlackIntroOverlay;
+  useEffect(() => {
+    if (isHomeModalOpen) return;
+    const timer = setTimeout(() => maybeOfferPush((user?.xp ?? 0) > 0), 1500);
+    return () => clearTimeout(timer);
+  }, [isHomeModalOpen, user?.xp, maybeOfferPush]);
 
   const displayName = user?.displayName ? user.displayName.toUpperCase() : 'SEYMEN';
   const displayXP = (user?.xp ?? 1240).toLocaleString();
@@ -304,6 +396,8 @@ export default function MissionsHomeScreen() {
 
   const dailyQuests = quests.filter((q) => q.type === 'daily');
   const weeklyQuests = quests.filter((q) => q.type === 'weekly');
+  const monthlyQuests = quests.filter((q) => q.type === 'monthly');
+  const lockedQuests = quests.filter((q) => q.status === 'locked' || q.type === 'locked');
 
   const todoQuests = quests.filter((q) => q.status === 'todo');
   const doneQuests = quests.filter((q) => q.status === 'done' || q.status === 'partial');
@@ -311,10 +405,15 @@ export default function MissionsHomeScreen() {
 
   const dailyTodoQuests = todoQuests.filter((q) => q.type === 'daily');
   const weeklyTodoQuests = todoQuests.filter((q) => q.type === 'weekly');
+  const monthlyTodoQuests = todoQuests.filter((q) => q.type === 'monthly');
+
   const dailyDoneQuests = doneQuests.filter((q) => q.type === 'daily');
   const weeklyDoneQuests = doneQuests.filter((q) => q.type === 'weekly');
+  const monthlyDoneQuests = doneQuests.filter((q) => q.type === 'monthly');
+
   const dailySkippedQuests = skippedQuests.filter((q) => q.type === 'daily');
   const weeklySkippedQuests = skippedQuests.filter((q) => q.type === 'weekly');
+  const monthlySkippedQuests = skippedQuests.filter((q) => q.type === 'monthly');
 
   // Automatically pop up DayCompleteScreen celebration ONCE per day when all daily tasks are completed/skipped
   useEffect(() => {
@@ -485,6 +584,18 @@ export default function MissionsHomeScreen() {
     }
   }, [handleCompleteTask]);
 
+    const handleOpenBuyModal = useCallback((quest: QuestItem) => {
+    setSelectedBuyQuest(quest);
+    setBuyModalVisible(true);
+  }, []);
+
+  const handleConfirmPurchase = useCallback((quest: QuestItem) => {
+    setBuyModalVisible(false);
+    setErrorToastTitle('Payment Coming Soon');
+    setErrorToastSubtitle(`Checkout for "${quest.title}" (₹${quest.price ?? 499}) will be available in the upcoming release.`);
+    setErrorToastVisible(true);
+  }, []);
+
   const handleDirectSkip = useCallback((questId: string) => {
     handleCompleteTask(questId, 'SKIPPED');
   }, [handleCompleteTask]);
@@ -528,12 +639,20 @@ export default function MissionsHomeScreen() {
         bounces={false}
         overScrollMode="never"
         ref={scrollRef}
+        onScroll={(e) => {
+          scrollYRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         {/* TOP HEADER */}
         <View style={styles.topHeader}>
-          <View style={styles.userProfileGroup}>
+          <TouchableOpacity
+            style={styles.userProfileGroup}
+            onPress={() => router.push('/(tabs)/profile')}
+            activeOpacity={0.7}
+          >
             <View style={styles.avatarWrapper}>
               <ExpoImage
                 source={getAvatarSource(user?.avatarUrl, (user as any)?.avatar_id)}
@@ -552,16 +671,31 @@ export default function MissionsHomeScreen() {
               <Text style={styles.greetingText}>HEY, {displayName}!</Text>
               <Text style={styles.xpSubtext}>{displayXP} XP · ARISE, HUNTER.</Text>
             </View>
-          </View>
+          </TouchableOpacity>
 
           <View style={styles.headerActions}>
-            <View style={styles.streakPill}>
-              <Ionicons name="flame" size={20} color="#FF5500" />
-              <Text style={styles.streakText}>{displayStreak}</Text>
-            </View>
+            <StreakPillLanding>
+              <View style={styles.streakPill}>
+                <View ref={streakFlameRef} collapsable={false}>
+                  <Ionicons name="flame" size={20} color="#FF5500" />
+                </View>
+                <Text style={styles.streakText}>{displayStreak}</Text>
+              </View>
+            </StreakPillLanding>
 
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => router.push('/notifications')}
+              activeOpacity={0.7}
+            >
               <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
+              {unreadNotifications > 0 ? (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>
+                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                  </Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           </View>
         </View>
@@ -774,6 +908,43 @@ export default function MissionsHomeScreen() {
                         ))}
                       </>
                     )}
+
+                    {/* MONTHLY QUESTS Section */}
+                    {monthlyTodoQuests.length > 0 && (
+                      <>
+                        <Text style={[styles.sectionMonoLabel, { marginTop: 24 }]}>MONTHLY QUESTS</Text>
+                        {monthlyTodoQuests.map((quest) => (
+                          <QuestListCard
+                            key={quest.id}
+                            quest={quest}
+                            variant="todo"
+                            proteinGoal={user?.daily_protein_goal}
+                            onComplete={handleOpenQuestActions}
+                            onSkip={handleDirectSkip}
+                            onReset={handleResetQuest}
+                          />
+                        ))}
+                      </>
+                    )}
+
+                    {/* SPECIAL OFFERS (LOCKED PAID TASKS) */}
+                    {lockedQuests.length > 0 && (
+                      <>
+                        <Text style={[styles.sectionMonoLabel, { marginTop: 24 }]}>SPECIAL OFFERS</Text>
+                        {lockedQuests.map((quest) => (
+                          <QuestListCard
+                            key={quest.id}
+                            quest={quest}
+                            variant="locked"
+                            proteinGoal={user?.daily_protein_goal}
+                            onComplete={handleOpenQuestActions}
+                            onSkip={handleDirectSkip}
+                            onReset={handleResetQuest}
+                            onBuy={handleOpenBuyModal}
+                          />
+                        ))}
+                      </>
+                    )}
                   </>
                 )}
               </>
@@ -815,6 +986,26 @@ export default function MissionsHomeScreen() {
                       <>
                         <Text style={[styles.sectionMonoLabel, { marginTop: dailyDoneQuests.length > 0 ? 24 : 0 }]}>WEEKLY QUESTS</Text>
                         {weeklyDoneQuests.map((quest) => (
+                          <QuestListCard
+                            key={quest.id}
+                            quest={quest}
+                            variant="done"
+                            proteinGoal={user?.daily_protein_goal}
+                            onComplete={handleOpenQuestActions}
+                            onSkip={handleDirectSkip}
+                            onReset={handleResetQuest}
+                          />
+                        ))}
+                      </>
+                    )}
+
+                    {/* MONTHLY QUESTS Section */}
+                    {monthlyDoneQuests.length > 0 && (
+                      <>
+                        <Text style={[styles.sectionMonoLabel, { marginTop: (dailyDoneQuests.length > 0 || weeklyDoneQuests.length > 0) ? 24 : 0 }]}>
+                          MONTHLY QUESTS
+                        </Text>
+                        {monthlyDoneQuests.map((quest) => (
                           <QuestListCard
                             key={quest.id}
                             quest={quest}
@@ -880,6 +1071,26 @@ export default function MissionsHomeScreen() {
                         ))}
                       </>
                     )}
+
+                    {/* MONTHLY QUESTS Section */}
+                    {monthlySkippedQuests.length > 0 && (
+                      <>
+                        <Text style={[styles.sectionMonoLabel, { marginTop: (dailySkippedQuests.length > 0 || weeklySkippedQuests.length > 0) ? 24 : 0 }]}>
+                          MONTHLY QUESTS
+                        </Text>
+                        {monthlySkippedQuests.map((quest) => (
+                          <QuestListCard
+                            key={quest.id}
+                            quest={quest}
+                            variant="skipped"
+                            proteinGoal={user?.daily_protein_goal}
+                            onComplete={handleOpenQuestActions}
+                            onSkip={handleDirectSkip}
+                            onReset={handleResetQuest}
+                          />
+                        ))}
+                      </>
+                    )}
                   </>
                 )}
               </>
@@ -890,6 +1101,12 @@ export default function MissionsHomeScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
       {/* Quest Action Selection Modal (Partial, Skip, Complete) */}
+      <PaidTaskPurchaseModal
+        visible={buyModalVisible}
+        quest={selectedBuyQuest}
+        onClose={() => setBuyModalVisible(false)}
+        onConfirmPurchase={handleConfirmPurchase}
+      />
       <QuestActionModal
         visible={actionModalVisible}
         questTitle={selectedQuest?.title ?? ''}
@@ -947,6 +1164,16 @@ export default function MissionsHomeScreen() {
         weekStatus={user?.week_status}
         onClose={() => setTaskBottomSheetVisible(false)}
         onContinue={() => setTaskBottomSheetVisible(false)}
+      />
+
+      <ConfirmDialog
+        visible={pushPrompt.visible}
+        title="Let the System summon you"
+        message="Get a heads-up before your streak breaks, when rewards drop and when new quests arrive. Never more than a few a day."
+        confirmLabel="Enable notifications"
+        cancelLabel="Not now"
+        onConfirm={pushPrompt.accept}
+        onCancel={pushPrompt.dismiss}
       />
 
       {/* Day Complete Modal Popup */}
@@ -1124,6 +1351,25 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 17,
+    height: 17,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: '#FE5B01',
+    borderWidth: 1.5,
+    borderColor: '#0A0A0C',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadgeText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 9.5,
+    color: '#FFFFFF',
   },
 
   /* Active Campaign */

@@ -1,5 +1,5 @@
-export type TaskStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED' | 'SKIPPED';
-export type TaskType = 'DAILY_FIXED' | 'DAILY_ADMIN' | 'WEEKLY';
+export type TaskStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED' | 'SKIPPED' | 'LOCKED';
+export type TaskType = 'DAILY_FIXED' | 'DAILY_ADMIN' | 'WEEKLY' | 'MONTHLY';
 
 export interface TaskItem {
   id: string;
@@ -7,6 +7,8 @@ export interface TaskItem {
   description: string;
   tag: string;
   image_url: string | null;
+  image_url_male?: string | null;
+  image_url_female?: string | null;
   task_type: TaskType;
   xp_reward: number;
   xp_partial: number;
@@ -14,10 +16,22 @@ export interface TaskItem {
   target_value: number | null;
   target_unit: string | null;
   is_recurring: boolean;
+  start_date?: string;
+  end_date?: string;
+  is_paid?: boolean;
   status: TaskStatus;
   progress_value: number | null;
   xp_earned: number;
   completed_at: string | null;
+  period_start?: string; // For MONTHLY tasks
+  price?: number; // For locked tasks
+  currency?: string; // e.g. "INR"
+}
+
+export interface LockedTaskItem extends TaskItem {
+  status: 'LOCKED';
+  price: number;
+  currency: string;
 }
 
 export interface TasksTodayData {
@@ -25,10 +39,18 @@ export interface TasksTodayData {
   week_start: string;
   daily: TaskItem[];
   weekly: TaskItem[];
+  monthly: (TaskItem & { period_start?: string })[];
+  locked: LockedTaskItem[];
   daily_xp_earned: number;
   daily_xp_possible: number;
   weekly_xp_earned: number;
   weekly_xp_possible: number;
+  monthly_xp_earned?: number;
+  monthly_xp_possible?: number;
+  streak?: {
+    at_risk: boolean;
+    [key: string]: any;
+  };
 }
 
 export interface CompleteTaskData {

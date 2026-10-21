@@ -3,8 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 
 /**
  * Backend-issued JWT/refresh token pair only — small strings, safe for
- * SecureStore's per-key size limit. The Supabase client keeps its own
- * session cache separately (see services/supabase/client.ts).
+ * SecureStore's per-key size limit.
  *
  * expo-secure-store has no web implementation and throws if called there,
  * so web falls back to localStorage — no Keychain/Keystore equivalent

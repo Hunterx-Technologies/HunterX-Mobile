@@ -7,12 +7,15 @@ import {
   TouchableOpacity,
   StyleProp,
   ViewStyle,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { FontAwesome5 } from '@expo/vector-icons';
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { HunterXEmblem } from './HunterXEmblem';
 import { TopographyPattern } from '../ui/TopographyPattern';
 import { fontFamilies } from '../../theme/typography';
+
+const HUNTERX_TITLE = require('../../assets/images/hunterx_card_title.png');
 
 export interface HunterXCardProps {
   width?: number;
@@ -38,7 +41,10 @@ export const HunterXCard: React.FC<HunterXCardProps> = ({
   animateGlow = true,
 }) => {
   const cardHeight = height || width * 1.54;
-  const calculatedEmblemSize = emblemSize || Math.min(width * 0.46, 120);
+  const calculatedEmblemSize = emblemSize || Math.round(width * 0.48);
+  const titleWidth = Math.round(width * 0.54);
+  const titleHeight = Math.round(titleWidth / 3.30);
+  const titleTop = Math.round(cardHeight * 0.07);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -109,7 +115,31 @@ export const HunterXCard: React.FC<HunterXCardProps> = ({
           opacity={isExpired ? 0.35 : 0.9}
         />
 
-        {/* 2. Very Mild, Subtle Orange Perimeter Tint (Top Edge Only) */}
+        {/* 2. Top Center Stylized "HUNTER X" Title Logo */}
+        <View
+          style={[
+            styles.cardTopTitleContainer,
+            {
+              top: titleTop,
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Image
+            source={HUNTERX_TITLE}
+            style={[
+              styles.cardTopTitle,
+              {
+                width: titleWidth,
+                height: titleHeight,
+                opacity: isExpired ? 0.45 : 1,
+              },
+            ]}
+            resizeMode="contain"
+          />
+        </View>
+
+        {/* 3. Very Mild, Subtle Orange Perimeter Tint (Top Edge Only) */}
         {!isExpired && (
           <LinearGradient
             colors={['rgba(246, 111, 40, 0.05)', 'transparent']}
@@ -120,7 +150,7 @@ export const HunterXCard: React.FC<HunterXCardProps> = ({
           />
         )}
 
-        {/* 3. Subtle Shimmer Highlight */}
+        {/* 4. Subtle Shimmer Highlight */}
         {animateGlow && (
           <Animated.View
             style={[
@@ -133,7 +163,7 @@ export const HunterXCard: React.FC<HunterXCardProps> = ({
           />
         )}
 
-        {/* 4. Center 3D Faceted HunterX Emblem */}
+        {/* 5. Center 3D Faceted HunterX Emblem */}
         <View style={styles.centerContainer} pointerEvents="none">
           <HunterXEmblem size={calculatedEmblemSize} glow={!isExpired} />
         </View>
@@ -198,6 +228,14 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
   },
+  cardTopTitleContainer: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTopTitle: {},
   shimmerSweep: {
     position: 'absolute',
     top: -80,
@@ -209,6 +247,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 12,
   },
   footerPromptRow: {
     position: 'absolute',

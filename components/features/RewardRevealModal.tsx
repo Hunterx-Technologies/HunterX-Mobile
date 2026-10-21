@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,9 +11,14 @@ import {
   Share,
   Linking,
   Dimensions,
+  Animated,
+  Platform,
+  StatusBar as RNStatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import * as Haptics from 'expo-haptics';
 import { fontFamilies } from '../../theme/typography';
 
@@ -103,6 +108,7 @@ export interface RewardRevealData {
   expiryDate?: string;
   minSpend?: string;
   amazonUrl?: string;
+  isUsed?: boolean;
 }
 
 export interface RewardRevealModalProps {
@@ -116,11 +122,21 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
   onClose,
   reward,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 44 : (RNStatusBar.currentHeight || 24));
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
+
   const [detailsExpanded, setDetailsExpanded] = useState(true);
   const [howToRedeemExpanded, setHowToRedeemExpanded] = useState(false);
   const [termsExpanded, setTermsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+
+  React.useEffect(() => {
+    if (visible) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
+    }
+  }, [visible]);
 
   // Combine passed reward with 4 other distinct gym/fitness slides for 5 total slides
   const slides: RewardSlideItem[] = React.useMemo(() => {
@@ -152,7 +168,7 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
   const handleCopyCode = () => {
     Clipboard.setString(currentSlide.code);
     setCopied(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
     setTimeout(() => {
       setCopied(false);
     }, 2500);
@@ -160,8 +176,16 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
 
   const handleShare = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const shareImage = reward?.productImageUrl || currentSlide.imageUrl;
+    const offerHeading = currentSlide.offerHeading || 'Exclusive Reward';
+    const productName = currentSlide.productName || 'Fitness Gear';
+
+    const message = `🎯 Grab this offer that I got on HunterX!\n\n🎁 Reward: ${offerHeading}\n📦 Product: ${productName}\n\nIf you're not a part of HunterX yet, join us today and start earning real rewards!\n\n${shareImage ? `🔗 View Offer: ${shareImage}` : ''}`;
+
     Share.share({
-      message: `🔥 I just won an Amazon reward: ${currentSlide.offerHeading} on ${currentSlide.productName}! Code: ${currentSlide.code}`,
+      title: `HunterX Reward: ${offerHeading}`,
+      message,
+      url: shareImage || undefined,
     }).catch(() => {});
   };
 
@@ -178,93 +202,63 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
       animationType="slide"
       transparent={false}
       onRequestClose={onClose}
+      statusBarTranslucent={true}
     >
+      <StatusBar style="light" backgroundColor="#121316" />
       <View style={styles.root}>
-        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-          {/* 1. TOP HEADER BAR */}
-          <View style={styles.headerBar}>
-            {/* Left: Close Button */}
-            <TouchableOpacity
-              style={styles.headerIconBtn}
-              onPress={onClose}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="close" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+        {/* 1. TOP HEADER BAR */}
+        <View style={[styles.headerBar, { paddingTop: topInset + 6 }]}>
+          {/* Left: Close Button */}
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={onClose}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
 
-            {/* Center: Brand Info (Amazon) */}
-            <View style={styles.headerBrandCol}>
-              <View style={styles.brandAvatarBox}>
-                <FontAwesome5 name="amazon" size={16} color="#0D0F12" />
-              </View>
-              <View style={styles.brandTextCol}>
-                <Text style={styles.brandNameText}>
-                  {reward.brandName || 'Amazon'}
-                </Text>
-                <View style={styles.sponsoredRow}>
-                  <Text style={styles.sponsoredText}>Sponsored</Text>
-                  <Ionicons name="information-circle-outline" size={13} color="#8E8E93" />
-                </View>
-              </View>
+          {/* Center: Brand Info (Amazon) */}
+          <View style={styles.headerBrandCol}>
+            <View style={styles.brandAvatarBox}>
+              <FontAwesome5 name="amazon" size={16} color="#0D0F12" />
             </View>
-
-            {/* Right: Actions (Share & Options) */}
-            <View style={styles.headerActionsRow}>
-              <TouchableOpacity
-                style={styles.headerIconBtn}
-                onPress={handleShare}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="share-social-outline" size={22} color="#FFFFFF" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.headerIconBtn}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="ellipsis-vertical" size={20} color="#FFFFFF" />
-              </TouchableOpacity>
+            <View style={styles.brandTextCol}>
+              <Text style={styles.brandNameText}>
+                {reward.brandName || 'Amazon'}
+              </Text>
+              <View style={styles.sponsoredRow}>
+                <Text style={styles.sponsoredText}>Sponsored</Text>
+                <Ionicons name="information-circle-outline" size={13} color="#8E8E93" />
+              </View>
             </View>
           </View>
 
-          {/* MAIN SCROLLABLE CONTENT */}
+          {/* Right: Action (Share Only) */}
+          <View style={styles.headerActionsRow}>
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={handleShare}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="share-social-outline" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* MAIN SCROLLABLE CONTENT */}
           <ScrollView
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* 2. PRODUCT HERO CAROUSEL (5 FITNESS REWARD SLIDES) */}
+            {/* 2. PRODUCT HERO IMAGE (SINGLE IMAGE PER REWARD) */}
             <View style={styles.heroCarouselContainer}>
-              <ScrollView
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onMomentumScrollEnd={(e) => {
-                  const slideIndex = Math.round(
-                    e.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 32)
-                  );
-                  const clamped = Math.max(0, Math.min(slides.length - 1, slideIndex));
-                  setActiveSlideIndex(clamped);
-                  setCopied(false);
-                }}
-                scrollEventThrottle={16}
-                contentContainerStyle={styles.carouselTrack}
-              >
-                {slides.map((slide, index) => (
-                  <View key={slide.id || index} style={styles.heroCardSlide}>
-                    <Image
-                      source={{ uri: slide.imageUrl }}
-                      style={styles.heroProductImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-                ))}
-              </ScrollView>
-
-              {/* Top-Left Slide Indicator (1/5, 2/5, 3/5, 4/5, 5/5) */}
-              <View style={styles.slideIndicatorBadge}>
-                <Text style={styles.slideIndicatorText}>
-                  {activeSlideIndex + 1}/{slides.length}
-                </Text>
+              <View style={styles.heroCardSlide}>
+                <Image
+                  source={{ uri: reward.productImageUrl || currentSlide.imageUrl }}
+                  style={styles.heroProductImage}
+                  resizeMode="cover"
+                />
               </View>
             </View>
 
@@ -442,19 +436,33 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
           </ScrollView>
 
           {/* 8. BOTTOM STICKY CTA: REDEEM NOW */}
-          <View style={styles.stickyFooterContainer}>
+          <View style={[styles.stickyFooterContainer, { paddingBottom: bottomInset + 12 }]}>
             <TouchableOpacity
-              style={styles.redeemNowBtn}
+              style={[
+                styles.redeemNowBtn,
+                reward.isUsed && styles.disabledRedeemBtn,
+              ]}
               onPress={handleRedeemNow}
+              disabled={reward.isUsed}
               activeOpacity={0.88}
             >
-              <Ionicons name="open-outline" size={18} color="#0D0F12" />
-              <Text style={styles.redeemNowBtnText}>Redeem now</Text>
+              <Ionicons
+                name={reward.isUsed ? 'checkmark-circle' : 'open-outline'}
+                size={18}
+                color={reward.isUsed ? '#8E8E93' : '#0D0F12'}
+              />
+              <Text
+                style={[
+                  styles.redeemNowBtnText,
+                  reward.isUsed && styles.disabledRedeemBtnText,
+                ]}
+              >
+                {reward.isUsed ? 'REDEEMED' : 'Redeem now'}
+              </Text>
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
-      </View>
-    </Modal>
+        </View>
+      </Modal>
   );
 };
 
@@ -669,7 +677,7 @@ const styles = StyleSheet.create({
   /* BOTTOM STICKY FOOTER */
   stickyFooterContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#1E2024',
     backgroundColor: '#121316',
@@ -679,9 +687,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#F66F28',
+    backgroundColor: '#FFFFFF',
     borderRadius: 28,
     paddingVertical: 14,
+  },
+  disabledRedeemBtn: {
+    backgroundColor: '#1E2024',
+    borderWidth: 1,
+    borderColor: '#2A2C33',
   },
   redeemNowBtnText: {
     fontFamily: fontFamilies.bold,
@@ -689,5 +702,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0.4,
+  },
+  disabledRedeemBtnText: {
+    color: '#8E8E93',
   },
 });

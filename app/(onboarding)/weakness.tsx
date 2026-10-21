@@ -10,7 +10,10 @@ import {
     Text,
     View,
 } from 'react-native';
-import { Feather, MaterialCommunityIcons, Ionicons, Entypo } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import Entypo from '@expo/vector-icons/Entypo';
 
 import { Button } from '@/components/common/Button';
 import { Screen } from '@/components/common/Screen';

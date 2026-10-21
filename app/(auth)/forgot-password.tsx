@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Button } from '@/components/common/Button';
 import { DustParticles } from '@/components/common/DustParticles';
@@ -39,7 +40,6 @@ export default function ForgotPasswordScreen() {
   const [isFocused, setIsFocused] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   // Staggered slide-up entrance animation
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -76,21 +76,27 @@ export default function ForgotPasswordScreen() {
   });
 
   const handleSendRecovery = async () => {
-    if (!email.trim()) return;
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setError('Email is required');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
     setError(null);
-    setSuccess(null);
     setLoading(true);
     try {
-      const msg = await forgotPassword(email.trim());
-      setSuccess(msg);
-      setTimeout(() => {
-        router.push({
-          pathname: '/(auth)/recovery-sent',
-          params: { email: email.trim() },
-        });
-      }, 800);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      const msg = await forgotPassword(cleanEmail);
+      router.push({
+        pathname: '/(auth)/recovery-sent',
+        params: { email: cleanEmail, message: msg },
+      });
+    } catch (err: any) {
+      setError(err instanceof Error && err.message ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -128,7 +134,7 @@ export default function ForgotPasswordScreen() {
 
       {/* Back Button positioned on top of the background */}
       <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={12}>
-        <Feather name="arrow-left" size={24} color="#FFFFFF" />
+        <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
       </Pressable>
 
       <KeyboardAvoidingView
@@ -246,11 +252,10 @@ const styles = StyleSheet.create({
     top: 54,
     left: 24,
     zIndex: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+    width: 38,
+    height: 38,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   bottomMask: {
     position: 'absolute',

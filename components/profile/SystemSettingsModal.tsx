@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  Linking,
   Modal,
   ScrollView,
   StyleSheet,
@@ -10,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { GoogleIcon } from '@/components/common/GoogleIcon';
 import { Screen } from '@/components/common/Screen';
@@ -26,6 +28,26 @@ import { useSettingsContext } from '@/context/SettingsContext';
 import { HunterSwitch } from './HunterSwitch';
 import { HunterToast, type HunterToastType } from '@/components/common/HunterToast';
 import { showGlobalToast } from '@/store/useToastStore';
+import {
+  getPushPermission,
+  registerDeviceIfPermitted,
+  requestPushPermission,
+  runPushDiagnostics,
+  type PushPermission,
+} from '@/services/notifications/push';
+
+// Dev builds and test APKs (eas.json `apk-local` sets EXPO_PUBLIC_PUSH_DEBUG) — never production.
+const SHOW_PUSH_DIAGNOSTICS = __DEV__ || process.env.EXPO_PUBLIC_PUSH_DEBUG === 'true';
+
+// Daily quest reminder slots (local time) — backend default is 19:00.
+const REMINDER_TIMES: { value: string; label: string }[] = [
+  { value: '07:00', label: '7 AM' },
+  { value: '09:00', label: '9 AM' },
+  { value: '12:00', label: '12 PM' },
+  { value: '17:00', label: '5 PM' },
+  { value: '19:00', label: '7 PM' },
+  { value: '21:00', label: '9 PM' },
+];
 
 export interface SystemSettingsModalProps {
   visible: boolean;
@@ -38,24 +60,6 @@ export interface SystemSettingsModalProps {
   setSoundEffectsEnabled?: (val: boolean) => void;
   hapticsEnabled?: boolean;
   setHapticsEnabled?: (val: boolean) => void;
-  allNotificationsEnabled?: boolean;
-  setAllNotificationsEnabled?: (val: boolean) => void;
-  dailyMotivationEnabled?: boolean;
-  setDailyMotivationEnabled?: (val: boolean) => void;
-  taskRemindersEnabled?: boolean;
-  setTaskRemindersEnabled?: (val: boolean) => void;
-  streakAtRiskEnabled?: boolean;
-  setStreakAtRiskEnabled?: (val: boolean) => void;
-  streakMilestonesEnabled?: boolean;
-  setStreakMilestonesEnabled?: (val: boolean) => void;
-  streakStatusAlertsEnabled?: boolean;
-  setStreakStatusAlertsEnabled?: (val: boolean) => void;
-  levelUpAlertsEnabled?: boolean;
-  setLevelUpAlertsEnabled?: (val: boolean) => void;
-  rewardReadyAlertsEnabled?: boolean;
-  setRewardReadyAlertsEnabled?: (val: boolean) => void;
-  announcementsEnabled?: boolean;
-  setAnnouncementsEnabled?: (val: boolean) => void;
 }
 
 export function SystemSettingsModal({
@@ -88,10 +92,14 @@ export function SystemSettingsModal({
     notify_level_up: true,
     notify_reward_ready: true,
     notify_announcements: true,
+    notify_social: true,
+    notify_leaderboard: true,
     leaderboard_visible: true,
   });
 
   const [isFetchingAccountSettings, setIsFetchingAccountSettings] = useState(false);
+  // OS-level push permission — the backend toggles below are moot without it.
+  const [pushPermission, setPushPermission] = useState<PushPermission>('unsupported');
 
   // Submodals
   const [isChangePasswordModalVisible, setIsChangePasswordModalVisible] = useState(false);
@@ -139,6 +147,39 @@ export function SystemSettingsModal({
     };
   }, [visible]);
 
+  // Re-checked on open and whenever the app returns from the OS Settings app.
+  useEffect(() => {
+    if (!visible) return;
+    const check = () => getPushPermission().then(setPushPermission).catch(() => { });
+    check();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
+    return () => sub.remove();
+  }, [visible]);
+
+  const [isRunningPushDiagnostics, setIsRunningPushDiagnostics] = useState(false);
+  const handleRunPushDiagnostics = async () => {
+    setIsRunningPushDiagnostics(true);
+    try {
+      const lines = await runPushDiagnostics();
+      getPushPermission().then(setPushPermission).catch(() => { });
+      Alert.alert('Push diagnostics', lines.join('\n\n'));
+    } finally {
+      setIsRunningPushDiagnostics(false);
+    }
+  };
+
+  const handleEnablePush = async () => {
+    const result = await requestPushPermission();
+    setPushPermission(result);
+    if (result === 'granted') {
+      registerDeviceIfPermitted({ force: true }).catch(() => { });
+    } else if (result === 'denied') {
+      Linking.openSettings().catch(() => { });
+    }
+  };
+
   // Optimistic handler for account settings toggle
   const handleToggleAccountSetting = async <K extends keyof UserSettings>(
     field: K,
@@ -160,7 +201,7 @@ export function SystemSettingsModal({
       if (field === 'units' && onUnitSystemChange) {
         onUnitSystemChange(previousValue as 'metric' | 'imperial');
       }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => { });
       Alert.alert('Setting Update Failed', err.message || 'Failed to sync preference.');
     }
   };
@@ -178,7 +219,7 @@ export function SystemSettingsModal({
       Alert.alert('Error', 'Passwords do not match.');
       return;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
     Alert.alert('Success', 'Your password has been updated.');
     setIsChangePasswordModalVisible(false);
     setCurrentPasswordInput('');
@@ -192,13 +233,13 @@ export function SystemSettingsModal({
   const p = providerUpper.includes('GOOGLE')
     ? 'GOOGLE'
     : providerUpper.includes('APPLE')
-    ? 'APPLE'
-    : providerUpper;
+      ? 'APPLE'
+      : providerUpper;
   const isSocialAuth = p === 'GOOGLE' || p === 'APPLE';
 
   const handlePressChangeEmail = () => {
     if (!isSocialAuth) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => { });
       Alert.alert(
         'Action Restricted',
         'Accounts registered via Email & Password cannot update their primary email address.'
@@ -229,14 +270,14 @@ export function SystemSettingsModal({
       try {
         const freshUser = await getCurrentUser();
         if (freshUser) onUpdateUser(freshUser);
-      } catch {}
+      } catch { }
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
       Alert.alert('Success', 'Your email address has been updated to ' + trimmed + '.');
       setIsChangeEmailModalVisible(false);
       setNewEmailInput('');
     } catch (err: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => { });
       Alert.alert('Update Failed', err.message || 'Failed to update email address.');
     } finally {
       setIsUpdatingEmail(false);
@@ -544,6 +585,22 @@ export function SystemSettingsModal({
 
           {/* SECTION 5: HUNTER NOTIFICATIONS (ACCOUNT-LEVEL BACKEND SYNC) */}
           <Text style={styles.sectionHeader}>HUNTER NOTIFICATIONS</Text>
+          {(pushPermission === 'denied' || pushPermission === 'undetermined') && (
+            <TouchableOpacity style={styles.pushBanner} onPress={handleEnablePush} activeOpacity={0.8}>
+              <Ionicons name="notifications-off-outline" size={18} color="#FE5B01" />
+              <View style={styles.settingTextGroup}>
+                <Text style={styles.settingTitle}>
+                  {pushPermission === 'denied' ? 'Notifications are off on this device' : 'Push notifications are not enabled'}
+                </Text>
+                <Text style={styles.settingSubtitle}>
+                  {pushPermission === 'denied'
+                    ? 'Turn them on in your phone settings so these alerts can reach you.'
+                    : 'Tap to allow HunterX to send these alerts.'}
+                </Text>
+              </View>
+              <Text style={styles.pushBannerAction}>{pushPermission === 'denied' ? 'Settings' : 'Enable'}</Text>
+            </TouchableOpacity>
+          )}
           <View style={styles.settingsGroupCard}>
             {/* Master All Notifications Toggle */}
             <View style={styles.settingRow}>
@@ -613,6 +670,33 @@ export function SystemSettingsModal({
                   onValueChange={(val) => handleToggleAccountSetting('notify_task_reminders', val)}
                 />
               </View>
+
+              {allOn && accountSettings.notify_task_reminders && (
+                <View style={styles.reminderTimeBlock}>
+                  <Text style={styles.reminderTimeLabel}>Remind me at</Text>
+                  <View style={styles.reminderTimeChips}>
+                    {REMINDER_TIMES.map((slot) => {
+                      const active = (accountSettings.reminder_time ?? '19:00') === slot.value;
+                      return (
+                        <TouchableOpacity
+                          key={slot.value}
+                          style={[styles.reminderChip, active && styles.reminderChipActive]}
+                          onPress={() => {
+                            if (active) return;
+                            Haptics.selectionAsync().catch(() => { });
+                            handleToggleAccountSetting('reminder_time', slot.value);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.reminderChipText, active && styles.reminderChipTextActive]}>
+                            {slot.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
 
               <View style={styles.settingItemDivider} />
 
@@ -726,7 +810,51 @@ export function SystemSettingsModal({
 
               <View style={styles.settingItemDivider} />
 
-              {/* 8. Announcements & Broadcast */}
+              {/* 8. Friends & Referrals */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeftGroup}>
+                  <View style={styles.settingSubIconBox}>
+                    <Ionicons name="people-outline" size={16} color="#FE5B01" />
+                  </View>
+                  <View style={styles.settingTextGroup}>
+                    <Text style={styles.settingTitle}>Friends & Referrals</Text>
+                    <Text style={styles.settingSubtitle}>
+                      When a friend joins with your Guest Pass
+                    </Text>
+                  </View>
+                </View>
+                <HunterSwitch
+                  disabled={!allOn}
+                  value={allOn && accountSettings.notify_social}
+                  onValueChange={(val) => handleToggleAccountSetting('notify_social', val)}
+                />
+              </View>
+
+              <View style={styles.settingItemDivider} />
+
+              {/* 9. Leaderboard Updates */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeftGroup}>
+                  <View style={styles.settingSubIconBox}>
+                    <Ionicons name="podium-outline" size={16} color="#FE5B01" />
+                  </View>
+                  <View style={styles.settingTextGroup}>
+                    <Text style={styles.settingTitle}>Leaderboard Updates</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Daily rank changes — climbs, top 10, friends passing you
+                    </Text>
+                  </View>
+                </View>
+                <HunterSwitch
+                  disabled={!allOn}
+                  value={allOn && accountSettings.notify_leaderboard}
+                  onValueChange={(val) => handleToggleAccountSetting('notify_leaderboard', val)}
+                />
+              </View>
+
+              <View style={styles.settingItemDivider} />
+
+              {/* 10. Announcements & Broadcast */}
               <View style={styles.settingRow}>
                 <View style={styles.settingLeftGroup}>
                   <View style={styles.settingSubIconBox}>
@@ -747,6 +875,26 @@ export function SystemSettingsModal({
               </View>
             </View>
           </View>
+
+          {SHOW_PUSH_DIAGNOSTICS && (
+            <TouchableOpacity
+              style={[styles.pushBanner, { marginTop: 10 }]}
+              onPress={handleRunPushDiagnostics}
+              disabled={isRunningPushDiagnostics}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="bug-outline" size={18} color="#FE5B01" />
+              <View style={styles.settingTextGroup}>
+                <Text style={styles.settingTitle}>Push diagnostics</Text>
+                <Text style={styles.settingSubtitle}>Checks each step and sends you a test notification</Text>
+              </View>
+              {isRunningPushDiagnostics ? (
+                <ActivityIndicator size="small" color="#FE5B01" />
+              ) : (
+                <Text style={styles.pushBannerAction}>Run</Text>
+              )}
+            </TouchableOpacity>
+          )}
 
           {/* SECTION 6: DATA & PRIVACY */}
           <Text style={styles.sectionHeader}>DATA & PRIVACY</Text>
@@ -939,6 +1087,60 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#242428',
     padding: 14,
+  },
+  pushBanner: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(254, 91, 1, 0.08)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(254, 91, 1, 0.35)',
+    padding: 12,
+    marginBottom: 10,
+  },
+  pushBannerAction: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13,
+    color: '#FE5B01',
+  },
+  reminderTimeBlock: {
+    paddingTop: 2,
+    paddingBottom: 10,
+    paddingLeft: 44,
+  },
+  reminderTimeLabel: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 11,
+    color: '#71717A',
+    marginBottom: 8,
+  },
+  reminderTimeChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  reminderChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2A2A30',
+    backgroundColor: '#18181C',
+  },
+  reminderChipActive: {
+    borderColor: '#FE5B01',
+    backgroundColor: 'rgba(254, 91, 1, 0.12)',
+  },
+  reminderChipText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12,
+    color: '#A1A1AA',
+  },
+  reminderChipTextActive: {
+    color: '#FE5B01',
+    fontFamily: fontFamilies.semiBold,
   },
   settingRow: {
     flexDirection: 'row',

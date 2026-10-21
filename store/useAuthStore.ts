@@ -2,6 +2,9 @@ import { create } from 'zustand';
 
 import * as authService from '@/services/api/auth.service';
 import { tokenStorage } from '@/services/api/tokenStorage';
+import { clearPendingReferral, getPendingReferral } from '@/services/referral/pendingReferral';
+import { unregisterDevice } from '@/services/notifications/push';
+import { useNotificationStore } from '@/store/useNotificationStore';
 import type { User } from '@/types/user';
 
 type AuthState = {
@@ -17,6 +20,11 @@ type AuthState = {
   signup: (payload: authService.RegisterPayload) => Promise<void>;
   loginWithGoogle: (
     idToken: string,
+    onboarding?: authService.OnboardingAnswerPayload[]
+  ) => Promise<{ isNew: boolean }>;
+  loginWithApple: (
+    idToken: string,
+    nonce: string,
     onboarding?: authService.OnboardingAnswerPayload[]
   ) => Promise<{ isNew: boolean }>;
   logout: () => Promise<void>;
@@ -45,7 +53,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   signup: async (payload) => {
     set({ isAuthenticating: true });
     try {
-      const user = await authService.signup(payload);
+      // Saved from a Guest Pass link, or typed on the signup screen.
+      const referral_code = payload.referral_code || (await getPendingReferral()) || undefined;
+      const user = await authService.signup({ ...payload, referral_code });
+      await clearPendingReferral();
       set({ user, isOnboarded: false });
     } finally {
       set({ isAuthenticating: false });
@@ -55,7 +66,22 @@ export const useAuthStore = create<AuthState>((set) => ({
   loginWithGoogle: async (idToken, onboarding = []) => {
     set({ isAuthenticating: true });
     try {
-      const { user, isNew } = await authService.loginWithGoogle(idToken, onboarding);
+      const referralCode = (await getPendingReferral()) || undefined;
+      const { user, isNew } = await authService.loginWithGoogle(idToken, onboarding, referralCode);
+      await clearPendingReferral();
+      set({ user, isOnboarded: !isNew });
+      return { isNew };
+    } finally {
+      set({ isAuthenticating: false });
+    }
+  },
+
+  loginWithApple: async (idToken, nonce, onboarding = []) => {
+    set({ isAuthenticating: true });
+    try {
+      const referralCode = (await getPendingReferral()) || undefined;
+      const { user, isNew } = await authService.loginWithApple(idToken, nonce, onboarding, referralCode);
+      await clearPendingReferral();
       set({ user, isOnboarded: !isNew });
       return { isNew };
     } finally {
@@ -64,7 +90,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    // Before the session is cleared — the backend DELETE needs auth. Stops
+    // this device receiving the signed-out user's pushes.
+    await unregisterDevice();
     await authService.logout();
+    useNotificationStore.getState().setUnreadCount(0);
     set({ user: null });
   },
 

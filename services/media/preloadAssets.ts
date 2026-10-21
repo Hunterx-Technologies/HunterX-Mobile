@@ -1,6 +1,6 @@
 import { Image as ExpoImage } from 'expo-image';
 import { Image as RNImage } from 'react-native';
-import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
+import { CLOUDINARY_ASSETS, STREAK_BADGE_ASSETS, STREAK_BADGE_WIDTH } from '@/constants/cloudinaryAssets';
 import { optimizeCloudinaryUrl } from '@/services/media/cloudinary';
 import { preloadTaskDoneSound } from '@/services/audio/taskDoneSound';
 
@@ -33,7 +33,7 @@ async function prefetchUrl(url: string): Promise<void> {
  * and local sound assets so they render/play instantly with zero delay.
  */
 export async function preloadAppAssets(): Promise<void> {
-  // Pre-warm done.wav audio buffer for ultra-snappy feedback
+  // Pre-warm done.m4a audio buffer for ultra-snappy feedback
   preloadTaskDoneSound().catch(() => { });
 
   // Give the login/ascension hero images a head start before the rest of the
@@ -42,11 +42,16 @@ export async function preloadAppAssets(): Promise<void> {
 
   const imageUrls = Object.values(CLOUDINARY_ASSETS)
     .map((asset) => asset.uri)
-    .filter((uri) => !uri.includes('/video/upload/') && !uri.endsWith('.mp3'))
     // login_bg/screen are covered above at their actual display size —
     // prefetching their raw, uncapped originals too would be pure waste.
     .filter((uri) => uri !== CLOUDINARY_ASSETS.login_bg.uri && uri !== CLOUDINARY_ASSETS.screen.uri);
 
+  // Streak badges at the exact size StreakBadgeImage requests, so the badge
+  // carousel and vault popup read them straight from the disk cache.
+  const badgeUrls = Object.values(STREAK_BADGE_ASSETS).map((asset) =>
+    optimizeCloudinaryUrl(asset.uri, STREAK_BADGE_WIDTH)
+  );
+
   // Pre-cache the remaining images in parallel across expo-image and React Native image caches
-  await Promise.allSettled(imageUrls.map(prefetchUrl));
+  await Promise.allSettled([...imageUrls, ...badgeUrls].map(prefetchUrl));
 }

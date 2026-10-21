@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.hunterx.mobile",
+      "usesAppleSignIn": true,
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -24,8 +25,8 @@
     },
     "android": {
       "package": "com.hunterx.mobile",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 1,
-      "minSdkVersion": 26,
       "adaptiveIcon": {
         "backgroundColor": "#0A0E17",
         "foregroundImage": "./assets/images/adaptive-icon.png"
@@ -36,6 +37,17 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "buildArchs": ["armeabi-v7a", "arm64-v8a"]
+          }
+        }
+      ],
       "expo-router",
       "expo-secure-store",
       [
@@ -62,8 +74,16 @@
         }
       ],
       "expo-web-browser",
+      "expo-apple-authentication",
       "@kingstinct/react-native-healthkit",
-      "react-native-health-connect"
+      "react-native-health-connect",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#FE5B01"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

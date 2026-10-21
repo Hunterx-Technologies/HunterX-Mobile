@@ -9,7 +9,19 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "apk-local": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://192.168.1.12:5001/api",
+        "ALLOW_CLEARTEXT_HTTP": "true",
+        "EXPO_PUBLIC_PUSH_DEBUG": "true"
+      }
     },
     "production": {
       "autoIncrement": true

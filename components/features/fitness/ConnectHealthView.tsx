@@ -10,7 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useShallow } from 'zustand/react/shallow';
@@ -178,97 +178,100 @@ export function ConnectHealthView({
           </Text>
         </View>
 
-        {/* Provider Option 1: Apple Health */}
-        <TouchableOpacity
-          style={[
-            styles.providerCardOuter,
-            selectedProvider === 'apple_health' && styles.cardActiveShadow,
-          ]}
-          onPress={() => handleConnect('apple_health')}
-          activeOpacity={0.88}
-        >
-          <LinearGradient
-            colors={
-              selectedProvider === 'apple_health'
-                ? ['#2A2E3B', '#1E212C', '#D84315', '#FF5A1E']
-                : ['#22242F', '#181922', '#181922', '#22242F']
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            locations={selectedProvider === 'apple_health' ? [0, 0.42, 0.78, 1] : [0, 0.5, 0.5, 1]}
-            style={styles.cardBorderGradient}
+        {/* Platform Specific Health Provider Option */}
+        {Platform.OS === 'ios' ? (
+          /* Provider Option: Apple Health (iOS) */
+          <TouchableOpacity
+            style={[
+              styles.providerCardOuter,
+              selectedProvider === 'apple_health' && styles.cardActiveShadow,
+            ]}
+            onPress={() => handleConnect('apple_health')}
+            activeOpacity={0.88}
           >
-            <View style={styles.providerCardInner}>
-              <View style={styles.providerIconContainer}>
-                <Ionicons name="logo-apple" size={32} color="#FFFFFF" />
+            <LinearGradient
+              colors={
+                selectedProvider === 'apple_health'
+                  ? ['#2A2E3B', '#1E212C', '#D84315', '#FF5A1E']
+                  : ['#22242F', '#181922', '#181922', '#22242F']
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              locations={selectedProvider === 'apple_health' ? [0, 0.42, 0.78, 1] : [0, 0.5, 0.5, 1]}
+              style={styles.cardBorderGradient}
+            >
+              <View style={styles.providerCardInner}>
+                <View style={styles.providerIconContainer}>
+                  <Ionicons name="logo-apple" size={32} color="#FFFFFF" />
+                </View>
+                <View style={styles.providerInfo}>
+                  <Text style={styles.providerSubtitle}>Connect with</Text>
+                  <Text style={styles.providerTitle}>Apple Health</Text>
+                  <Text style={styles.providerDesc}>
+                    Sync your health and fitness data securely using HealthKit.
+                  </Text>
+                </View>
+                <View style={styles.providerAction}>
+                  {connectingProvider === 'apple_health' ? (
+                    <ActivityIndicator size="small" color="#FE5B01" />
+                  ) : (
+                    <Ionicons
+                      name="chevron-forward"
+                      size={22}
+                      color={selectedProvider === 'apple_health' ? '#FFFFFF' : '#8E8E98'}
+                    />
+                  )}
+                </View>
               </View>
-              <View style={styles.providerInfo}>
-                <Text style={styles.providerSubtitle}>Connect with</Text>
-                <Text style={styles.providerTitle}>Apple Health</Text>
-                <Text style={styles.providerDesc}>
-                  Sync your health and fitness data securely using HealthKit.
-                </Text>
-              </View>
-              <View style={styles.providerAction}>
-                {connectingProvider === 'apple_health' ? (
-                  <ActivityIndicator size="small" color="#FE5B01" />
-                ) : (
-                  <Ionicons
-                    name="chevron-forward"
-                    size={22}
-                    color={selectedProvider === 'apple_health' ? '#FFFFFF' : '#8E8E98'}
-                  />
-                )}
-              </View>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Provider Option 2: Google Fit / Health Connect */}
-        <TouchableOpacity
-          style={[
-            styles.providerCardOuter,
-            selectedProvider === 'health_connect' && styles.cardActiveShadow,
-          ]}
-          onPress={() => handleConnect('health_connect')}
-          activeOpacity={0.88}
-        >
-          <LinearGradient
-            colors={
-              selectedProvider === 'health_connect'
-                ? ['#2A2E3B', '#1E212C', '#D84315', '#FF5A1E']
-                : ['#22242F', '#181922', '#181922', '#22242F']
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            locations={selectedProvider === 'health_connect' ? [0, 0.42, 0.78, 1] : [0, 0.5, 0.5, 1]}
-            style={styles.cardBorderGradient}
+            </LinearGradient>
+          </TouchableOpacity>
+        ) : (
+          /* Provider Option: Google Fit / Health Connect (Android) */
+          <TouchableOpacity
+            style={[
+              styles.providerCardOuter,
+              selectedProvider === 'health_connect' && styles.cardActiveShadow,
+            ]}
+            onPress={() => handleConnect('health_connect')}
+            activeOpacity={0.88}
           >
-            <View style={styles.providerCardInner}>
-              <View style={styles.providerIconContainer}>
-                <GoogleIcon size={30} />
+            <LinearGradient
+              colors={
+                selectedProvider === 'health_connect'
+                  ? ['#2A2E3B', '#1E212C', '#D84315', '#FF5A1E']
+                  : ['#22242F', '#181922', '#181922', '#22242F']
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              locations={selectedProvider === 'health_connect' ? [0, 0.42, 0.78, 1] : [0, 0.5, 0.5, 1]}
+              style={styles.cardBorderGradient}
+            >
+              <View style={styles.providerCardInner}>
+                <View style={styles.providerIconContainer}>
+                  <GoogleIcon size={30} />
+                </View>
+                <View style={styles.providerInfo}>
+                  <Text style={styles.providerSubtitle}>Connect with</Text>
+                  <Text style={styles.providerTitle}>Google Fit / Health Connect</Text>
+                  <Text style={styles.providerDesc}>
+                    Sync your health and fitness data securely using Health Connect.
+                  </Text>
+                </View>
+                <View style={styles.providerAction}>
+                  {connectingProvider === 'health_connect' ? (
+                    <ActivityIndicator size="small" color="#FE5B01" />
+                  ) : (
+                    <Ionicons
+                      name="chevron-forward"
+                      size={22}
+                      color={selectedProvider === 'health_connect' ? '#FFFFFF' : '#8E8E98'}
+                    />
+                  )}
+                </View>
               </View>
-              <View style={styles.providerInfo}>
-                <Text style={styles.providerSubtitle}>Connect with</Text>
-                <Text style={styles.providerTitle}>Google Fit / Health Connect</Text>
-                <Text style={styles.providerDesc}>
-                  Sync your health and fitness data securely using Health Connect.
-                </Text>
-              </View>
-              <View style={styles.providerAction}>
-                {connectingProvider === 'health_connect' ? (
-                  <ActivityIndicator size="small" color="#FE5B01" />
-                ) : (
-                  <Ionicons
-                    name="chevron-forward"
-                    size={22}
-                    color={selectedProvider === 'health_connect' ? '#FFFFFF' : '#8E8E98'}
-                  />
-                )}
-              </View>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
 
         {/* Feature and Trust Points */}
         <View style={styles.featuresList}>

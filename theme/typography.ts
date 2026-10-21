@@ -5,15 +5,8 @@ export const fontFamilies = {
   medium: 'Inter_500Medium',
   semiBold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
-  italic: 'Inter_400Regular_Italic',
-  mediumItalic: 'Inter_500Medium_Italic',
   semiBoldItalic: 'Inter_600SemiBold_Italic',
   boldItalic: 'Inter_700Bold_Italic',
-  brush: 'PermanentMarker_400Regular',
-  grunge: 'SedgwickAveDisplay_400Regular',
-  rockSalt: 'RockSalt_400Regular',
-  lacquer: 'Lacquer_400Regular',
-  shojumaru: 'Shojumaru_400Regular',
 };
 
 export const fontFamily = Platform.select({

@@ -12,7 +12,7 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 
 import { Button } from '@/components/common/Button';
 import { Screen } from '@/components/common/Screen';

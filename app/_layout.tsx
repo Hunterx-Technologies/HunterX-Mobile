@@ -6,23 +6,24 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import {
-  useFonts,
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-  Inter_400Regular_Italic,
-  Inter_600SemiBold_Italic,
-  Inter_700Bold_Italic,
-} from '@expo-google-fonts/inter';
+import { useFonts } from 'expo-font';
+import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
+import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
+import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
+import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
+import { Inter_600SemiBold_Italic } from '@expo-google-fonts/inter/600SemiBold_Italic';
+import { Inter_700Bold_Italic } from '@expo-google-fonts/inter/700Bold_Italic';
 
 import { colors } from '@/theme/colors';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useMetricsStore } from '@/store/useMetricsStore';
 import { GlobalToast } from '@/components/common/GlobalToast';
+import { GlobalLevelUp } from '@/components/features/levelUp/GlobalLevelUp';
+import { GlobalStreakBadge } from '@/components/features/streaks/GlobalStreakBadge';
+import { GlobalStreakBreak } from '@/components/features/streaks/GlobalStreakBreak';
 import { preloadAppAssets } from '@/services/media/preloadAssets';
 import { getAvatars } from '@/services/api/avatar.service';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 import { SettingsProvider } from '@/context/SettingsContext';
 
@@ -84,26 +85,23 @@ function ScrollToTopOnNavigate() {
   return null;
 }
 
+function PushNotificationsObserver() {
+  usePushNotifications();
+  return null;
+}
+
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    Inter_400Regular_Italic,
     Inter_600SemiBold_Italic,
     Inter_700Bold_Italic,
-    PermanentMarker_400Regular:
-      'https://fonts.gstatic.com/s/permanentmarker/v16/Fh4uPib9Iyv2ucM6pGQMWimMp004Hao.ttf',
-    SedgwickAveDisplay_400Regular:
-      'https://fonts.gstatic.com/s/sedgwickavedisplay/v23/xfuu0XPgU3jZPUoUo3ScvmPi-NapQ8OxM2cz.ttf',
-    RockSalt_400Regular:
-      'https://fonts.gstatic.com/s/rocksalt/v24/MwQ0bhv11fWD6QsAVOZbsA.ttf',
-    Lacquer_400Regular:
-      'https://fonts.gstatic.com/s/lacquer/v16/EYqzma1QwqpG4_BBB78.ttf',
-    Shojumaru_400Regular:
-      'https://fonts.gstatic.com/s/shojumaru/v16/rax_HiWfutkLLnaKCtlMBA.ttf',
   });
+  // A font that fails to load falls back to the system font; it must never
+  // hold the app on the splash screen.
+  const fontsReady = fontsLoaded || !!fontError;
 
   // Runs once on app start — reads the persisted access token and warms image cache
   useEffect(() => {
@@ -140,7 +138,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsReady) {
       SplashScreen.hideAsync();
     }
 
@@ -163,9 +161,9 @@ export default function RootLayout() {
         document.head.appendChild(style);
       }
     }
-  }, [fontsLoaded]);
+  }, [fontsReady]);
 
-  if (!fontsLoaded) {
+  if (!fontsReady) {
     return null;
   }
 
@@ -179,6 +177,7 @@ export default function RootLayout() {
         <SettingsProvider>
           <StatusBar style="light" />
           <ScrollToTopOnNavigate />
+          <PushNotificationsObserver />
           <Stack
             screenOptions={{
               headerShown: false,
@@ -191,6 +190,9 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
             <Stack.Screen name="+not-found" />
           </Stack>
+          <GlobalLevelUp />
+          <GlobalStreakBadge />
+          <GlobalStreakBreak />
           <GlobalToast />
         </SettingsProvider>
       </SafeAreaProvider>

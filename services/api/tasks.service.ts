@@ -3,12 +3,26 @@ import type { TasksTodayData, CompleteTaskData, TaskStatus, ReopenTaskData } fro
 
 import { apiClient } from './client';
 
+let inFlightTasksToday: Promise<TasksTodayData> | null = null;
+
 export async function fetchTasksToday(): Promise<TasksTodayData> {
-  const { data } = await apiClient.get<ApiResponse<TasksTodayData>>('/tasks/today');
-  if (!data.success) {
-    throw new Error(data.error?.message || 'Failed to fetch today\'s tasks');
+  if (inFlightTasksToday) {
+    return inFlightTasksToday;
   }
-  return data.data;
+
+  inFlightTasksToday = (async () => {
+    try {
+      const { data } = await apiClient.get<ApiResponse<TasksTodayData>>('/tasks/today');
+      if (!data.success) {
+        throw new Error(data.error?.message || 'Failed to fetch today\'s tasks');
+      }
+      return data.data;
+    } finally {
+      inFlightTasksToday = null;
+    }
+  })();
+
+  return inFlightTasksToday;
 }
 
 export async function completeTask(

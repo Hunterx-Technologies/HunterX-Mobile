@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "991893509642",
+    "project_id": "hunterx-504217",
+    "storage_bucket": "hunterx-504217.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:991893509642:android:f5eef7b833b7a46c4971f3",
+        "android_client_info": {
+          "package_name": "com.hunterx.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "991893509642-ci067mpa85j2uc2sgvbs50ji7002fd0s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBLVsVJRDzsRefIr4YkeHccu4hqKVADMJk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "991893509642-ci067mpa85j2uc2sgvbs50ji7002fd0s.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "991893509642-1mpn4fs7gm814s1v0cvjsd4cqfk5klh6.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hunterx.mobile"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

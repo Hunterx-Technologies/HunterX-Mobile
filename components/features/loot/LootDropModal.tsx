@@ -14,7 +14,7 @@ type LootDropModalProps = {
 };
 
 /**
- * Renders a static reveal for now. Swap the placeholder box for a Lottie
+ * Renders a static reveal for now. Swap the placeholder box for a
  * rarity-tier animation once Sunil delivers the assets.
  */
 export function LootDropModal({ visible, rarity, onDismiss }: LootDropModalProps) {

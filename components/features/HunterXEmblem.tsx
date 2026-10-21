@@ -1,120 +1,109 @@
-import React from 'react';
-import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
-import Svg, {
-  Path,
-  Defs,
-  LinearGradient,
-  RadialGradient,
-  Stop,
-  G,
-} from 'react-native-svg';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, StyleProp, ViewStyle, Image, Animated } from 'react-native';
+
+const HUNTER_REWARD_GEM = require('../../assets/images/hunterx_reward_emblem.webp');
 
 export interface HunterXEmblemProps {
   size?: number;
   glow?: boolean;
   glowColor?: string;
   style?: StyleProp<ViewStyle>;
+  animated?: boolean;
 }
 
 export const HunterXEmblem: React.FC<HunterXEmblemProps> = ({
-  size = 80,
+  size = 130,
   glow = true,
   glowColor = '#F66F28',
   style,
+  animated = true,
 }) => {
   const width = size;
-  const height = size;
+  const height = Math.round(size * (502 / 512));
+
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!animated || !glow) return;
+
+    // Subtle breathing pulse on the aura
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.08,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1.0,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    // Subtle hovering float
+    const floatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: -3,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 3,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    pulseLoop.start();
+    floatLoop.start();
+
+    return () => {
+      pulseLoop.stop();
+      floatLoop.stop();
+    };
+  }, [animated, glow]);
 
   return (
     <View style={[styles.container, { width, height }, style]}>
-      <Svg width={width} height={height} viewBox="0 0 100 100" fill="none">
-        <Defs>
-          {/* Subtle localized back aura (tightly contained) */}
-          <RadialGradient id="xBackAura" cx="50%" cy="50%" r="42%">
-            <Stop offset="0%" stopColor={glowColor} stopOpacity="0.22" />
-            <Stop offset="60%" stopColor="#B94F24" stopOpacity="0.05" />
-            <Stop offset="100%" stopColor="#000000" stopOpacity="0" />
-          </RadialGradient>
+      {/* Ambient Radial Back Glow */}
+      {glow && (
+        <Animated.View
+          style={[
+            styles.glowAura,
+            {
+              width: width * 0.85,
+              height: height * 0.85,
+              backgroundColor: glowColor,
+              transform: [{ scale: pulseAnim }],
+            },
+          ]}
+          pointerEvents="none"
+        />
+      )}
 
-          {/* Top-Left Wing Upper Chamfer Highlight */}
-          <LinearGradient id="gradWingHighlight" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#FFAC66" />
-            <Stop offset="40%" stopColor="#FF9438" />
-            <Stop offset="100%" stopColor="#F66F28" />
-          </LinearGradient>
-
-          {/* Top-Left Wing Body */}
-          <LinearGradient id="gradWingBody" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#F66F28" />
-            <Stop offset="50%" stopColor="#DF5714" />
-            <Stop offset="100%" stopColor="#9E350A" />
-          </LinearGradient>
-
-          {/* Main Diagonal Upper Lit Face */}
-          <LinearGradient id="gradMainSlash" x1="100%" y1="0%" x2="0%" y2="100%">
-            <Stop offset="0%" stopColor="#FFAA66" />
-            <Stop offset="25%" stopColor="#F66F28" />
-            <Stop offset="65%" stopColor="#E05A18" />
-            <Stop offset="100%" stopColor="#A6380A" />
-          </LinearGradient>
-
-          {/* Main Diagonal Lower Shadow Face */}
-          <LinearGradient id="gradSlashShadow" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#E05A18" />
-            <Stop offset="50%" stopColor="#B94F24" />
-            <Stop offset="100%" stopColor="#692005" />
-          </LinearGradient>
-
-          {/* Bottom-Right Foot Shadow */}
-          <LinearGradient id="gradFootShadow" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#B94F24" />
-            <Stop offset="50%" stopColor="#8A2E07" />
-            <Stop offset="100%" stopColor="#4D1602" />
-          </LinearGradient>
-        </Defs>
-
-        {/* Tight Ambient Glow behind emblem only */}
-        {glow && (
-          <Path
-            d="M 5 5 L 95 5 L 95 95 L 5 95 Z"
-            fill="url(#xBackAura)"
-          />
-        )}
-
-        <G>
-          {/* ========================================================== */}
-          {/* 1. TOP-LEFT WING (Chamfer & Horn)                          */}
-          {/* ========================================================== */}
-          <Path
-            d="M 16 28 L 38 30 L 47 43 L 32 36 Z"
-            fill="url(#gradWingHighlight)"
-          />
-          <Path
-            d="M 16 28 L 32 36 L 47 43 L 37 55 L 28 38 Z"
-            fill="url(#gradWingBody)"
-          />
-
-          {/* ========================================================== */}
-          {/* 2. BOTTOM-RIGHT FOOT (Angled upward cut at bottom)         */}
-          {/* ========================================================== */}
-          <Path
-            d="M 54 55 L 80 80 L 58 78 L 48 66 Z"
-            fill="url(#gradFootShadow)"
-          />
-
-          {/* ========================================================== */}
-          {/* 3. MAIN DIAGONAL SLASH (Top-Right Needle to Bottom-Left)   */}
-          {/* ========================================================== */}
-          <Path
-            d="M 82 14 L 51 44 L 37 55 L 14 88 L 26 74 L 42 56 L 62 40 Z"
-            fill="url(#gradMainSlash)"
-          />
-          <Path
-            d="M 82 14 L 62 40 L 42 56 L 54 55 L 43 74 L 38 76 L 14 88 L 26 74 Z"
-            fill="url(#gradSlashShadow)"
-          />
-        </G>
-      </Svg>
+      {/* Floating Elemental Mana Core Gem */}
+      <Animated.View
+        style={[
+          styles.imageContainer,
+          {
+            width,
+            height,
+            transform: [{ translateY: animated ? floatAnim : 0 }],
+          },
+        ]}
+        pointerEvents="none"
+      >
+        <Image
+          source={HUNTER_REWARD_GEM}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="contain"
+        />
+      </Animated.View>
     </View>
   );
 };
@@ -123,6 +112,20 @@ export const HunterXLogo = HunterXEmblem;
 
 const styles = StyleSheet.create({
   container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  glowAura: {
+    position: 'absolute',
+    borderRadius: 999,
+    opacity: 0.16,
+    shadowColor: '#F66F28',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.65,
+    shadowRadius: 28,
+  },
+  imageContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },

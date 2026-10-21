@@ -8,7 +8,9 @@ import Svg, {
   Circle,
   Path,
 } from 'react-native-svg';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 

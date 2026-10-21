@@ -14,7 +14,9 @@ import {
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/common/Button';
 import { DustParticles } from '@/components/common/DustParticles';
@@ -22,6 +24,10 @@ import { GoogleIcon } from '@/components/common/GoogleIcon';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/useAuthStore';
 import { isGoogleSignInCancelled, signInWithGoogle } from '@/services/auth/googleAuth';
+import {
+  isAppleSignInCancelled,
+  signInWithApple,
+} from '@/services/auth/appleAuth';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
@@ -36,12 +42,14 @@ import { optimizeCloudinaryUrl, DEFAULT_BLURHASH } from '@/services/media/cloudi
 const HERO_IMAGE_URI = optimizeCloudinaryUrl(CLOUDINARY_ASSETS.login_bg.uri, 1200);
 
 export default function LoginScreen() {
-  const { login, loginWithGoogle, isAuthenticating } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { login, loginWithGoogle, loginWithApple, isAuthenticating } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
 
   const [focusedInput, setFocusedInput] = useState<'email' | 'password' | null>(null);
 
@@ -129,8 +137,22 @@ export default function LoginScreen() {
     }
   };
 
-  const handleAppleLogin = () => {
-    // Placeholder for Apple OAuth
+  const handleAppleLogin = async () => {
+    setError(null);
+    setIsAppleLoading(true);
+    try {
+      const { idToken, nonce } = await signInWithApple();
+      // Same as Google — a brand new account gets the onboarding wizard,
+      // which attaches its answers to this account at the end.
+      const { isNew } = await loginWithApple(idToken, nonce);
+      router.replace(isNew ? '/(onboarding)/name' : '/(tabs)');
+    } catch (err) {
+      if (!isAppleSignInCancelled(err)) {
+        setError(err instanceof Error ? err.message : 'Apple sign-in failed');
+      }
+    } finally {
+      setIsAppleLoading(false);
+    }
   };
 
   const handleLostAccess = () => {
@@ -263,7 +285,7 @@ export default function LoginScreen() {
                 label="CONTINUE"
                 onPress={handleLogin}
                 loading={isAuthenticating}
-                disabled={isGoogleLoading}
+                disabled={isGoogleLoading || isAppleLoading}
                 variant="primary"
                 style={styles.continueButton}
                 labelStyle={styles.continueButtonLabel}
@@ -271,39 +293,46 @@ export default function LoginScreen() {
             </Animated.View>
 
             {/* Social Logins & Sign Up Link */}
-            <Animated.View style={createAnimatedStyle(socialAnim)}>
-              {/* Divider */}
-              <View style={styles.dividerContainer}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.dividerLine} />
+            <Animated.View style={[createAnimatedStyle(socialAnim), styles.socialSection]}>
+              <View>
+                {/* Divider */}
+                <View style={styles.dividerContainer}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                <Button
+                  label="Continue with Google"
+                  onPress={handleGoogleLogin}
+                  loading={isGoogleLoading}
+                  disabled={isAuthenticating || isAppleLoading}
+                  variant="outline"
+                  icon={<GoogleIcon size={18} />}
+                  style={styles.socialButton}
+                  labelStyle={styles.socialButtonLabel}
+                />
+
+                <Button
+                  label="Continue with Apple"
+                  onPress={handleAppleLogin}
+                  loading={isAppleLoading}
+                  disabled={isAuthenticating || isGoogleLoading}
+                  variant="outline"
+                  icon={<Ionicons name="logo-apple" size={18} color="#FFFFFF" />}
+                  style={[styles.socialButton, { marginTop: 10 }]}
+                  labelStyle={styles.socialButtonLabel}
+                />
               </View>
 
-              <Button
-                label="Continue with Google"
-                onPress={handleGoogleLogin}
-                loading={isGoogleLoading}
-                disabled={isAuthenticating}
-                variant="outline"
-                icon={<GoogleIcon size={18} />}
-                style={styles.socialButton}
-                labelStyle={styles.socialButtonLabel}
-              />
-
-              <Button
-                label="Continue with Apple"
-                onPress={handleAppleLogin}
-                variant="outline"
-                icon={<Ionicons name="logo-apple" size={18} color="#FFFFFF" />}
-                style={[styles.socialButton, { marginTop: 10 }]}
-                labelStyle={styles.socialButtonLabel}
-              />
-
               {/* Bottom Link */}
-              <View style={styles.signupContainer}>
+              <View style={[styles.signupContainer, { paddingBottom: Math.max(insets.bottom + 36, 48) }]}>
                 <Text style={styles.signupPrefix}>New here? </Text>
                 <Link href="/(onboarding)/name" asChild>
-                  <Pressable>
+                  <Pressable
+                    hitSlop={10}
+                    onPress={() => router.push('/(onboarding)/name')}
+                  >
                     <Text style={styles.signupLink}>Create account</Text>
                   </Pressable>
                 </Link>
@@ -355,9 +384,14 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   formContainer: {
+    flex: 1,
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 36,
+    paddingBottom: 0,
+  },
+  socialSection: {
+    flex: 1,
+    justifyContent: 'space-between',
   },
   inputWrapper: {
     flexDirection: 'row',

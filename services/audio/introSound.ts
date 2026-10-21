@@ -1,11 +1,9 @@
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
-import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
 import { useSettingsStore } from '@/store/useSettingsStore';
 
-let globalIntroSound: Audio.Sound | null = null;
+let globalIntroSound: AudioPlayer | null = null;
 let hapticTimers: any[] = [];
-let isPreloading = false;
 
 export function clearIntroHaptics(): void {
   hapticTimers.forEach((timer) => clearTimeout(timer));
@@ -38,33 +36,26 @@ export function triggerIntroHaptics(): void {
   });
 }
 
+function loadIntroSound(): AudioPlayer {
+  setAudioModeAsync({ playsInSilentMode: true, interruptionMode: 'duckOthers' }).catch(() => {});
+  const player = createAudioPlayer(require('@/assets/sounds/intro.mp3'));
+  player.volume = 1.0;
+  return player;
+}
+
 /**
  * Preload intro sound into memory for zero-delay instant playback
  */
 export async function preloadIntroAudio(): Promise<void> {
-  if (globalIntroSound || isPreloading) return;
-  isPreloading = true;
-
+  if (globalIntroSound) return;
   try {
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-    }).catch(() => {});
-
-    const { sound } = await Audio.Sound.createAsync(
-      require('@/assets/sounds/intro.mp3'),
-      { shouldPlay: false, volume: 1.0 }
-    );
-    globalIntroSound = sound;
+    globalIntroSound = loadIntroSound();
   } catch (err) {
     console.log('Error preloading intro audio:', err);
-  } finally {
-    isPreloading = false;
   }
 }
 
-export async function playIntroAudio(withHaptics: boolean = true): Promise<Audio.Sound | null> {
+export async function playIntroAudio(withHaptics: boolean = true): Promise<AudioPlayer | null> {
   const { soundEffectsEnabled, hapticsEnabled } = useSettingsStore.getState();
   if (!soundEffectsEnabled && !hapticsEnabled) return null;
 
@@ -75,39 +66,13 @@ export async function playIntroAudio(withHaptics: boolean = true): Promise<Audio
 
     if (!soundEffectsEnabled) return null;
 
-    if (globalIntroSound) {
-      const status = await globalIntroSound.getStatusAsync();
-      if (status.isLoaded) {
-        await globalIntroSound.setPositionAsync(0).catch(() => {});
-        await globalIntroSound.playAsync().catch(() => {});
-        return globalIntroSound;
-      }
+    if (!globalIntroSound) {
+      globalIntroSound = loadIntroSound();
     }
-
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-    }).catch(() => {});
-
-    const { sound } = await Audio.Sound.createAsync(
-      require('@/assets/sounds/intro.mp3'),
-      { shouldPlay: true, volume: 1.0 }
-    );
-
-    globalIntroSound = sound;
-
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        sound.unloadAsync().catch(() => {});
-        clearIntroHaptics();
-        if (globalIntroSound === sound) {
-          globalIntroSound = null;
-        }
-      }
-    });
-
-    return sound;
+    const player = globalIntroSound;
+    await player.seekTo(0).catch(() => {});
+    player.play();
+    return player;
   } catch (err) {
     console.log('Error playing intro audio:', err);
     return null;
@@ -118,8 +83,8 @@ export async function stopIntroAudio(): Promise<void> {
   try {
     clearIntroHaptics();
     if (globalIntroSound) {
-      await globalIntroSound.stopAsync().catch(() => {});
-      await globalIntroSound.unloadAsync().catch(() => {});
+      globalIntroSound.pause();
+      globalIntroSound.remove();
       globalIntroSound = null;
     }
   } catch (err) {

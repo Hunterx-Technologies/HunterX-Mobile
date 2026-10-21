@@ -12,13 +12,15 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ViewShot from '@/components/common/ViewShotCompat';
 import type { ViewShotHandle } from '@/types/viewShot';
 import RNShare from '@/services/share/RNShare';
 import { Screen } from '@/components/common/Screen';
 import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
+import { env } from '@/config/env';
 import { optimizeCloudinaryUrl, DEFAULT_BLURHASH } from '@/services/media/cloudinary';
 import { fontFamilies } from '@/theme/typography';
 
@@ -36,7 +38,7 @@ export function InviteFriendsModal({
   displayName = 'SYSTEM',
 }: InviteFriendsModalProps) {
   const [isCopied, setIsCopied] = useState(false);
-  const referralLink = `https://join.hunterx.app/guestpass/${referralCode}`;
+  const referralLink = `https://${env.referralLinkHost}/guestpass/${referralCode}`;
   const guestPassCardRef = useRef<ViewShotHandle>(null);
 
   // Scan Line Animation Value

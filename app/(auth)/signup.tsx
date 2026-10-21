@@ -13,7 +13,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Button } from '@/components/common/Button';
 import { Screen } from '@/components/common/Screen';
@@ -21,13 +22,23 @@ import { GoogleIcon } from '@/components/common/GoogleIcon';
 import { useAuth } from '@/hooks/useAuth';
 import { resendOtp, verifyOtp } from '@/services/api/auth.service';
 import { isGoogleSignInCancelled, signInWithGoogle } from '@/services/auth/googleAuth';
+import {
+  isAppleSignInCancelled,
+  signInWithApple,
+} from '@/services/auth/appleAuth';
+import {
+  clearPendingReferral,
+  getPendingReferral,
+  normalizeReferralCode,
+  savePendingReferral,
+} from '@/services/referral/pendingReferral';
 import { buildOnboardingAnswers, useOnboardingStore } from '@/store/useOnboardingStore';
 import { showGlobalToast } from '@/store/useToastStore';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 
 export default function SignupScreen() {
-  const { signup, loginWithGoogle, isAuthenticating } = useAuth();
+  const { signup, loginWithGoogle, loginWithApple, isAuthenticating } = useAuth();
   const storeHunterName = useOnboardingStore((s) => s.hunterName);
   const verifiedEmail = useOnboardingStore((s) => s.verifiedEmail);
   const setVerifiedEmail = useOnboardingStore((s) => s.setVerifiedEmail);
@@ -37,9 +48,11 @@ export default function SignupScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [referralCode, setReferralCode] = useState('');
   const [sendingOtp, setSendingOtp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
 
   // OTP Popup Modal states
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
@@ -62,7 +75,19 @@ export default function SignupScreen() {
     confirmPassword.length > 0 &&
     password === confirmPassword;
 
-  const [focusedInput, setFocusedInput] = useState<'email' | 'password' | 'confirmPassword' | null>(null);
+  const [focusedInput, setFocusedInput] = useState<'email' | 'password' | 'confirmPassword' | 'referral' | null>(null);
+
+  // Prefill from a Guest Pass link opened earlier (app/guestpass/[code].tsx).
+  useEffect(() => {
+    getPendingReferral().then((code) => {
+      if (code) setReferralCode((current) => current || code);
+    });
+  }, []);
+
+  // useAuthStore attaches the pending code to register / Google sign-in, so
+  // mirror the field into it — including clearing it if the hunter erased it.
+  const syncPendingReferral = () =>
+    normalizeReferralCode(referralCode) ? savePendingReferral(referralCode) : clearPendingReferral();
 
   const titleAnim = useRef(new Animated.Value(0)).current;
   const formAnim = useRef(new Animated.Value(0)).current;
@@ -227,6 +252,7 @@ export default function SignupScreen() {
     };
 
     try {
+      await syncPendingReferral();
       await signup(registerPayload);
       router.replace('/(onboarding)/ascension');
     } catch (err: any) {
@@ -244,6 +270,7 @@ export default function SignupScreen() {
     setIsGoogleLoading(true);
     try {
       const idToken = await signInWithGoogle();
+      await syncPendingReferral();
       const { isNew } = await loginWithGoogle(idToken, buildOnboardingAnswers());
       if (isNew) {
         router.replace('/(onboarding)/ascension');
@@ -267,6 +294,32 @@ export default function SignupScreen() {
       }
     } finally {
       setIsGoogleLoading(false);
+    }
+  };
+
+  const handleAppleSignup = async () => {
+    setError(null);
+    setIsAppleLoading(true);
+    try {
+      const { idToken, nonce } = await signInWithApple();
+      await syncPendingReferral();
+      // Apple only shares the user's name once, so the backend names a new
+      // account from onboarding Q1 (the hunter name) instead.
+      const { isNew } = await loginWithApple(idToken, nonce, buildOnboardingAnswers());
+      if (isNew) {
+        router.replace('/(onboarding)/ascension');
+      } else {
+        router.replace('/(tabs)');
+        setTimeout(() => {
+          showGlobalToast('User Account is already exist', 'info');
+        }, 350);
+      }
+    } catch (err) {
+      if (!isAppleSignInCancelled(err)) {
+        setError(err instanceof Error ? err.message : 'Apple sign-in failed');
+      }
+    } finally {
+      setIsAppleLoading(false);
     }
   };
 
@@ -394,13 +447,39 @@ export default function SignupScreen() {
           </Pressable>
         </View>
 
+        <View
+          style={[
+            styles.inputWrapper,
+            focusedInput === 'referral' && styles.inputWrapperFocused,
+          ]}
+        >
+          <Feather
+            name="gift"
+            size={18}
+            color={focusedInput === 'referral' ? colors.accentGold : '#71717A'}
+            style={styles.inputIcon}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Referral Code (Optional)"
+            placeholderTextColor="#52525B"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={16}
+            value={referralCode}
+            onChangeText={(text) => setReferralCode(text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())}
+            onFocus={() => setFocusedInput('referral')}
+            onBlur={() => setFocusedInput(null)}
+          />
+        </View>
+
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <Button
           label="CREATE ACCOUNT"
           onPress={handleSignup}
           loading={isAuthenticating}
-          disabled={!isFormValid || isGoogleLoading}
+          disabled={!isFormValid || isGoogleLoading || isAppleLoading}
           variant="primary"
           style={[styles.signupButton, !isFormValid && styles.signupButtonDisabled]}
           labelStyle={[styles.signupButtonLabel, !isFormValid && styles.signupButtonLabelDisabled]}
@@ -418,7 +497,7 @@ export default function SignupScreen() {
           label="Continue with Google"
           onPress={handleGoogleSignup}
           loading={isGoogleLoading}
-          disabled={isAuthenticating}
+          disabled={isAuthenticating || isAppleLoading}
           variant="outline"
           icon={<GoogleIcon size={18} />}
           style={styles.socialButton}
@@ -427,7 +506,9 @@ export default function SignupScreen() {
 
         <Button
           label="Continue with Apple"
-          onPress={() => {}}
+          onPress={handleAppleSignup}
+          loading={isAppleLoading}
+          disabled={isAuthenticating || isGoogleLoading}
           variant="outline"
           icon={<Ionicons name="logo-apple" size={18} color="#FFFFFF" />}
           style={[styles.socialButton, { marginTop: 10 }]}

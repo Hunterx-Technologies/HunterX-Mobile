@@ -1,12 +1,15 @@
 import React, { useCallback } from 'react';
-import { Tabs, useFocusEffect, usePathname, useRouter } from 'expo-router';
+import { Tabs, useFocusEffect, usePathname, useRouter, Redirect } from 'expo-router';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 import { colors } from '@/theme/colors';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function TabsLayout() {
+  const { isAuthenticated, isOnboarded, isBootstrapping } = useAuth();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
@@ -34,6 +37,19 @@ export default function TabsLayout() {
       return () => subscription.remove();
     }, [pathname, router])
   );
+
+  // Auth Guard: Redirect unauthenticated users immediately to login
+  if (isBootstrapping) {
+    return null;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
+  if (!isOnboarded) {
+    return <Redirect href="/(onboarding)/name" />;
+  }
 
   return (
     <Tabs

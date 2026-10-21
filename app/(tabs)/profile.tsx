@@ -21,7 +21,8 @@ import Animated, {
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useScrollToTop } from '@react-navigation/native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
@@ -44,6 +45,9 @@ import { RateHunterModal } from '@/components/profile/RateHunterModal';
 import { RecentActivityModal } from '@/components/profile/RecentActivityModal';
 import { SystemSettingsModal } from '@/components/profile/SystemSettingsModal';
 import { WeeklyProgressCard } from '@/components/features/streaks/WeeklyProgressCard';
+import { showLevelUp } from '@/store/useLevelUpStore';
+import { showStreakBadge } from '@/store/useStreakBadgeStore';
+import { showStreakBreak } from '@/store/useStreakBreakStore';
 
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { getCurrentUser, refreshAccessToken, updateProfile, updateUserAvatar, type UpdateProfilePayload } from '@/services/api/auth.service';
@@ -67,7 +71,8 @@ export default function ProfileScreen() {
     }, [])
   );
 
-  // Persistent Settings Store (Audio, Haptics, Notifications, Units)
+  // Persistent Settings Store (Audio, Haptics, Units) — notification toggles
+  // live on the backend (SystemSettingsModal → /users/me/settings)
   const {
     unitSystem,
     setUnitSystem,
@@ -75,24 +80,6 @@ export default function ProfileScreen() {
     setSoundEffectsEnabled,
     hapticsEnabled,
     setHapticsEnabled,
-    allNotificationsEnabled,
-    setAllNotificationsEnabled,
-    dailyMotivationEnabled,
-    setDailyMotivationEnabled,
-    taskRemindersEnabled,
-    setTaskRemindersEnabled,
-    streakAtRiskEnabled,
-    setStreakAtRiskEnabled,
-    streakMilestonesEnabled,
-    setStreakMilestonesEnabled,
-    streakStatusAlertsEnabled,
-    setStreakStatusAlertsEnabled,
-    levelUpAlertsEnabled,
-    setLevelUpAlertsEnabled,
-    rewardReadyAlertsEnabled,
-    setRewardReadyAlertsEnabled,
-    announcementsEnabled,
-    setAnnouncementsEnabled,
   } = useSettingsStore();
 
   // Modals Visibility
@@ -328,6 +315,24 @@ export default function ProfileScreen() {
         break;
       case 'send_feedback':
         router.push('/feedback');
+        break;
+      case 'reward_test':
+        router.push('/reward-test');
+        break;
+      case 'streak_badge_test':
+        showStreakBadge({ currentIndex: 2, streakDays: 30 });
+        break;
+      case 'day_complete_test':
+        router.push('/day-complete?streak=30&xp=25');
+        break;
+      case 'streak_life_test':
+        showStreakBreak({ livesLeft: 1, streakDays: 16 });
+        break;
+      case 'streak_lost_test':
+        showStreakBreak({ livesLeft: 0, streakDays: 16 });
+        break;
+      case 'level_up_test':
+        showLevelUp({ level: 3, rankName: 'Dormant III', tierLabel: 'DORMANT' });
         break;
       case 'instagram':
         Linking.openURL('https://instagram.com');
@@ -631,6 +636,52 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* DEVELOPER SECTION (dev builds only, for testing screens on a phone) */}
+        {__DEV__ && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionHeaderTitle}>Developer</Text>
+            <View style={styles.menuContainer}>
+              <MenuItem
+                icon="flask-outline"
+                label="Reward Test"
+                subtitle="Scratch card reward screen"
+                onPress={() => handleMenuPress('reward_test')}
+              />
+              <MenuItem
+                icon="trending-up-outline"
+                label="Level Up Test"
+                subtitle="Level up screen"
+                onPress={() => handleMenuPress('level_up_test')}
+              />
+              <MenuItem
+                icon="ribbon-outline"
+                label="Streak Badge Test"
+                subtitle="Badge unlock showcase"
+                onPress={() => handleMenuPress('streak_badge_test')}
+              />
+              <MenuItem
+                icon="checkmark-done-outline"
+                label="Day Complete Test"
+                subtitle="Day complete streak screen"
+                onPress={() => handleMenuPress('day_complete_test')}
+              />
+              <MenuItem
+                icon="flame-outline"
+                label="Streak Life Test"
+                subtitle="Lose 1 of 2 streak lives"
+                onPress={() => handleMenuPress('streak_life_test')}
+              />
+              <MenuItem
+                icon="cloud-outline"
+                label="Streak Lost Test"
+                subtitle="Lose the last streak life"
+                onPress={() => handleMenuPress('streak_lost_test')}
+                isLast
+              />
+            </View>
+          </View>
+        )}
+
         {/* LOG OUT CARD */}
         <View style={styles.menuContainer}>
           <MenuItem
@@ -701,24 +752,6 @@ export default function ProfileScreen() {
         setSoundEffectsEnabled={setSoundEffectsEnabled}
         hapticsEnabled={hapticsEnabled}
         setHapticsEnabled={setHapticsEnabled}
-        allNotificationsEnabled={allNotificationsEnabled}
-        setAllNotificationsEnabled={setAllNotificationsEnabled}
-        dailyMotivationEnabled={dailyMotivationEnabled}
-        setDailyMotivationEnabled={setDailyMotivationEnabled}
-        taskRemindersEnabled={taskRemindersEnabled}
-        setTaskRemindersEnabled={setTaskRemindersEnabled}
-        streakAtRiskEnabled={streakAtRiskEnabled}
-        setStreakAtRiskEnabled={setStreakAtRiskEnabled}
-        streakMilestonesEnabled={streakMilestonesEnabled}
-        setStreakMilestonesEnabled={setStreakMilestonesEnabled}
-        streakStatusAlertsEnabled={streakStatusAlertsEnabled}
-        setStreakStatusAlertsEnabled={setStreakStatusAlertsEnabled}
-        levelUpAlertsEnabled={levelUpAlertsEnabled}
-        setLevelUpAlertsEnabled={setLevelUpAlertsEnabled}
-        rewardReadyAlertsEnabled={rewardReadyAlertsEnabled}
-        setRewardReadyAlertsEnabled={setRewardReadyAlertsEnabled}
-        announcementsEnabled={announcementsEnabled}
-        setAnnouncementsEnabled={setAnnouncementsEnabled}
       />
 
       <RateHunterModal

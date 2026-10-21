@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { fontFamilies } from '@/theme/typography';
 import { forgotPassword } from '@/services/api/auth.service';
@@ -104,24 +105,45 @@ export default function RecoverySentScreen() {
     Linking.openURL(scheme).catch(() => { });
   };
 
-  const { email } = useLocalSearchParams<{ email?: string }>();
+  const { email, message } = useLocalSearchParams<{ email?: string; message?: string }>();
+  const [countdown, setCountdown] = useState(60);
   const [resending, setResending] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [countdown]);
+
   const handleResend = async () => {
-    if (!email) {
-      setFeedback({ type: 'error', text: 'No email address found to resend to.' });
-      return;
-    }
+    if (!email || countdown > 0 || resending) return;
     setResending(true);
     setFeedback(null);
     try {
       const msg = await forgotPassword(email);
-      setFeedback({ type: 'success', text: msg || 'Recovery link resent successfully!' });
-    } catch (err) {
+      setFeedback({
+        type: 'success',
+        text:
+          msg ||
+          "If an account exists for this email, we have sent instructions to reset your Secret Key. Check your spam folder if it does not arrive within 2 minutes.",
+      });
+      setCountdown(60);
+    } catch (err: any) {
       setFeedback({
         type: 'error',
-        text: err instanceof Error ? err.message : 'Resend failed. Please try again.',
+        text:
+          err instanceof Error && err.message
+            ? err.message
+            : 'Something went wrong. Please try again.',
       });
     } finally {
       setResending(false);
@@ -138,7 +160,7 @@ export default function RecoverySentScreen() {
             hitSlop={12}
             style={styles.backButton}
           >
-            <Feather name="arrow-left" size={22} color="#FFFFFF" />
+            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
           </Pressable>
         </Animated.View>
 
@@ -167,7 +189,7 @@ export default function RecoverySentScreen() {
               { opacity: headingOp, transform: [{ translateY: headingY }] },
             ]}
           >
-            RECOVERY LINK SENT
+            CHECK YOUR EMAIL
           </Animated.Text>
 
           {/* Description */}
@@ -177,8 +199,8 @@ export default function RecoverySentScreen() {
               { opacity: descOp, transform: [{ translateY: descY }] },
             ]}
           >
-            We've sent a password reset link to your email. Check your inbox and
-            follow the instructions to create a new password.
+            {message ||
+              "If an account exists for this email, we've sent instructions to reset your password. Check your spam folder if it doesn't arrive within 2 minutes."}
           </Animated.Text>
         </View>
 
@@ -225,14 +247,26 @@ export default function RecoverySentScreen() {
               </Pressable>
             </Animated.View>
 
-            {/* Resend Link */}
+            {/* Resend Email */}
             <Pressable
               onPress={handleResend}
-              disabled={resending}
-              style={[styles.resendBtn, resending && { opacity: 0.5 }]}
+              disabled={countdown > 0 || resending}
+              style={[
+                styles.resendBtn,
+                (countdown > 0 || resending) && styles.resendBtnDisabled,
+              ]}
             >
-              <Text style={styles.resendLabel}>
-                {resending ? 'RESENDING...' : 'RESEND LINK'}
+              <Text
+                style={[
+                  styles.resendLabel,
+                  (countdown > 0 || resending) && styles.resendLabelDisabled,
+                ]}
+              >
+                {countdown > 0
+                  ? `Resend email (${countdown}s)`
+                  : resending
+                  ? 'Resending...'
+                  : 'Resend email'}
               </Text>
             </Pressable>
 
@@ -270,9 +304,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -365,15 +398,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   resendBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  resendBtnDisabled: {
+    opacity: 0.6,
   },
   resendLabel: {
-    fontFamily: fontFamilies.regular,
+    fontFamily: fontFamilies.bold,
     fontSize: 12,
     letterSpacing: 1.4,
-    color: '#52525B',
+    color: '#FFFFFF',
     textDecorationLine: 'underline',
+    textTransform: 'uppercase',
+  },
+  resendLabelDisabled: {
+    color: '#71717A',
+    textDecorationLine: 'none',
   },
   feedbackText: {
     fontFamily: fontFamilies.regular,

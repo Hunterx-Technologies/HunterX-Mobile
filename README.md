@@ -57,10 +57,11 @@ HunterX is designed to help users develop lasting habits through an engaging RPG
 | Expo | Development framework |
 | Expo Router | File-based navigation |
 | TypeScript | Type safety |
-| Supabase | Authentication & Database |
+| HunterX Backend API | Authentication & data |
+| Cloudinary | Remote images (served via backend & app assets) |
 | React Native Reanimated | Smooth animations |
-| Lottie | Achievement animations |
-| Expo AV | Sound effects |
+| React Native Skia | Reward & level-up animations |
+| Expo Audio | Sound effects |
 | RevenueCat | Subscription management *(Phase 2)* |
 
 ---
@@ -113,9 +114,9 @@ npm install
 Create a `.env` file.
 
 ```env
-EXPO_PUBLIC_SUPABASE_URL=
-EXPO_PUBLIC_SUPABASE_ANON_KEY=
 EXPO_PUBLIC_API_URL=
+EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB=
+EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS=
 ```
 
 ### Start Development Server

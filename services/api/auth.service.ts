@@ -23,7 +23,7 @@ function prefetchCurrentUserAvatar(avatarUrl: string | null | undefined) {
   if (!avatarUrl || !(avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
     return;
   }
-  ExpoImage.prefetch(optimizeCloudinaryUrl(avatarUrl, AVATAR_THUMB_WIDTH), 'memory-disk').catch(() => {});
+  ExpoImage.prefetch(optimizeCloudinaryUrl(avatarUrl, AVATAR_THUMB_WIDTH), 'memory-disk').catch(() => { });
 }
 
 export function mapBackendUserToUser(u: any): User {
@@ -49,8 +49,8 @@ export function mapBackendUserToUser(u: any): User {
   const normalizedProvider = upperProvider.includes('GOOGLE')
     ? 'GOOGLE'
     : upperProvider.includes('APPLE')
-    ? 'APPLE'
-    : upperProvider;
+      ? 'APPLE'
+      : upperProvider;
 
   return {
     ...u,
@@ -123,6 +123,8 @@ export type RegisterPayload = {
   email: string;
   password: string;
   onboarding: OnboardingAnswerPayload[];
+  // Inviter's code from a Guest Pass link — unknown codes are ignored server-side.
+  referral_code?: string;
 };
 
 export async function signup(payload: RegisterPayload): Promise<User> {
@@ -162,28 +164,31 @@ export async function signup(payload: RegisterPayload): Promise<User> {
   }
 }
 
-export type GoogleLoginResult = {
+export type SocialLoginResult = {
   user: User;
   isNew: boolean;
 };
 
-type GoogleLoginResponse = LoginResponse & { isNew?: boolean };
+export type GoogleLoginResult = SocialLoginResult;
+export type AppleLoginResult = SocialLoginResult;
 
-// Backend handles register-or-login in a single call (see HunterX-Backend
-// POST /api/auth/google) — same endpoint is used from both the Login and
-// Signup screens' "Continue with Google". onboarding[] only matters when
-// the account turns out to be brand new; an existing user just logs in.
-export async function loginWithGoogle(
-  idToken: string,
-  onboarding: OnboardingAnswerPayload[] = []
-): Promise<GoogleLoginResult> {
-  try {
-    const { data } = await apiClient.post<ApiResponse<GoogleLoginResponse>>('/auth/google', {
-      idToken,
-      onboarding,
-    });
+type SocialLoginResponse = LoginResponse & { isNew?: boolean };
+
+// Backend handles register-or-login in a single call for each provider
+// (HunterX-Backend POST /api/auth/google and /api/auth/apple) — the same
+// endpoint is used from both the Login and Signup screens' "Continue with …".
+// onboarding[] only matters when the account turns out to be brand new; an
+// existing user just logs in. referral_code likewise only applies on create.
+async function socialLogin(
+  provider: 'GOOGLE' | 'APPLE',
+  path: string,
+  body: Record<string, unknown>,
+  failMessage: string
+): Promise<SocialLoginResult> {
+  const post = async (url: string) => {
+    const { data } = await apiClient.post<ApiResponse<SocialLoginResponse>>(url, body);
     if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-      throw new Error(data.error?.message || 'Google sign-in failed');
+      throw new Error(data.error?.message || failMessage);
     }
     const accessToken = data?.data?.access_token || data?.data?.accessToken;
     const refreshToken = data?.data?.refresh_token || data?.data?.refreshToken;
@@ -191,68 +196,88 @@ export async function loginWithGoogle(
       throw new Error('Invalid token response from backend');
     }
     await tokenStorage.setTokens(accessToken, refreshToken);
-    const googleUser = data.data.user || {};
-    if (!googleUser.auth_provider && !googleUser.authProvider && !googleUser.provider) {
-      googleUser.auth_provider = 'GOOGLE';
+    const rawUser = data.data.user || {};
+    if (!rawUser.auth_provider && !rawUser.authProvider && !rawUser.provider) {
+      rawUser.auth_provider = provider;
     }
-    return { user: mapBackendUserToUser(googleUser), isNew: !!data.data.isNew };
+    return { user: mapBackendUserToUser(rawUser), isNew: !!data.data.isNew };
+  };
+
+  try {
+    return await post(path);
   } catch (err: any) {
     const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
     if (isNotFound) {
-      const { data } = await apiClient.post<ApiResponse<GoogleLoginResponse>>('/api/auth/google', {
-        idToken,
-        onboarding,
-      });
-      if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-        throw new Error(data.error?.message || 'Google sign-in failed');
-      }
-      const accessToken = data?.data?.access_token || data?.data?.accessToken;
-      const refreshToken = data?.data?.refresh_token || data?.data?.refreshToken;
-      if (!accessToken || !refreshToken) {
-        throw new Error('Invalid token response from backend');
-      }
-      await tokenStorage.setTokens(accessToken, refreshToken);
-      const googleUserFallback = data.data.user || {};
-      if (!googleUserFallback.auth_provider && !googleUserFallback.authProvider && !googleUserFallback.provider) {
-        googleUserFallback.auth_provider = 'GOOGLE';
-      }
-      return { user: mapBackendUserToUser(googleUserFallback), isNew: !!data.data.isNew };
+      return post(`/api${path}`);
     }
     throw new Error(extractErrorMessage(err));
   }
+}
+
+export async function loginWithGoogle(
+  idToken: string,
+  onboarding: OnboardingAnswerPayload[] = [],
+  referralCode?: string
+): Promise<GoogleLoginResult> {
+  const body = referralCode ? { idToken, onboarding, referral_code: referralCode } : { idToken, onboarding };
+  return socialLogin('GOOGLE', '/auth/google', body, 'Google sign-in failed');
+}
+
+export async function loginWithApple(
+  idToken: string,
+  nonce: string,
+  onboarding: OnboardingAnswerPayload[] = [],
+  referralCode?: string
+): Promise<AppleLoginResult> {
+  const body = referralCode
+    ? { idToken, nonce, onboarding, referral_code: referralCode }
+    : { idToken, nonce, onboarding };
+  return socialLogin('APPLE', '/auth/apple', body, 'Apple sign-in failed');
 }
 
 export async function logout(): Promise<void> {
   await tokenStorage.clearTokens();
 }
 
+let inFlightCurrentUser: Promise<User> | null = null;
+
 // Restores a session on app start — apiClient already attaches the stored
 // access token (and transparently refreshes it on a 401), so this just
 // confirms it's still valid and fetches the user it belongs to.
 export async function getCurrentUser(): Promise<User> {
-  try {
-    const { data } = await apiClient.get<ApiResponse<{ user: User } | User>>('/auth/me');
-    if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-      throw new Error((data as any).error?.message || 'Failed to fetch profile');
-    }
-    const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
-    return mapBackendUserToUser(rawUser);
-  } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.get<ApiResponse<{ user: User } | User>>('/api/auth/me');
-        if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-          throw new Error((data as any).error?.message || 'Failed to fetch profile');
-        }
-        const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
-        return mapBackendUserToUser(rawUser);
-      } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
-      }
-    }
-    throw new Error(extractErrorMessage(err));
+  if (inFlightCurrentUser) {
+    return inFlightCurrentUser;
   }
+
+  inFlightCurrentUser = (async () => {
+    try {
+      const { data } = await apiClient.get<ApiResponse<{ user: User } | User>>('/auth/me');
+      if (data && typeof data === 'object' && 'success' in data && data.success === false) {
+        throw new Error((data as any).error?.message || 'Failed to fetch profile');
+      }
+      const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
+      return mapBackendUserToUser(rawUser);
+    } catch (err: any) {
+      const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
+      if (isNotFound) {
+        try {
+          const { data } = await apiClient.get<ApiResponse<{ user: User } | User>>('/api/auth/me');
+          if (data && typeof data === 'object' && 'success' in data && data.success === false) {
+            throw new Error((data as any).error?.message || 'Failed to fetch profile');
+          }
+          const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
+          return mapBackendUserToUser(rawUser);
+        } catch (innerErr: any) {
+          throw new Error(extractErrorMessage(innerErr));
+        }
+      }
+      throw new Error(extractErrorMessage(err));
+    } finally {
+      inFlightCurrentUser = null;
+    }
+  })();
+
+  return inFlightCurrentUser;
 }
 
 // For an already-authenticated user whose onboarding isn't done yet — e.g.
@@ -342,39 +367,43 @@ export async function verifyOtp(email: string, otp: string): Promise<void> {
 }
 
 export async function forgotPassword(email: string): Promise<string> {
+  const DEFAULT_SUCCESS_MSG =
+    "If an account exists for this email, we have sent instructions to reset your Secret Key. Check your spam folder if it does not arrive within 2 minutes.";
+
+  const getErrorMessage = (err: any): string => {
+    if (err?.response?.data?.message && typeof err.response.data.message === 'string') {
+      return err.response.data.message;
+    }
+    if (err?.response?.data?.error) {
+      if (typeof err.response.data.error === 'string') return err.response.data.error;
+      if (typeof err.response.data.error.message === 'string') return err.response.data.error.message;
+    }
+    return 'Something went wrong. Please try again.';
+  };
+
   try {
     const { data } = await apiClient.post('/auth/forgot-password', { email });
     if (typeof data === 'string') return data;
     if (data?.success === false) {
-      throw new Error(data?.message || 'Failed to send recovery link.');
+      throw new Error(data?.message || 'Something went wrong. Please try again.');
     }
-    if (data?.message) return data.message;
-    return 'Recovery link sent to your email.';
+    return data?.message || DEFAULT_SUCCESS_MSG;
   } catch (err: any) {
-    const msg = err?.message;
-    const isGeneric404 = msg === 'Request failed with status code 404' || (msg && msg.includes('404'));
-    const isNetworkError = msg && (msg.includes('Network Error') || msg.includes('network_error'));
-
-    if (msg && !isGeneric404 && !isNetworkError) {
-      throw err;
-    }
-
     const responseStatus = err?.response?.status || err?.status;
     if (responseStatus === 404) {
       try {
         const { data } = await apiClient.post('/api/auth/forgot-password', { email });
         if (typeof data === 'string') return data;
         if (data?.success === false) {
-          throw new Error(data?.message || 'Failed to send recovery link.');
+          throw new Error(data?.message || 'Something went wrong. Please try again.');
         }
-        if (data?.message) return data.message;
-        return 'Recovery link sent to your email.';
+        return data?.message || DEFAULT_SUCCESS_MSG;
       } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
+        throw new Error(getErrorMessage(innerErr));
       }
     }
 
-    throw new Error(extractErrorMessage(err));
+    throw new Error(getErrorMessage(err));
   }
 }
 

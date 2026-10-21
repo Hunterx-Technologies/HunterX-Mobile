@@ -17,6 +17,9 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+# Firebase / Google service-account keys (FCM v1) — upload via `eas credentials`, never commit
+*firebase-adminsdk*.json
+*service-account*.json
 
 # Metro
 .metro-health-check*
@@ -45,3 +48,6 @@ yarn-error.*
 *.apk
 *.aab
 *.ipa
+
+# Editor settings
+.vscode/

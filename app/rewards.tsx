@@ -13,8 +13,11 @@ import {
   BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+import { useRouter, Redirect } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 
@@ -24,6 +27,7 @@ import { HunterXEmblem } from '../components/features/HunterXEmblem';
 import { RewardRevealModal } from '../components/features/RewardRevealModal';
 import { TopographyPattern } from '../components/ui/TopographyPattern';
 import { fontFamilies } from '../theme/typography';
+import { useAuth } from '@/hooks/useAuth';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_CARD_WIDTH = (SCREEN_WIDTH - 32 - 14) / 2;
@@ -201,7 +205,9 @@ const INITIAL_COUPONS: CouponReward[] = [
 ];
 
 export default function RewardsScreen() {
+  const { isAuthenticated, isBootstrapping } = useAuth();
   const router = useRouter();
+
   const [coupons, setCoupons] = useState<CouponReward[]>(INITIAL_COUPONS);
   const [activeTab, setActiveTab] = useState<WalletTab>('ACTIVE');
 
@@ -213,6 +219,24 @@ export default function RewardsScreen() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
+  const scrollYRef = useRef(0);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      router.replace('/(tabs)/profile');
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [router]);
+
+  if (isBootstrapping) {
+    return null;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   const activeCards = coupons.filter((c) => !c.isUsed && !c.isExpired);
   const usedCards = coupons.filter((c) => c.isUsed);
@@ -234,16 +258,18 @@ export default function RewardsScreen() {
   const handleCopyCode = (code: string) => {
     Clipboard.setString(code);
     setCopiedCode(code);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
     setTimeout(() => {
       setCopiedCode(null);
     }, 2500);
   };
 
-  // Tap Scratch Card -> If unscratched, open center to scratch. If already scratched, open full reward details.
+  // Tap Scratch Card -> If unscratched, open center to scratch. If already scratched, open full reward details. (Expired cards non-interactive)
   const handleCardPress = (card: CouponReward) => {
-    Haptics.selectionAsync().catch(() => {});
-    if (!card.isScratched && !card.isExpired) {
+    if (card.isExpired) return;
+
+    Haptics.selectionAsync().catch(() => { });
+    if (!card.isScratched) {
       setActiveCenterCard(card);
     } else {
       setSelectedDetailsCard(card);
@@ -257,7 +283,7 @@ export default function RewardsScreen() {
     const completedCard = activeCenterCard;
     const updatedCard: CouponReward = { ...completedCard, isScratched: true };
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
     setCoupons((prev) =>
       prev.map((c) => (c.id === completedCard.id ? updatedCard : c))
     );
@@ -271,17 +297,8 @@ export default function RewardsScreen() {
     router.replace('/(tabs)/profile');
   };
 
-  useEffect(() => {
-    const onBackPress = () => {
-      router.replace('/(tabs)/profile');
-      return true;
-    };
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => sub.remove();
-  }, [router]);
-
   const handleMarkAsUsed = (cardId: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
     setCoupons((prev) =>
       prev.map((c) => (c.id === cardId ? { ...c, isUsed: true, expiresIn: 'REDEEMED' } : c))
     );
@@ -290,6 +307,7 @@ export default function RewardsScreen() {
 
   return (
     <View style={styles.rootView}>
+      <StatusBar style="light" backgroundColor="#0D0F12" />
       {/* Background #0D0F12 */}
       <LinearGradient colors={['#0D0F12', '#0A0C0E', '#08090B']} style={StyleSheet.absoluteFillObject} />
 
@@ -312,96 +330,62 @@ export default function RewardsScreen() {
             <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
 
-          <View style={styles.headerTitleCol}>
-            <Text style={styles.headerTag}>HUNTER LOOT VAULT</Text>
-            <Text style={styles.headerTitle}>
-              REWARDS <Text style={styles.orangeText}>CENTER</Text>
-            </Text>
-          </View>
+          <Text style={styles.headerTitle}>Rewards</Text>
 
-          <TouchableOpacity
-            style={styles.headerShareBtn}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              Share.share({ message: '🔥 Check out my Hunter rewards and loot cards on Arise!' }).catch(() => {});
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="share-social-outline" size={20} color="#F66F28" />
-          </TouchableOpacity>
+          <View style={styles.headerRightSpacer} />
         </View>
 
-        {/* SUMMARY STATS BANNER */}
-        <View style={styles.statsBannerOuter}>
-          <LinearGradient
-            colors={['#16181C', '#121316']}
-            style={styles.statsBannerGradient}
-          >
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>TOTAL DROPS</Text>
-              <Text style={styles.statValue}>{coupons.length}</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>UNOPENED</Text>
-              <Text style={[styles.statValue, { color: '#F66F28' }]}>
-                {coupons.filter((c) => !c.isScratched && !c.isExpired).length}
-              </Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>ACTIVE</Text>
-              <Text style={[styles.statValue, { color: '#F2F2F2' }]}>{activeCards.length}</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>REDEEMED</Text>
-              <Text style={[styles.statValue, { color: '#10B981' }]}>{usedCards.length}</Text>
-            </View>
-          </LinearGradient>
-        </View>
-
-        {/* SEGMENTED 3 TABS (ACTIVE, USED, EXPIRED) */}
-        <View style={styles.tabBarContainer}>
-          {(['ACTIVE', 'USED', 'EXPIRED'] as WalletTab[]).map((tab) => {
-            const isActive = activeTab === tab;
-            let count = 0;
-            if (tab === 'ACTIVE') count = activeCards.length;
-            if (tab === 'USED') count = usedCards.length;
-            if (tab === 'EXPIRED') count = expiredCards.length;
-
-            return (
-              <TouchableOpacity
-                key={tab}
-                activeOpacity={0.75}
-                style={[styles.tabItem, isActive && styles.tabItemActive]}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setActiveTab(tab);
-                  scrollRef.current?.scrollTo({ y: 0, animated: false });
-                }}
-              >
-                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                  {tab}
-                </Text>
-                <View style={[styles.tabBadge, isActive && styles.tabBadgeActive]}>
-                  <Text style={[styles.tabBadgeText, isActive && styles.tabBadgeTextActive]}>
-                    {count}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* 2-COLUMN SCRATCH CARD GRID */}
         <ScrollView
           bounces={false}
           overScrollMode="never"
           ref={scrollRef}
           contentContainerStyle={styles.scrollGridContent}
           showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={[0]}
+          scrollEventThrottle={32}
+          onScroll={(e) => {
+            scrollYRef.current = e.nativeEvent.contentOffset.y;
+          }}
         >
+          {/* Sticky tabs: solid background so cards don't show through */}
+          <View style={styles.stickyTabsWrap}>
+            {/* SEGMENTED 3 TABS (ACTIVE, USED, EXPIRED) */}
+            <View style={styles.tabBarContainer}>
+              {(['ACTIVE', 'USED', 'EXPIRED'] as WalletTab[]).map((tab) => {
+                const isActive = activeTab === tab;
+                let count = 0;
+                if (tab === 'ACTIVE') count = activeCards.length;
+                if (tab === 'USED') count = usedCards.length;
+                if (tab === 'EXPIRED') count = expiredCards.length;
+
+                return (
+                  <TouchableOpacity
+                    key={tab}
+                    activeOpacity={0.75}
+                    style={[styles.tabItem, isActive && styles.tabItemActive]}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => { });
+                      setActiveTab(tab);
+                      if (scrollYRef.current > 0) {
+                        scrollRef.current?.scrollTo({ y: 0, animated: false });
+                      }
+                    }}
+                  >
+                    <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                      {tab}
+                    </Text>
+                    <View style={[styles.tabBadge, isActive && styles.tabBadgeActive]}>
+                      <Text style={[styles.tabBadgeText, isActive && styles.tabBadgeTextActive]}>
+                        {count}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* 2-COLUMN SCRATCH CARD GRID */}
           <View style={styles.gridContainer}>
             {getCurrentTabCards().map((item) => {
               // 1. UNSCRATCHED CARD: Tapping moves it to the center of the screen
@@ -422,7 +406,8 @@ export default function RewardsScreen() {
               return (
                 <TouchableOpacity
                   key={item.id}
-                  activeOpacity={0.88}
+                  activeOpacity={item.isExpired ? 1 : 0.88}
+                  disabled={item.isExpired}
                   style={[
                     styles.gridCardOuter,
                     {
@@ -459,8 +444,8 @@ export default function RewardsScreen() {
                         item.isUsed
                           ? styles.statusBadgeUsed
                           : item.isExpired
-                          ? styles.statusBadgeExpired
-                          : styles.statusBadgeNew,
+                            ? styles.statusBadgeExpired
+                            : styles.statusBadgeNew,
                       ]}
                     >
                       <Text
@@ -469,8 +454,8 @@ export default function RewardsScreen() {
                           item.isUsed
                             ? styles.statusTextUsed
                             : item.isExpired
-                            ? styles.statusTextExpired
-                            : styles.statusTextNew,
+                              ? styles.statusTextExpired
+                              : styles.statusTextNew,
                         ]}
                       >
                         {item.isUsed ? 'USED' : item.isExpired ? 'EXPIRED' : 'New'}
@@ -504,8 +489,8 @@ export default function RewardsScreen() {
                 {activeTab === 'ACTIVE'
                   ? 'Complete daily hunter quests to earn Amazon fitness scratch cards!'
                   : activeTab === 'USED'
-                  ? 'Redeemed coupons and claimed rewards will appear here.'
-                  : 'Expired scratch cards and rewards will be archived here.'}
+                    ? 'Redeemed coupons and claimed rewards will appear here.'
+                    : 'Expired scratch cards and rewards will be archived here.'}
               </Text>
             </View>
           )}
@@ -527,15 +512,6 @@ export default function RewardsScreen() {
               activeOpacity={1}
               onPress={() => setActiveCenterCard(null)}
             />
-
-            {/* Floating Background-less Close Button */}
-            <TouchableOpacity
-              style={styles.floatingCloseBtn}
-              onPress={() => setActiveCenterCard(null)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="close" size={26} color="#F2F2F2" />
-            </TouchableOpacity>
 
             {/* The Scratch Card Centered Directly (No Dialog/Popup Chrome) */}
             {activeCenterCard && (
@@ -566,18 +542,19 @@ export default function RewardsScreen() {
           reward={
             selectedDetailsCard
               ? {
-                  id: selectedDetailsCard.id,
-                  brandName: 'Amazon',
-                  offerHeading: selectedDetailsCard.badge,
-                  offerSubheading: 'on Amazon Fitness orders above ₹800',
-                  code: selectedDetailsCard.code,
-                  productName: selectedDetailsCard.productName,
-                  productCategory: selectedDetailsCard.productCategory,
-                  productImageUrl: selectedDetailsCard.productImageUrl,
-                  expiryDate: selectedDetailsCard.expiresIn === 'EXPIRED' ? 'Expired' : 'October 9, 2026',
-                  minSpend: '₹800',
-                  amazonUrl: 'https://www.amazon.com',
-                }
+                id: selectedDetailsCard.id,
+                brandName: 'Amazon',
+                offerHeading: selectedDetailsCard.badge,
+                offerSubheading: 'on Amazon Fitness orders above ₹800',
+                code: selectedDetailsCard.code,
+                productName: selectedDetailsCard.productName,
+                productCategory: selectedDetailsCard.productCategory,
+                productImageUrl: selectedDetailsCard.productImageUrl,
+                expiryDate: selectedDetailsCard.expiresIn === 'EXPIRED' ? 'Expired' : 'October 9, 2026',
+                minSpend: '₹800',
+                amazonUrl: 'https://www.amazon.com',
+                isUsed: selectedDetailsCard.isUsed,
+              }
               : null
           }
         />
@@ -637,30 +614,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitleCol: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  headerTag: {
-    fontFamily: fontFamilies.bold,
-    color: '#777777',
-    fontSize: 10,
-    letterSpacing: 2,
-  },
   headerTitle: {
     fontFamily: fontFamilies.bold,
-    color: '#F2F2F2',
-    fontSize: 20,
-    letterSpacing: 1,
+    color: '#FFFFFF',
+    fontSize: 18,
+    letterSpacing: 0.3,
   },
-  orangeText: {
-    color: '#F66F28',
-  },
-  headerShareBtn: {
+  headerRightSpacer: {
     width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   /* STATS BANNER */
@@ -754,10 +715,14 @@ const styles = StyleSheet.create({
 
   /* 2-COLUMN GRID */
   scrollGridContent: {
-    paddingHorizontal: 16,
     paddingBottom: 40,
   },
+  stickyTabsWrap: {
+    backgroundColor: '#0D0F12',
+    paddingTop: 8,
+  },
   gridContainer: {
+    paddingHorizontal: 16,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 14,
@@ -878,7 +843,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    paddingHorizontal: 24,
+    paddingHorizontal: 40,
     gap: 12,
   },
   emptyTitle: {

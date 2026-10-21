@@ -7,6 +7,7 @@ export function useAuth() {
   const login = useAuthStore((state) => state.login);
   const signup = useAuthStore((state) => state.signup);
   const loginWithGoogle = useAuthStore((state) => state.loginWithGoogle);
+  const loginWithApple = useAuthStore((state) => state.loginWithApple);
   const logout = useAuthStore((state) => state.logout);
   const completeOnboarding = useAuthStore((state) => state.completeOnboarding);
   const submitOnboarding = useAuthStore((state) => state.submitOnboarding);
@@ -22,6 +23,7 @@ export function useAuth() {
     login,
     signup,
     loginWithGoogle,
+    loginWithApple,
     logout,
     completeOnboarding,
     submitOnboarding,

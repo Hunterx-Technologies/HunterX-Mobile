@@ -11,7 +11,9 @@ import {
   Image,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
   Path,
@@ -24,9 +26,13 @@ import Svg, {
   LinearGradient as SvgGradient,
   RadialGradient,
   Stop,
+  Image as SvgImage,
 } from 'react-native-svg';
 import { fontFamilies } from '../../theme/typography';
 import { TopographyPattern } from '../ui/TopographyPattern';
+
+const HUNTERX_TITLE = require('../../assets/images/hunterx_card_title.png');
+const HUNTER_REWARD_GEM = require('../../assets/images/hunterx_reward_emblem.webp');
 
 export type ScratchRarity = 'legendary' | 'epic' | 'rare' | 'common';
 
@@ -45,7 +51,7 @@ export interface ScratchCardProps {
   iconName?: keyof typeof MaterialCommunityIcons.glyphMap;
   width?: number;
   height?: number;
-  autoRevealThreshold?: number; // 0.0 to 1.0 (e.g. 0.28 = 28%)
+  autoRevealThreshold?: number; // 0.0 to 1.0 (e.g. 0.50 = 50%)
 }
 
 interface Point {
@@ -53,8 +59,8 @@ interface Point {
   y: number;
 }
 
-const GRID_COLS = 6;
-const GRID_ROWS = 6;
+const GRID_COLS = 8;
+const GRID_ROWS = 10;
 const TOTAL_GRID_CELLS = GRID_COLS * GRID_ROWS;
 
 const RARITY_THEMES: Record<
@@ -115,7 +121,7 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
   rarity = 'legendary',
   width = 300,
   height = 460,
-  autoRevealThreshold = 0.28,
+  autoRevealThreshold = 0.50,
 }) => {
   const [paths, setPaths] = useState<string[]>([]);
   const [points, setPoints] = useState<Point[]>([]);
@@ -128,7 +134,11 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
   const isRevealedRef = useRef(isScratched);
 
   const theme = RARITY_THEMES[rarity] || RARITY_THEMES.legendary;
-  const emblemSize = Math.min(width * 0.46, 120);
+  const emblemWidth = Math.round(width * 0.48);
+  const emblemHeight = Math.round(emblemWidth * (839 / 857));
+  const titleWidth = Math.round(width * 0.54);
+  const titleHeight = Math.round(titleWidth / 3.30);
+  const titleTop = Math.round(height * 0.07);
 
   const triggerReveal = () => {
     if (isRevealedRef.current) return;
@@ -157,8 +167,6 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
     if (!gridCellsRef.current.has(cellId)) {
       gridCellsRef.current.add(cellId);
       const clearedRatio = gridCellsRef.current.size / TOTAL_GRID_CELLS;
-
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
       if (clearedRatio >= autoRevealThreshold && !isRevealedRef.current) {
         triggerReveal();
@@ -324,7 +332,7 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
                       key={`p-${index}`}
                       d={p}
                       stroke="#000000"
-                      strokeWidth={54}
+                      strokeWidth={44}
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       fill="none"
@@ -335,7 +343,7 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
                       key={`pt-${index}`}
                       cx={pt.x}
                       cy={pt.y}
-                      r={27}
+                      r={22}
                       fill="#000000"
                     />
                   ))}
@@ -424,17 +432,25 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
                   <Path d="M 5 310 C 50 320, 85 295, 120 315 C 155 335, 175 365, 210 380" stroke="url(#topoGreyClean)" strokeWidth="1" fill="none" />
                 </G>
 
-                {/* 3. Center 3D HunterX Emblem */}
-                <G
-                  transform={`translate(${(width - emblemSize) / 2}, ${(height - emblemSize) / 2}) scale(${emblemSize / 100})`}
-                >
-                  <Path d="M 5 5 L 95 5 L 95 95 L 5 95 Z" fill="url(#xBackAura)" />
-                  <Path d="M 16 28 L 38 30 L 47 43 L 32 36 Z" fill="url(#gradWingHighlight)" />
-                  <Path d="M 16 28 L 32 36 L 47 43 L 37 55 L 28 38 Z" fill="url(#gradWingBody)" />
-                  <Path d="M 54 55 L 80 80 L 58 78 L 48 66 Z" fill="url(#gradFootShadow)" />
-                  <Path d="M 82 14 L 51 44 L 37 55 L 14 88 L 26 74 L 42 56 L 62 40 Z" fill="url(#gradMainSlash)" />
-                  <Path d="M 82 14 L 62 40 L 42 56 L 54 55 L 43 74 L 38 76 L 14 88 L 26 74 Z" fill="url(#gradSlashShadow)" />
-                </G>
+                {/* 3. Top Center Stylized "HUNTER X" Title Logo */}
+                <SvgImage
+                  href={HUNTERX_TITLE}
+                  x={(width - titleWidth) / 2}
+                  y={titleTop}
+                  width={titleWidth}
+                  height={titleHeight}
+                  preserveAspectRatio="xMidYMid meet"
+                />
+
+                {/* 4. Center Elemental Mana Core Crystal Emblem */}
+                <SvgImage
+                  href={HUNTER_REWARD_GEM}
+                  x={(width - emblemWidth) / 2}
+                  y={(height - emblemHeight) / 2 + 10}
+                  width={emblemWidth}
+                  height={emblemHeight}
+                  preserveAspectRatio="xMidYMid meet"
+                />
 
                 {/* 4. Bottom "DRAG TO SCRATCH" Footer Text */}
                 <SvgText

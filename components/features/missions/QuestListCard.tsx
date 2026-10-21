@@ -1,11 +1,11 @@
-import React, { memo, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { memo, useRef } from "react";
+import { Animated, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image as ExpoImage } from "expo-image";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 
-import { fontFamilies } from '@/theme/typography';
-import type { QuestItem } from '@/app/(tabs)/index';
+import { fontFamilies } from "@/theme/typography";
+import type { QuestItem } from "@/app/(tabs)/index";
 
 function QuestHeaderImage({ quest }: { quest: QuestItem }) {
   if (quest.image) {
@@ -22,7 +22,7 @@ function QuestHeaderImage({ quest }: { quest: QuestItem }) {
   }
   return (
     <LinearGradient
-      colors={['#1F1F24', '#0E0E11']}
+      colors={["#1F1F24", "#0E0E11"]}
       style={styles.questImagePlaceholder}
     />
   );
@@ -74,18 +74,19 @@ function AnimatedWrongButton({ onPress }: { onPress: () => void }) {
 
 function getQuestTargetValue(quest: QuestItem, proteinGoal?: number | null): string | undefined {
   if (quest.targetValue) return quest.targetValue;
-  if (quest.title === 'Protein Goal' && proteinGoal) return `${proteinGoal}g`;
+  if (quest.title === "Protein Goal" && proteinGoal) return `${proteinGoal}g`;
   return undefined;
 }
 
 export interface QuestListCardProps {
   quest: QuestItem;
-  variant: 'todo' | 'done' | 'skipped';
-  /** Only needed to resolve the "Protein Goal" quest's dynamic target text. */
+  variant: "todo" | "done" | "skipped" | "locked";
+  /** Only needed to resolve the "Protein Goal" quest dynamic target text. */
   proteinGoal?: number | null;
   onComplete: (questId: string) => void;
   onSkip: (questId: string) => void;
   onReset: (questId: string) => void;
+  onBuy?: (quest: QuestItem) => void;
 }
 
 function QuestListCardComponent({
@@ -95,16 +96,30 @@ function QuestListCardComponent({
   onComplete,
   onSkip,
   onReset,
+  onBuy,
 }: QuestListCardProps) {
   const targetValue = getQuestTargetValue(quest, proteinGoal);
-  const typeLabel = quest.type === 'weekly' ? 'Weekly' : 'Routine';
+  const typeLabel =
+    quest.type === "weekly"
+      ? "Weekly"
+      : quest.type === "monthly"
+      ? "Monthly"
+      : quest.type === "locked"
+      ? "Offer"
+      : "Routine";
 
   return (
-    <View style={[styles.questCard, variant === 'skipped' && styles.questCardSkipped]}>
+    <View
+      style={[
+        styles.questCard,
+        variant === "skipped" && styles.questCardSkipped,
+        variant === "locked" && styles.questCardLocked,
+      ]}
+    >
       <View style={styles.questImageWrapper}>
         <QuestHeaderImage quest={quest} />
 
-        {variant === 'todo' && (
+        {variant === "todo" && (
           <View style={styles.topRightActionsCol}>
             <View style={styles.xpBadgeInline}>
               <Text style={styles.xpBadgeText}>+{quest.xpReward} XP</Text>
@@ -118,7 +133,7 @@ function QuestListCardComponent({
           </View>
         )}
 
-        {variant === 'done' && (
+        {variant === "done" && (
           <View style={styles.topRightActionsCol}>
             <View style={styles.xpBadgeInline}>
               <Text style={styles.xpBadgeText}>+{quest.xpReward} XP</Text>
@@ -126,10 +141,22 @@ function QuestListCardComponent({
           </View>
         )}
 
-        {variant === 'skipped' && (
+        {variant === "skipped" && (
           <View style={[styles.xpBadgeTopRight, styles.skippedBadgeContainer]}>
             <Ionicons name="play-skip-forward" size={14} color="#A1A1AA" />
-            <Text style={[styles.xpBadgeText, { color: '#A1A1AA' }]}>SKIPPED</Text>
+            <Text style={[styles.xpBadgeText, { color: "#A1A1AA" }]}>SKIPPED</Text>
+          </View>
+        )}
+
+        {variant === "locked" && (
+          <View style={styles.topRightActionsCol}>
+            <View style={[styles.xpBadgeInline, styles.lockedPriceBadge]}>
+              <Ionicons name="lock-closed" size={12} color="#F59E0B" />
+              <Text style={styles.lockedPriceText}>₹{quest.price ?? 0}</Text>
+            </View>
+            <View style={styles.xpBadgeInline}>
+              <Text style={styles.xpBadgeText}>+{quest.xpReward} XP</Text>
+            </View>
           </View>
         )}
       </View>
@@ -137,18 +164,63 @@ function QuestListCardComponent({
       <View style={styles.questBody}>
         <View style={styles.questTitleCol}>
           <View style={styles.categoryRow}>
-            <View style={styles.categoryPill}>
-              <Text style={styles.categoryPillText}>{quest.category}</Text>
+            <View
+              style={[
+                styles.categoryPill,
+                variant === "locked" && styles.lockedCategoryPill,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.categoryPillText,
+                  variant === "locked" && styles.lockedCategoryPillText,
+                ]}
+              >
+                {variant === "locked" ? "PREMIUM OFFER" : quest.category}
+              </Text>
             </View>
             <View style={styles.routineBadgeInline}>
-              <Ionicons name="repeat-outline" size={12} color="#A1A1AA" />
-              <Text style={styles.routineBadgeText}>{typeLabel}</Text>
+              <Ionicons
+                name={variant === "locked" ? "time-outline" : "repeat-outline"}
+                size={12}
+                color="#A1A1AA"
+              />
+              <Text style={styles.routineBadgeText}>
+                {variant === "locked"
+                  ? quest.end_date
+                    ? `Offer ends ${quest.end_date}`
+                    : "Limited offer"
+                  : quest.period_end
+                  ? `Ends ${quest.period_end}`
+                  : typeLabel}
+              </Text>
             </View>
           </View>
           <Text style={styles.questTitle}>{quest.title}</Text>
+          {variant === "locked" && quest.description ? (
+            <Text style={styles.lockedDescription} numberOfLines={2}>
+              {quest.description}
+            </Text>
+          ) : null}
         </View>
 
-        {variant === 'skipped' ? (
+        {variant === "locked" ? (
+          <TouchableOpacity
+            style={styles.buyButton}
+            activeOpacity={0.85}
+            onPress={() => onBuy?.(quest)}
+          >
+            <LinearGradient
+              colors={["#F59E0B", "#D97706"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.buyButtonGradient}
+            >
+              <Ionicons name="lock-open" size={13} color="#0A0A0A" />
+              <Text style={styles.buyButtonText}>BUY</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        ) : variant === "skipped" ? (
           <TouchableOpacity style={styles.undoButton} onPress={() => onReset(quest.id)}>
             <Ionicons name="refresh-outline" size={16} color="#A1A1AA" />
             <Text style={styles.undoButtonText}>Reset</Text>
@@ -165,66 +237,61 @@ function QuestListCardComponent({
   );
 }
 
-// The parent screen (Home) holds ~16 independent pieces of state (modals,
-// toasts, animation values, ...) and re-renders often; without memo every
-// quest row would re-render on every one of those, even the ones whose own
-// `quest` data never changed. React.memo's default shallow prop comparison
-// is enough here because `quest` keeps a stable object reference for every
-// unaffected item (setQuests only replaces the one that changed) and
-// onComplete/onSkip/onReset are stabilized in the parent via useCallback —
-// see handleOpenQuestActions/handleDirectSkip/handleResetQuest.
 export const QuestListCard = memo(QuestListCardComponent);
 
 const styles = StyleSheet.create({
   questCard: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#27272A',
-    overflow: 'hidden',
+    borderColor: "#27272A",
+    overflow: "hidden",
     marginBottom: 16,
-    backgroundColor: '#0E0E11',
+    backgroundColor: "#0E0E11",
   },
   questCardSkipped: {
     opacity: 0.55,
   },
+  questCardLocked: {
+    borderColor: "rgba(245, 158, 11, 0.35)",
+  },
   questImageWrapper: {
     height: 115,
-    position: 'relative',
+    position: "relative",
   },
   questImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
   },
   questImageBg: {
-    backgroundColor: '#1A1A1F',
+    backgroundColor: "#1A1A1F",
   },
   questImagePlaceholder: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   topRightActionsCol: {
-    position: 'absolute',
+    position: "absolute",
     top: 10,
     right: 10,
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
     gap: 6,
   },
   xpBadgeInline: {
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: "rgba(255, 255, 255, 0.12)",
   },
   xpBadgeText: {
     fontFamily: fontFamilies.bold,
     fontSize: 13,
-    color: '#FFFFFF',
+    color: "#FFFFFF",
   },
   xpBadgeTopRight: {
-    position: 'absolute',
+    position: "absolute",
     top: 10,
     right: 10,
     paddingHorizontal: 8,
@@ -232,108 +299,151 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
   },
+  lockedPriceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(245, 158, 11, 0.2)",
+    borderColor: "rgba(245, 158, 11, 0.4)",
+  },
+  lockedPriceText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 13,
+    color: "#F59E0B",
+  },
   skippedBadgeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
-    backgroundColor: '#27272A',
-    borderColor: '#3F3F46',
+    backgroundColor: "#27272A",
+    borderColor: "#3F3F46",
   },
   questBody: {
     paddingHorizontal: 16,
     paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    backgroundColor: '#0E0E11',
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    backgroundColor: "#0E0E11",
   },
   questTitleCol: {
     flex: 1,
     paddingRight: 12,
   },
   categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     marginBottom: 6,
   },
   categoryPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#1C1C1E',
+    alignSelf: "flex-start",
+    backgroundColor: "#1C1C1E",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: "#2C2C2E",
   },
   categoryPillText: {
     fontFamily: fontFamilies.bold,
     fontSize: 10,
-    color: '#A1A1AA',
+    color: "#A1A1AA",
     letterSpacing: 0.8,
   },
+  lockedCategoryPill: {
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    borderColor: "rgba(245, 158, 11, 0.35)",
+  },
+  lockedCategoryPillText: {
+    color: "#F59E0B",
+  },
   routineBadgeInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
   },
   routineBadgeText: {
     fontFamily: fontFamilies.bold,
     fontSize: 10,
-    color: '#A1A1AA',
+    color: "#A1A1AA",
     letterSpacing: 0.5,
   },
   questTitle: {
     fontFamily: fontFamilies.bold,
     fontSize: 20,
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     letterSpacing: 0.2,
   },
+  lockedDescription: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12,
+    color: "#71717A",
+    marginTop: 4,
+    lineHeight: 16,
+  },
   targetValueBox: {
-    backgroundColor: '#18181B',
+    backgroundColor: "#18181B",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#27272A',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "#27272A",
+    alignItems: "center",
+    justifyContent: "center",
   },
   targetValueText: {
     fontFamily: fontFamilies.bold,
     fontSize: 14,
-    color: '#FFFFFF',
+    color: "#FFFFFF",
   },
   undoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
-    backgroundColor: '#18181B',
+    backgroundColor: "#18181B",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: "#27272A",
   },
   undoButtonText: {
     fontFamily: fontFamilies.bold,
     fontSize: 12,
-    color: '#A1A1AA',
+    color: "#A1A1AA",
+  },
+  buyButton: {
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  buyButtonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  buyButtonText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 12,
+    color: "#0A0A0A",
+    letterSpacing: 0.5,
   },
   creamSquareTickButton: {
     width: 30,
     height: 30,
     borderRadius: 6,
-    backgroundColor: '#E5D7C5',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#E5D7C5",
+    alignItems: "center",
+    justifyContent: "center",
   },
   redSquareWrongButton: {
     width: 30,
     height: 30,
     borderRadius: 6,
-    backgroundColor: '#DC2626',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

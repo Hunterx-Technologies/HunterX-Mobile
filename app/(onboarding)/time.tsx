@@ -10,7 +10,7 @@ import {
     Text,
     View,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Button } from '@/components/common/Button';
 import { Screen } from '@/components/common/Screen';
@@ -62,6 +62,11 @@ const TIME_OPTIONS: TimeOption[] = [
         description: 'Raid mode. Maximum evolution.',
         answer: '2hr_plus',
     },
+];
+
+const TIME_OPTION_ROWS: TimeOption[][] = [
+    [TIME_OPTIONS[0], TIME_OPTIONS[1]],
+    [TIME_OPTIONS[2], TIME_OPTIONS[3]],
 ];
 
 export default function TimeScreen() {
@@ -132,7 +137,7 @@ export default function TimeScreen() {
             {/* ─── Top Bar: Back + Step Indicator ─── */}
             <View style={styles.topBar}>
                 <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backButton}>
-                    <Feather name="arrow-left" size={22} color="#FFFFFF" />
+                    <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
                 </Pressable>
                 <View style={styles.indicatorWrapper}>
                     <StepIndicator totalSteps={TOTAL_STEPS} currentStep={CURRENT_STEP} />
@@ -158,28 +163,32 @@ export default function TimeScreen() {
                 </Animated.View>
 
                 <Animated.View style={[styles.gridContainer, fadeSlideStyle(listAnim)]}>
-                    {TIME_OPTIONS.map((option) => {
-                        const isSelected = selectedId === option.id;
-                        return (
-                            <Pressable
-                                key={option.id}
-                                onPress={() => setSelectedId(option.id)}
-                                style={[
-                                    styles.optionCard,
-                                    isSelected && styles.optionCardSelected,
-                                ]}
-                            >
-                                {/* Dot top right corner */}
-                                <View style={[styles.indicatorDot, isSelected && styles.indicatorDotSelected]} />
+                    {TIME_OPTION_ROWS.map((row, rowIndex) => (
+                        <View key={rowIndex} style={styles.gridRow}>
+                            {row.map((option) => {
+                                const isSelected = selectedId === option.id;
+                                return (
+                                    <Pressable
+                                        key={option.id}
+                                        onPress={() => setSelectedId(option.id)}
+                                        style={[
+                                            styles.optionCard,
+                                            isSelected && styles.optionCardSelected,
+                                        ]}
+                                    >
+                                        {/* Dot top right corner */}
+                                        <View style={[styles.indicatorDot, isSelected && styles.indicatorDotSelected]} />
 
-                                <View style={styles.optionContent}>
-                                    <Text style={[styles.optionValue, isSelected && styles.optionValueSelected]}>{option.value}</Text>
-                                    <Text style={[styles.optionUnit, isSelected && styles.optionUnitSelected]}>{option.unit}</Text>
-                                    <Text style={styles.optionDesc}>{option.description}</Text>
-                                </View>
-                            </Pressable>
-                        );
-                    })}
+                                        <View style={styles.optionContent}>
+                                            <Text style={[styles.optionValue, isSelected && styles.optionValueSelected]}>{option.value}</Text>
+                                            <Text style={[styles.optionUnit, isSelected && styles.optionUnitSelected]}>{option.unit}</Text>
+                                            <Text style={styles.optionDesc}>{option.description}</Text>
+                                        </View>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+                    ))}
                 </Animated.View>
             </ScrollView>
 
@@ -213,8 +222,8 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
     },
     backButton: {
-        width: 40,
-        height: 40,
+        width: 38,
+        height: 38,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -255,18 +264,20 @@ const styles = StyleSheet.create({
 
     /* ─── Grid Options ─── */
     gridContainer: {
+        gap: 12,
+    },
+    gridRow: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 16,
+        gap: 12,
     },
     optionCard: {
-        width: '47.5%', // Slightly less than 50% to account for gap
+        flex: 1,
         backgroundColor: '#141416',
         borderWidth: 1,
         borderColor: '#26262B',
         borderRadius: 8,
-        padding: 16,
-        minHeight: 140,
+        padding: 14,
+        minHeight: 130,
         position: 'relative',
     },
     optionCardSelected: {

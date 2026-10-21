@@ -14,6 +14,12 @@ export interface UserSettings {
   notify_level_up: boolean;
   notify_reward_ready: boolean;
   notify_announcements: boolean;
+  notify_social: boolean;
+  notify_leaderboard: boolean;
+  /** IANA zone the backend schedules local-time pushes in (set from the device on registration). */
+  timezone?: string;
+  /** "HH:MM" local — when the daily quest reminder fires. */
+  reminder_time?: string;
   leaderboard_visible: boolean;
   created_at?: string;
   updated_at?: string;

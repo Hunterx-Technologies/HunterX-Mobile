@@ -7,3 +7,10 @@ export class GoogleSignInCancelledError extends Error {
     this.name = 'GoogleSignInCancelledError';
   }
 }
+
+export class AppleSignInCancelledError extends Error {
+  constructor() {
+    super('Apple sign-in was cancelled');
+    this.name = 'AppleSignInCancelledError';
+  }
+}

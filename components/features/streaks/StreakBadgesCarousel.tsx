@@ -1,26 +1,32 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   ScrollView,
   TouchableOpacity,
   useWindowDimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
   LayoutChangeEvent,
+  Dimensions,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { fontFamilies } from '@/theme/typography';
 import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
+import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
+import { STREAK_BADGE_ASSETS, STREAK_BADGE_WIDTH } from '@/constants/cloudinaryAssets';
+import { optimizeCloudinaryUrl } from '@/services/media/cloudinary';
 
 export interface StreakBadgeItem {
   id: number;
   dayNumber: number;
   daysText: string;
   title: string;
-  imageSource: any;
+  imageSource: { uri: string };
 }
 
 export interface UserBadgeData {
@@ -31,55 +37,78 @@ export interface UserBadgeData {
   earned_at?: string;
 }
 
+const badgeImage = (asset: { uri: string }) => ({
+  uri: optimizeCloudinaryUrl(asset.uri, STREAK_BADGE_WIDTH),
+});
+
+/**
+ * Badge artwork from Cloudinary. expo-image's disk cache keeps the file across
+ * app launches, so each badge downloads once and loads from disk afterwards
+ * (the URLs are versioned, so a re-uploaded badge gets a fresh download).
+ */
+export const StreakBadgeImage: React.FC<{
+  badge: StreakBadgeItem;
+  style?: React.ComponentProps<typeof Image>['style'];
+  tintColor?: string;
+}> = ({ badge, style, tintColor }) => (
+  <Image
+    source={badge.imageSource}
+    style={style}
+    tintColor={tintColor}
+    contentFit="contain"
+    cachePolicy="memory-disk"
+  />
+);
+
 export const STREAK_BADGES_DATA: StreakBadgeItem[] = [
   {
     id: 1,
     dayNumber: 7,
     daysText: '7 days',
     title: 'Ember Vow',
-    imageSource: require('@/assets/images/streak-badges/ember_vow.png'),
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.ember_vow),
   },
   {
     id: 2,
     dayNumber: 14,
     daysText: '14 days',
     title: 'Iron Resolve',
-    imageSource: require('@/assets/images/streak-badges/iron_resolve.png'),
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.iron_resolve),
   },
   {
     id: 3,
     dayNumber: 30,
     daysText: '30 days',
     title: 'Shadow Oath',
-    imageSource: require('@/assets/images/streak-badges/shadow_oath.png'),
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.shadow_oath),
   },
   {
     id: 4,
     dayNumber: 60,
     daysText: '60 days',
     title: 'Phantom Discipline',
-    imageSource: require('@/assets/images/streak-badges/phantom_discipline.png'),
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.phantom_discipline),
   },
   {
     id: 5,
     dayNumber: 90,
     daysText: '90 days',
     title: 'Sovereign Will',
-    imageSource: require('@/assets/images/streak-badges/sovereign_will.png'),
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.sovereign_will),
   },
   {
     id: 6,
     dayNumber: 200,
     daysText: '200 days',
     title: 'Void Ascendant',
-    imageSource: require('@/assets/images/streak-badges/void_ascendant.png'),
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.void_ascendant),
   },
   {
     id: 7,
     dayNumber: 365,
     daysText: '365 days',
     title: 'Eternal Hunter',
-    imageSource: require('@/assets/images/streak-badges/eternal_hunter.png'),
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.eternal_hunter),
   },
 ];
 
@@ -99,6 +128,8 @@ export const StreakBadgesCarousel: React.FC<StreakBadgesCarouselProps> = ({
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [measuredWidth, setMeasuredWidth] = useState<number>(0);
   const scrollViewRef = useRef<ScrollView>(null);
+  const slotRefs = useRef<Record<number, View | null>>({});
+  const earnedIds = useStreakBadgeStore((s) => s.earnedIds);
 
   // Dynamic width measurement for 100% precision across all mobile devices
   const availableWidth = measuredWidth > 0 ? measuredWidth : Math.max(280, windowWidth - 48);
@@ -108,6 +139,44 @@ export const StreakBadgesCarousel: React.FC<StreakBadgesCarouselProps> = ({
 
   // Total pages calculation (4 badges per page view)
   const totalPages = Math.ceil(STREAK_BADGES_DATA.length / itemsPerPage);
+
+  // Lets the streak badge popup fly a newly earned badge into its slot:
+  // expands the section, pages to the badge, scrolls home so it's in view,
+  // then reports where the slot is on screen.
+  const collapsedRef = useRef(isCollapsed);
+  collapsedRef.current = isCollapsed;
+  useEffect(() => {
+    const measure = (id: number) =>
+      new Promise<{ x: number; y: number; width: number; height: number } | null>((resolve) => {
+        const view = slotRefs.current[id];
+        if (!view) return resolve(null);
+        view.measureInWindow((x, y, width, height) => resolve(width > 0 ? { x, y, width, height } : null));
+      });
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    return useStreakBadgeStore.getState().setLocator(async (id) => {
+      const index = STREAK_BADGES_DATA.findIndex((b) => b.id === id);
+      if (index < 0) return null;
+      if (collapsedRef.current) {
+        setIsCollapsed(false);
+        await wait(80);
+      }
+      const page = Math.floor(index / itemsPerPage);
+      scrollViewRef.current?.scrollTo({ x: page * (cardWidth + cardGap) * itemsPerPage, animated: false });
+      setActivePageIndex(page);
+      await wait(40);
+
+      let rect = await measure(id);
+      const screenH = Dimensions.get('window').height;
+      const scrollHome = useStreakBadgeStore.getState().homeScroller;
+      if (rect && scrollHome && (rect.y < screenH * 0.2 || rect.y + rect.height > screenH * 0.75)) {
+        scrollHome(rect.y - screenH * 0.45);
+        await wait(450);
+        rect = (await measure(id)) ?? rect;
+      }
+      return rect;
+    });
+  }, [cardWidth]);
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width } = event.nativeEvent.layout;
@@ -182,6 +251,7 @@ export const StreakBadgesCarousel: React.FC<StreakBadgesCarouselProps> = ({
                         (b.name && b.name.toLowerCase() === badge.title.toLowerCase())
                     )
                   : currentStreak >= badge.dayNumber;
+              const isEarned = isUnlocked || earnedIds.includes(badge.id);
 
               return (
                 <TouchableOpacity
@@ -191,22 +261,29 @@ export const StreakBadgesCarousel: React.FC<StreakBadgesCarouselProps> = ({
                   style={[styles.badgeItemContainer, { width: cardWidth }]}
                 >
                   {/* Badge Graphic (Top) */}
-                  <View style={styles.imageWrapper}>
-                    <Image
-                      source={badge.imageSource}
-                      style={[styles.badgeImage, !isUnlocked && styles.badgeImageMuted]}
-                      resizeMode="contain"
+                  <LandingPop badgeId={badge.id}>
+                  <View
+                    ref={(view) => {
+                      slotRefs.current[badge.id] = view;
+                    }}
+                    collapsable={false}
+                    style={styles.imageWrapper}
+                  >
+                    <StreakBadgeImage
+                      badge={badge}
+                      style={[styles.badgeImage, !isEarned && styles.badgeImageMuted]}
                     />
-                    {!isUnlocked && (
+                    {!isEarned && (
                       <View style={styles.normalLockOverlay}>
                         <Ionicons name="lock-closed" size={13} color="#A1A1AA" />
                       </View>
                     )}
                   </View>
+                  </LandingPop>
 
                   {/* Days Text (Middle: e.g. "7 days") */}
                   <Text
-                    style={[styles.daysText, isUnlocked ? styles.daysTextUnlocked : styles.daysTextLocked]}
+                    style={[styles.daysText, isEarned ? styles.daysTextUnlocked : styles.daysTextLocked]}
                     numberOfLines={1}
                     adjustsFontSizeToFit
                     minimumFontScale={0.7}
@@ -216,7 +293,7 @@ export const StreakBadgesCarousel: React.FC<StreakBadgesCarouselProps> = ({
 
                   {/* Badge Title (Bottom: e.g. "Ember Vow") */}
                   <Text
-                    style={[styles.badgeTitle, isUnlocked ? styles.badgeTitleUnlocked : styles.badgeTitleMuted]}
+                    style={[styles.badgeTitle, isEarned ? styles.badgeTitleUnlocked : styles.badgeTitleMuted]}
                     numberOfLines={1}
                     adjustsFontSizeToFit
                     minimumFontScale={0.7}
@@ -246,7 +323,47 @@ export const StreakBadgesCarousel: React.FC<StreakBadgesCarouselProps> = ({
   );
 };
 
+/** Pops the slot with a glowing ring when the streak badge popup lands this badge here. */
+const LandingPop: React.FC<{ badgeId: number; children: React.ReactNode }> = ({ badgeId, children }) => {
+  const landing = useStreakBadgeStore((s) => s.landing);
+  const pop = useSharedValue(1);
+  const ring = useSharedValue(0);
+
+  useEffect(() => {
+    if (landing?.id !== badgeId) return;
+    pop.value = withSequence(withTiming(1.45, { duration: 140 }), withSpring(1, { damping: 7, stiffness: 180 }));
+    ring.value = 0;
+    ring.value = withTiming(1, { duration: 900 });
+  }, [landing, badgeId, pop, ring]);
+
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: ring.value > 0 && ring.value < 1 ? (1 - ring.value) * 0.9 : 0,
+    transform: [{ scale: 0.8 + ring.value * 0.9 }],
+  }));
+
+  return (
+    <View style={styles.landingWrap}>
+      <Animated.View style={[styles.landingRing, ringStyle]} pointerEvents="none" />
+      <Animated.View style={popStyle}>{children}</Animated.View>
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
+  landingWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  landingRing: {
+    position: 'absolute',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: '#F66F28',
+    top: -2,
+  },
   carouselContainer: {
     marginTop: 4,
     paddingTop: 8,

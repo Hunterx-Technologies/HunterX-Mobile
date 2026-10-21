@@ -1,0 +1,40 @@
+import React from 'react';
+import { router } from 'expo-router';
+import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
+import { StreakBadgeShowcaseModal } from './StreakBadgeShowcase';
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Continue: switch to the home tab under the popup, then find the badge's
+// slot in the home "Badges" section for the badge to fly into.
+const findHomeSlot = async (badgeId: number) => {
+  router.navigate('/(tabs)');
+  await wait(320);
+  // The home tab may be mounting for the first time; give it a moment.
+  for (let i = 0; i < 12 && !useStreakBadgeStore.getState().locator; i++) await wait(100);
+  const locate = useStreakBadgeStore.getState().locator;
+  return locate ? locate(badgeId) : null;
+};
+
+/** App-wide streak badge popup, opened with showStreakBadge(). Mounted once in the root layout. */
+export function GlobalStreakBadge() {
+  const { visible, options, hideStreakBadge, landBadge } = useStreakBadgeStore();
+  const soundEffectsEnabled = useSettingsStore((s) => s.soundEffectsEnabled);
+  const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
+
+  if (!options) return null;
+
+  return (
+    <StreakBadgeShowcaseModal
+      {...options}
+      visible={visible}
+      sound={soundEffectsEnabled}
+      haptics={hapticsEnabled}
+      onClose={hideStreakBadge}
+      onContinue={hideStreakBadge}
+      getFlightTarget={(badge) => findHomeSlot(badge.id)}
+      onLanded={(badge) => landBadge(badge.id)}
+    />
+  );
+}

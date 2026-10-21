@@ -15,7 +15,9 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
@@ -27,6 +29,7 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { HunterToast, type HunterToastType } from '@/components/common/HunterToast';
 import { Screen } from '@/components/common/Screen';
 import { useAuth } from '@/hooks/useAuth';
+import { Redirect } from 'expo-router';
 import { showGlobalToast } from '@/store/useToastStore';
 import {
   sendFeedback,
@@ -54,7 +57,7 @@ const MAX_LENGTH = 1000;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 export default function FeedbackScreen() {
-  const { user } = useAuth();
+  const { user, isAuthenticated, isBootstrapping } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
 
   // Tab State
@@ -145,6 +148,7 @@ export default function FeedbackScreen() {
 
   // Load Feedback History
   const loadFeedbackHistory = useCallback(async () => {
+    if (!isAuthenticated) return;
     setIsLoadingHistory(true);
     try {
       const data = await fetchMyFeedback();
@@ -154,13 +158,23 @@ export default function FeedbackScreen() {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useFocusEffect(
     useCallback(() => {
-      loadFeedbackHistory();
-    }, [loadFeedbackHistory])
+      if (isAuthenticated) {
+        loadFeedbackHistory();
+      }
+    }, [isAuthenticated, loadFeedbackHistory])
   );
+
+  if (isBootstrapping) {
+    return null;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   const showToast = (message: string, type: HunterToastType = 'error') => {
     setToast({ visible: true, message, type });

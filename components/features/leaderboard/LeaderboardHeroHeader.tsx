@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { fontFamilies } from '@/theme/typography';
 import { DustParticles } from '@/components/common/DustParticles';
 
-const LEADERBOARD_HERO_BG = require('@/assets/images/leaderboardone.png');
+const LEADERBOARD_HERO_BG = require('@/assets/images/leaderboardone.webp');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Scale the hero with screen width so the artwork keeps its framing on
 // small and large phones alike.
@@ -63,7 +63,7 @@ export const LeaderboardHeroBackground: React.FC<LeaderboardHeroBackgroundProps>
       pointerEvents="none"
       style={[styles.backgroundLayer, { top, opacity, transform: [{ translateY }] }]}
     >
-      {/* Background Graphic: leaderboardone.png covering the hero */}
+      {/* Background Graphic: leaderboardone.webp covering the hero */}
       <Animated.Image
         source={LEADERBOARD_HERO_BG}
         style={styles.backgroundImage}
