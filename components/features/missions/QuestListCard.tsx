@@ -133,7 +133,21 @@ function QuestListCardComponent({
           </View>
         )}
 
-        {variant === "done" && (
+        {variant === "done" && quest.reviewStatus === "in_review" && (
+          <View style={[styles.xpBadgeTopRight, styles.reviewBadge]}>
+            <Ionicons name="time-outline" size={14} color="#FBBF24" />
+            <Text style={[styles.xpBadgeText, { color: "#FBBF24" }]}>IN REVIEW</Text>
+          </View>
+        )}
+
+        {variant === "done" && quest.reviewStatus === "rejected" && (
+          <View style={[styles.xpBadgeTopRight, styles.rejectedBadge]}>
+            <Ionicons name="close-circle-outline" size={14} color="#F87171" />
+            <Text style={[styles.xpBadgeText, { color: "#F87171" }]}>REJECTED</Text>
+          </View>
+        )}
+
+        {variant === "done" && !quest.reviewStatus && (
           <View style={styles.topRightActionsCol}>
             <View style={styles.xpBadgeInline}>
               <Text style={styles.xpBadgeText}>+{quest.xpReward} XP</Text>
@@ -197,6 +211,25 @@ function QuestListCardComponent({
             </View>
           </View>
           <Text style={styles.questTitle}>{quest.title}</Text>
+          {(quest.proofCount ?? 0) > 0 && variant !== "locked" && (
+            <View style={styles.proofRow}>
+              <Ionicons name="camera-outline" size={12} color="#F66F28" />
+              <Text style={styles.proofText}>
+                {quest.reviewStatus === "in_review"
+                  ? "Proof sent · XP once approved"
+                  : `Photo proof · ${quest.proofCount} photo${quest.proofCount === 1 ? "" : "s"}`}
+              </Text>
+            </View>
+          )}
+          {(quest.reviewStatus === "resubmit" || quest.reviewStatus === "rejected") && !!quest.reviewNote && (
+            <Text
+              style={[styles.reviewNote, quest.reviewStatus === "rejected" && styles.reviewNoteRejected]}
+              numberOfLines={3}
+            >
+              {quest.reviewStatus === "resubmit" ? "New proof needed: " : "Not accepted: "}
+              {quest.reviewNote}
+            </Text>
+          )}
           {variant === "locked" && quest.description ? (
             <Text style={styles.lockedDescription} numberOfLines={2}>
               {quest.description}
@@ -310,6 +343,42 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     fontSize: 13,
     color: "#F59E0B",
+  },
+  reviewBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(251, 191, 36, 0.12)",
+    borderColor: "rgba(251, 191, 36, 0.35)",
+  },
+  rejectedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(248, 113, 113, 0.12)",
+    borderColor: "rgba(248, 113, 113, 0.35)",
+  },
+  proofRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+  },
+  proofText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 10,
+    color: "#F66F28",
+    letterSpacing: 0.4,
+  },
+  reviewNote: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12,
+    color: "#FCD34D",
+    marginTop: 4,
+    lineHeight: 16,
+  },
+  reviewNoteRejected: {
+    color: "#FCA5A5",
   },
   skippedBadgeContainer: {
     flexDirection: "row",

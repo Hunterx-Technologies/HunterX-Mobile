@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   Animated,
   TouchableOpacity,
   Clipboard,
-  Image,
+  ActivityIndicator,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -30,29 +30,56 @@ import Svg, {
 } from 'react-native-svg';
 import { fontFamilies } from '../../theme/typography';
 import { TopographyPattern } from '../ui/TopographyPattern';
+import { RewardProductImage, REWARD_IMAGE_WIDTH } from './reward/RewardProductImage';
 
 const HUNTERX_TITLE = require('../../assets/images/hunterx_card_title.png');
 const HUNTER_REWARD_GEM = require('../../assets/images/hunterx_reward_emblem.webp');
 
 export type ScratchRarity = 'legendary' | 'epic' | 'rare' | 'common';
 
+/**
+ * Where the prize under the foil is:
+ * - locked: not asked for yet; the first touch calls onScratchStart.
+ * - loading: being fetched; the foil stays whole and can't be scratched off.
+ * - ready: drawn under the foil; scratching reveals it.
+ * - error: the request failed; the foil is restored, the next touch asks again.
+ */
+export type ScratchCardStatus = 'locked' | 'loading' | 'ready' | 'error';
+
 export interface ScratchCardProps {
   onComplete?: () => void;
   isScratched?: boolean;
+  /** Defaults to 'ready' (prize passed in up front, e.g. dev screens). */
+  status?: ScratchCardStatus;
+  /** First touch of an unscratched card while it isn't 'ready': fetch the prize. */
+  onScratchStart?: () => void;
   rewardText?: string;
   rewardSubtitle?: string;
   rewardValue?: string;
   productName?: string;
   productCategory?: string;
-  productIcon?: keyof typeof MaterialCommunityIcons.glyphMap;
   productImageUrl?: string;
   code?: string;
   rarity?: ScratchRarity;
-  iconName?: keyof typeof MaterialCommunityIcons.glyphMap;
+  /** Brand badge in the top-left corner; none when not given. */
+  iconName?: 'amazon' | keyof typeof MaterialCommunityIcons.glyphMap;
   width?: number;
   height?: number;
   autoRevealThreshold?: number; // 0.0 to 1.0 (e.g. 0.50 = 50%)
 }
+
+/** Sample prize for dev/test screens only — real cards get theirs from the backend. */
+export const SCRATCH_CARD_DEMO_PRIZE: Pick<
+  ScratchCardProps,
+  'rewardText' | 'rewardSubtitle' | 'productName' | 'productCategory' | 'code' | 'iconName'
+> = {
+  rewardText: '$25 AMAZON VOUCHER',
+  rewardSubtitle: 'on Amazon Fitness orders above ₹800',
+  productName: 'Pro Resistance Bands Set',
+  productCategory: 'Strength & Mobility Kit',
+  code: 'AMZ-BAND-25',
+  iconName: 'amazon',
+};
 
 interface Point {
   x: number;
@@ -75,10 +102,10 @@ const RARITY_THEMES: Record<
   }
 > = {
   legendary: {
-    borderColor: '#F66F28',
-    glowColor: 'rgba(246, 111, 40, 0.45)',
-    badgeBg: 'rgba(246, 111, 40, 0.18)',
-    textColor: '#F66F28',
+    borderColor: '#FE5B01',
+    glowColor: 'rgba(254, 91, 1, 0.45)',
+    badgeBg: 'rgba(254, 91, 1, 0.18)',
+    textColor: '#FE5B01',
     gradientColors: ['#16181C', '#121316', '#0E0F12'],
     badgeLabel: 'LEGENDARY LOOT',
   },
@@ -111,13 +138,14 @@ const RARITY_THEMES: Record<
 export const ScratchCard: React.FC<ScratchCardProps> = ({
   onComplete,
   isScratched = false,
-  rewardText = '$25 AMAZON VOUCHER',
-  rewardSubtitle = 'Claim on Amazon Fitness & Gym Store',
-  productName = 'Pro Resistance Bands Set',
-  productCategory = 'Strength & Mobility Kit',
-  productIcon = 'dumbbell',
+  status = 'ready',
+  onScratchStart,
+  rewardText,
+  rewardSubtitle,
+  productName,
   productImageUrl,
-  code = 'AMZ-BAND-25',
+  code,
+  iconName,
   rarity = 'legendary',
   width = 300,
   height = 460,
@@ -132,6 +160,26 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
   const revealAnim = useRef(new Animated.Value(isScratched ? 0 : 1)).current;
   const gridCellsRef = useRef<Set<number>>(new Set());
   const isRevealedRef = useRef(isScratched);
+
+  // The pan handlers below are created once, so they read these through refs.
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  const onScratchStartRef = useRef(onScratchStart);
+  onScratchStartRef.current = onScratchStart;
+  // Read at reveal time: the caller's callback closes over the card it had
+  // when rendered, and the prize only arrives after the first touch.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
+  // Until the prize is drawn the foil has to stay whole: wipe any strokes
+  // made while it was loading, and again if the request failed.
+  useEffect(() => {
+    if (status === 'ready') return;
+    currentPathRef.current = '';
+    gridCellsRef.current = new Set();
+    setPaths([]);
+    setPoints([]);
+  }, [status]);
 
   const theme = RARITY_THEMES[rarity] || RARITY_THEMES.legendary;
   const emblemWidth = Math.round(width * 0.48);
@@ -153,7 +201,7 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
       duration: 250,
       useNativeDriver: true,
     }).start(() => {
-      if (onComplete) onComplete();
+      onCompleteRef.current?.();
     });
   };
 
@@ -177,6 +225,12 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
   const handleTouchStart = (evt: GestureResponderEvent) => {
     if (isRevealedRef.current) return;
 
+    // No prize under the foil yet: ask for it, and don't scratch meanwhile.
+    if (statusRef.current !== 'ready') {
+      if (statusRef.current !== 'loading') onScratchStartRef.current?.();
+      return;
+    }
+
     const { locationX, locationY } = evt.nativeEvent;
     const clampedX = Math.max(0, Math.min(width, locationX));
     const clampedY = Math.max(0, Math.min(height, locationY));
@@ -191,6 +245,12 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
 
   const handleTouchMove = (evt: GestureResponderEvent) => {
     if (isRevealedRef.current) return;
+    // Started on a loading card that has since become ready: begin a stroke here.
+    if (statusRef.current !== 'ready') return;
+    if (!currentPathRef.current) {
+      handleTouchStart(evt);
+      return;
+    }
 
     const { locationX, locationY } = evt.nativeEvent;
     const clampedX = Math.max(0, Math.min(width, locationX));
@@ -210,6 +270,8 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
   };
 
   const handleTouchEnd = () => {
+    currentPathRef.current = '';
+    if (statusRef.current !== 'ready') return;
     if (gridCellsRef.current.size >= 4 && !isRevealedRef.current) {
       const clearedRatio = gridCellsRef.current.size / TOTAL_GRID_CELLS;
       if (clearedRatio >= 0.2) {
@@ -244,32 +306,30 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
         {
           width,
           height,
-          borderColor: '#F66F28',
+          borderColor: '#FE5B01',
         },
       ]}
     >
       <View style={[styles.cardContainer, { width, height }]}>
         {/* REVEALED REWARD SURFACE: MATCHING GOOGLE PAY REFERENCE SCREENSHOT */}
+        {/* Drawn only once the prize has arrived, so nothing sits under the foil before. */}
+        {(status === 'ready' || isScratched) && (
         <View style={styles.revealedSurface}>
           <View style={styles.revealedContainer}>
             {/* 1. TOP HALF: HERO PRODUCT IMAGE */}
             <View style={styles.topImageSection}>
-              {productImageUrl ? (
-                <Image
-                  source={{ uri: productImageUrl }}
-                  style={styles.heroProductImg}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.heroIconFallback}>
-                  <MaterialCommunityIcons name={productIcon} size={48} color="#FF9900" />
+              <RewardProductImage uri={productImageUrl} width={REWARD_IMAGE_WIDTH.scratchCard} />
+
+              {/* Top-Left Circular Brand Badge */}
+              {iconName && (
+                <View style={styles.brandCircleBadge}>
+                  {iconName === 'amazon' ? (
+                    <FontAwesome5 name="amazon" size={15} color="#0D0F12" />
+                  ) : (
+                    <MaterialCommunityIcons name={iconName} size={16} color="#0D0F12" />
+                  )}
                 </View>
               )}
-
-              {/* Top-Left Circular Brand Badge (Amazon) */}
-              <View style={styles.brandCircleBadge}>
-                <FontAwesome5 name="amazon" size={15} color="#0D0F12" />
-              </View>
 
               {/* Top-Right Tag Badge */}
               <View style={styles.topRightTagBadge}>
@@ -283,12 +343,16 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
                 <Text style={styles.offerMainHeading} numberOfLines={1}>
                   {rewardText}
                 </Text>
-                <Text style={styles.offerSubtext} numberOfLines={1}>
-                  on Amazon Fitness orders above ₹800
-                </Text>
-                <Text style={styles.productNameText} numberOfLines={1}>
-                  {productName}
-                </Text>
+                {!!rewardSubtitle && (
+                  <Text style={styles.offerSubtext} numberOfLines={1}>
+                    {rewardSubtitle}
+                  </Text>
+                )}
+                {!!productName && (
+                  <Text style={styles.productNameText} numberOfLines={1}>
+                    {productName}
+                  </Text>
+                )}
               </View>
 
               {/* Code Snippet Box */}
@@ -315,6 +379,7 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
             </View>
           </View>
         </View>
+        )}
 
         {/* TOP FOIL LAYER WITH NATURAL MASK SCRATCH (Clean Google Pay Style) */}
         {!isRevealed && (
@@ -358,8 +423,8 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
 
                 {/* Subtle top orange reflection */}
                 <SvgGradient id="topOrangeReflection" x1="10%" y1="0%" x2="40%" y2="25%">
-                  <Stop offset="0%" stopColor="#F66F28" stopOpacity="0.05" />
-                  <Stop offset="100%" stopColor="#F66F28" stopOpacity="0" />
+                  <Stop offset="0%" stopColor="#FE5B01" stopOpacity="0.05" />
+                  <Stop offset="100%" stopColor="#FE5B01" stopOpacity="0" />
                 </SvgGradient>
 
                 {/* Topo line gradients */}
@@ -377,23 +442,23 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
 
                 {/* HunterX Emblem Gradients */}
                 <RadialGradient id="xBackAura" cx="50%" cy="50%" r="42%">
-                  <Stop offset="0%" stopColor="#F66F28" stopOpacity="0.22" />
+                  <Stop offset="0%" stopColor="#FE5B01" stopOpacity="0.22" />
                   <Stop offset="60%" stopColor="#B94F24" stopOpacity="0.05" />
                   <Stop offset="100%" stopColor="#000000" stopOpacity="0" />
                 </RadialGradient>
                 <SvgGradient id="gradWingHighlight" x1="0%" y1="0%" x2="100%" y2="100%">
                   <Stop offset="0%" stopColor="#FFAC66" />
                   <Stop offset="40%" stopColor="#FF9438" />
-                  <Stop offset="100%" stopColor="#F66F28" />
+                  <Stop offset="100%" stopColor="#FE5B01" />
                 </SvgGradient>
                 <SvgGradient id="gradWingBody" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <Stop offset="0%" stopColor="#F66F28" />
+                  <Stop offset="0%" stopColor="#FE5B01" />
                   <Stop offset="50%" stopColor="#DF5714" />
                   <Stop offset="100%" stopColor="#9E350A" />
                 </SvgGradient>
                 <SvgGradient id="gradMainSlash" x1="100%" y1="0%" x2="0%" y2="100%">
                   <Stop offset="0%" stopColor="#FFAA66" />
-                  <Stop offset="25%" stopColor="#F66F28" />
+                  <Stop offset="25%" stopColor="#FE5B01" />
                   <Stop offset="65%" stopColor="#E05A18" />
                   <Stop offset="100%" stopColor="#A6380A" />
                 </SvgGradient>
@@ -466,6 +531,12 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
                 </SvgText>
               </G>
             </Svg>
+            {status === 'loading' && (
+              <View style={styles.loadingPill} pointerEvents="none">
+                <ActivityIndicator size="small" color="#FE5B01" />
+                <Text style={styles.loadingPillText}>Revealing...</Text>
+              </View>
+            )}
           </Animated.View>
         )}
       </View>
@@ -502,16 +573,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     backgroundColor: '#1A1C20',
     overflow: 'hidden',
-  },
-  heroProductImg: {
-    width: '100%',
-    height: '100%',
-  },
-  heroIconFallback: {
-    flex: 1,
-    backgroundColor: '#1A1C20',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   brandCircleBadge: {
     position: 'absolute',
@@ -602,7 +663,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F66F28',
+    backgroundColor: '#FE5B01',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -616,6 +677,26 @@ const styles = StyleSheet.create({
   foilCoating: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 10,
+  },
+  loadingPill: {
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(13, 15, 18, 0.85)',
+    borderWidth: 1,
+    borderColor: '#2A2C33',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  loadingPillText: {
+    fontFamily: fontFamilies.semiBold,
+    color: '#F2F2F2',
+    fontSize: 11,
+    letterSpacing: 0.4,
   },
 });
 

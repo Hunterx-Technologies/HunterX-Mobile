@@ -42,7 +42,6 @@ import type { LeaderboardEntry, LeaderboardScope } from '@/types/leaderboard';
 const SCOPE_BY_TAB: Record<MainCategoryTab, LeaderboardScope> = {
   Global: 'global',
   Friends: 'friends',
-  'Gen Z': 'genz',
 };
 
 // First list item carries the non-sticky intro (community card, table
@@ -59,6 +58,7 @@ function toHunter(entry: LeaderboardEntry): LeaderboardHunter {
     level: entry.level,
     avatarUrl: entry.avatarThumbUrl,
     isCurrentUser: entry.isMe,
+    streak: entry.streak,
   };
 }
 
@@ -120,6 +120,7 @@ export default function LeaderboardScreen() {
       level: me.level,
       avatarUrl: me.avatarThumbUrl,
       isCurrentUser: true,
+      streak: me.streak,
     };
   }, [me, meAlreadyVisible]);
 
@@ -430,13 +431,13 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   inviteButton: {
-    backgroundColor: '#FE5B01',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 20,
   },
   inviteButtonText: {
-    color: '#FFFFFF',
+    color: '#0D0F12',
     fontWeight: '700',
     fontSize: 14,
   },
@@ -464,7 +465,7 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     marginTop: 18,
-    backgroundColor: '#FE5B01',
+    backgroundColor: '#27272A',
     paddingHorizontal: 28,
     paddingVertical: 12,
     borderRadius: 20,

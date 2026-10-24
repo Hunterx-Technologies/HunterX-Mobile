@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
   button: {
     height: BUTTON_HEIGHT,
     borderRadius: BUTTON_HEIGHT / 2,
-    backgroundColor: REWARD_BUTTON,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -748,7 +748,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semiBold,
     fontSize: 17,
     letterSpacing: -0.43,
-    color: '#FFFFFF',
+    color: '#0D0F12',
   },
   flash: {
     backgroundColor: '#FFE2A8',

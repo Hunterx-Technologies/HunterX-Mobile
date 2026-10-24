@@ -47,12 +47,36 @@ import { SystemSettingsModal } from '@/components/profile/SystemSettingsModal';
 import { WeeklyProgressCard } from '@/components/features/streaks/WeeklyProgressCard';
 import { showLevelUp } from '@/store/useLevelUpStore';
 import { showStreakBadge } from '@/store/useStreakBadgeStore';
+import { showReward } from '@/store/useCelebrationStore';
+import {
+  getRewardsMockMode,
+  isRewardsMockEnabled,
+  rewardsMock as rewardsMockApi,
+  setRewardsMockEnabled,
+  setRewardsMockMode,
+  type RewardsMockMode,
+} from '@/services/api/rewards.mock';
+import type { UserReward } from '@/types/reward';
 import { showStreakBreak } from '@/store/useStreakBreakStore';
 
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { getCurrentUser, refreshAccessToken, updateProfile, updateUserAvatar, type UpdateProfilePayload } from '@/services/api/auth.service';
 import { getUserSettings } from '@/services/api/settings.service';
 import { useAvatarsReady } from '@/services/api/avatar.service';
+
+/** A card summary for the Developer section's Reward Test (no prize, like the real thing). */
+const devSampleReward = (): UserReward => ({
+  id: `dev-${Date.now()}`,
+  type: 'SCRATCH_CARD',
+  rarity: 'rare',
+  source: 'STREAK_MILESTONE',
+  milestone_days: 7,
+  status: 'UNSEEN',
+  title: null,
+  description: null,
+  granted_at: new Date().toISOString(),
+  expires_at: null,
+});
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -95,6 +119,10 @@ export default function ProfileScreen() {
   // Confirm Dialogs
   const [isLogoutConfirmVisible, setIsLogoutConfirmVisible] = useState(false);
   const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+  // Developer section: which rewards mock mode is on ('off' = real API).
+  const [rewardsMock, setRewardsMock] = useState<RewardsMockMode | 'off'>(() =>
+    isRewardsMockEnabled() ? getRewardsMockMode() : 'off'
+  );
 
   // Account Deletion Checker
   useEffect(() => {
@@ -317,19 +345,46 @@ export default function ProfileScreen() {
         router.push('/feedback');
         break;
       case 'reward_test':
-        router.push('/reward-test');
+        // Through the real celebration queue. With the mock on, the card is
+        // also in the mock wallet, so "Got it!" opens it there.
+        showReward(isRewardsMockEnabled() ? rewardsMockApi.grant(7) : devSampleReward());
         break;
+      case 'scratch_flow_test':
+        setRewardsMockEnabled(true);
+        setRewardsMock(getRewardsMockMode());
+        router.push('/rewards');
+        break;
+      case 'rewards_mock_mode': {
+        const order: (RewardsMockMode | 'off')[] = ['off', 'normal', 'slow', 'error', 'noCoupon'];
+        const next = order[(order.indexOf(rewardsMock) + 1) % order.length];
+        setRewardsMockEnabled(next !== 'off');
+        if (next !== 'off') setRewardsMockMode(next);
+        setRewardsMock(next);
+        break;
+      }
       case 'streak_badge_test':
         showStreakBadge({ currentIndex: 2, streakDays: 30 });
         break;
       case 'day_complete_test':
         router.push('/day-complete?streak=30&xp=25');
         break;
-      case 'streak_life_test':
-        showStreakBreak({ livesLeft: 1, streakDays: 16 });
+      case 'streak_life_test': {
+        // Previews the card with this hunter's real streak and lives.
+        const lives = user?.user_progression?.streak_lives ?? 1;
+        showStreakBreak({
+          livesLeft: Math.max(0, lives - 1),
+          livesLost: 1,
+          streakLost: false,
+          streakDays: Math.max(1, user?.currentStreak ?? user?.user_progression?.daily_streak ?? 0),
+        });
         break;
+      }
       case 'streak_lost_test':
-        showStreakBreak({ livesLeft: 0, streakDays: 16 });
+        showStreakBreak({
+          livesLeft: 0,
+          streakLost: true,
+          streakDays: Math.max(1, user?.currentStreak ?? user?.user_progression?.daily_streak ?? 0),
+        });
         break;
       case 'level_up_test':
         showLevelUp({ level: 3, rankName: 'Dormant III', tierLabel: 'DORMANT' });
@@ -646,6 +701,18 @@ export default function ProfileScreen() {
                 label="Reward Test"
                 subtitle="Scratch card reward screen"
                 onPress={() => handleMenuPress('reward_test')}
+              />
+              <MenuItem
+                icon="card-outline"
+                label="Scratch Flow Test"
+                subtitle="Rewards wallet on the mock rewards API"
+                onPress={() => handleMenuPress('scratch_flow_test')}
+              />
+              <MenuItem
+                icon="options-outline"
+                label="Rewards Mock"
+                subtitle={`Mode: ${rewardsMock} (tap to switch)`}
+                onPress={() => handleMenuPress('rewards_mock_mode')}
               />
               <MenuItem
                 icon="trending-up-outline"

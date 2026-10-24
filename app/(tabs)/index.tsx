@@ -22,7 +22,7 @@ import type { TaskItem } from '@/types/task';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { usePushPermissionPrompt } from '@/hooks/usePushPermissionPrompt';
-import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { PushPermissionModal } from '@/components/features/notifications/PushPermissionModal';
 import { getCurrentUser } from '@/services/api/auth.service';
 import { optimizeCloudinaryUrl, DEFAULT_BLURHASH } from '@/services/media/cloudinary';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -34,6 +34,8 @@ import { QuestListCard } from '@/components/features/missions/QuestListCard';
 import { PaidTaskPurchaseModal } from '@/components/features/missions/PaidTaskPurchaseModal';
 import { LootDropModal } from '@/components/features/loot/LootDropModal';
 import { QuestActionModal } from '@/components/features/missions/QuestActionModal';
+import { ProofSubmitModal } from '@/components/features/missions/ProofSubmitModal';
+import { showGlobalToast } from '@/store/useToastStore';
 import { TaskCompletedToast } from '@/components/features/missions/TaskCompletedToast';
 import { TaskCompletionBottomSheet } from '@/components/features/missions/TaskCompletionBottomSheet';
 import { WeeklyTracker } from '@/components/features/streaks/WeeklyTracker';
@@ -45,7 +47,9 @@ import { fontFamilies } from '@/theme/typography';
 import { getAvatarSource } from './profile';
 import { useAvatarsReady } from '@/services/api/avatar.service';
 import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
-import { useStreakBreakWatcher } from '@/hooks/useStreakBreakWatcher';
+import { setCelebrationHold, showReward, useCelebrationStore } from '@/store/useCelebrationStore';
+import { syncStreakBadges, useStreakBadgeSync } from '@/hooks/useStreakBadgeSync';
+import { showLevelUpFromApi } from '@/store/useLevelUpStore';
 import { useStreakBreakStore } from '@/store/useStreakBreakStore';
 import { StreakPillLanding } from '@/components/features/streaks/StreakPillLanding';
 
@@ -73,6 +77,12 @@ export interface QuestItem {
   price?: number;
   currency?: string;
   is_paid?: boolean;
+  /** Photos needed to complete it (0 or missing = a normal quest). */
+  proofCount?: number;
+  /** Proof quests: waiting on the admin, sent back for new photos, or rejected. */
+  reviewStatus?: 'in_review' | 'resubmit' | 'rejected';
+  /** The admin's reason, on resubmit / rejected. */
+  reviewNote?: string | null;
 }
 
 function addDaysToIso(dateStr: string, days: number): string {
@@ -166,7 +176,18 @@ function mapTaskToQuest(
   const image = item.image_url ? { uri: optimizeCloudinaryUrl(item.image_url) } : null;
 
   let status: 'todo' | 'done' | 'partial' | 'skipped' | 'locked' = 'todo';
-  if (item.status === 'COMPLETED') {
+  let reviewStatus: QuestItem['reviewStatus'];
+  // Proof quests: submitted proof sits with the done ones (it counts for
+  // today's streak) until the admin decides; a resubmit request reopens it.
+  if (item.status === 'IN_REVIEW') {
+    status = 'done';
+    reviewStatus = 'in_review';
+  } else if (item.status === 'REJECTED') {
+    status = 'done';
+    reviewStatus = 'rejected';
+  } else if (item.status === 'RESUBMIT') {
+    reviewStatus = 'resubmit';
+  } else if (item.status === 'COMPLETED') {
     status = 'done';
   } else if (item.status === 'PARTIAL') {
     status = 'partial';
@@ -217,6 +238,9 @@ function mapTaskToQuest(
     price: item.price,
     currency: item.currency || 'INR',
     is_paid: item.is_paid,
+    proofCount: item.proof_count ?? 0,
+    reviewStatus,
+    reviewNote: item.review_note ?? null,
     imageHeight: tagUpper === 'REST' ? 120 : undefined,
     imageStyle: tagUpper === 'NUTRITION' ? { height: 170, top: -25 } : undefined,
   };
@@ -225,7 +249,6 @@ function mapTaskToQuest(
 export default function MissionsHomeScreen() {
   const { user } = useAuth();
   // Shows the streak break card when a life was used since the last visit.
-  useStreakBreakWatcher(user);
   const { lastDrop, roll } = useLootDrop();
   const params = useLocalSearchParams<{ fromAscension?: string }>();
   const isFromAscension = params.fromAscension === 'true';
@@ -298,6 +321,8 @@ export default function MissionsHomeScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedQuest, setSelectedQuest] = useState<QuestItem | null>(null);
+  /** The proof quest whose upload sheet is open. */
+  const [proofQuest, setProofQuest] = useState<QuestItem | null>(null);
   const [selectedBuyQuest, setSelectedBuyQuest] = useState<QuestItem | null>(null);
   const [buyModalVisible, setBuyModalVisible] = useState(false);
   const [actionModalVisible, setActionModalVisible] = useState(false);
@@ -372,12 +397,26 @@ export default function MissionsHomeScreen() {
     prevGenderRef.current = user?.gender;
   }, [loadTasks, user?.gender]);
 
+  // Earned streak badges (crack-the-seal popup) show here on home.
+  useStreakBadgeSync(!!user?.id);
+
+  // Celebrations (level-up, badge, reward…) wait while one of home's own
+  // popups is up, instead of opening on top of it. Day Complete waits its
+  // turn in the other direction: it opens once nothing is celebrating.
+  const celebrating = useCelebrationStore((s) => s.current !== null || s.queue.length > 0);
+  const showDayComplete = dayCompleteModalVisible && !celebrating;
+  const holdCelebrations = taskBottomSheetVisible || showDayComplete || showBlackIntroOverlay;
+  useEffect(() => {
+    setCelebrationHold('home', holdCelebrations);
+  }, [holdCelebrations]);
+  useEffect(() => () => setCelebrationHold('home', false), []);
+
   // Offer push notifications once the hunter has earned XP — never over
   // another Home modal or the post-Ascension intro fade.
   const pushPrompt = usePushPermissionPrompt();
   const maybeOfferPush = pushPrompt.maybeOffer;
   const isHomeModalOpen =
-    dropVisible || actionModalVisible || dayCompleteModalVisible || taskBottomSheetVisible || showBlackIntroOverlay;
+    dropVisible || actionModalVisible || dayCompleteModalVisible || taskBottomSheetVisible || showBlackIntroOverlay || !!proofQuest;
   useEffect(() => {
     if (isHomeModalOpen) return;
     const timer = setTimeout(() => maybeOfferPush((user?.xp ?? 0) > 0), 1500);
@@ -522,6 +561,16 @@ export default function MissionsHomeScreen() {
 
     try {
       const data = await completeTask(questId, actionStatus);
+
+      // Celebrations play one after another (streak badge first, then any
+      // scratch card). Cards come without their prize; it's revealed when
+      // scratched in the wallet.
+      // A new streak badge is fetched from the unseen list (so it's shown,
+      // and marked seen, the same way however it was earned).
+      if (data.streak_milestone) syncStreakBadges();
+      showLevelUpFromApi(data.level_up);
+      (data.rewards_earned ?? []).forEach(showReward);
+
       const serverStatus = data.status === 'COMPLETED' ? 'done' : data.status === 'PARTIAL' ? 'partial' : data.status === 'SKIPPED' ? 'skipped' : 'todo';
 
       setQuests((prev) =>
@@ -576,6 +625,11 @@ export default function MissionsHomeScreen() {
   const handleOpenQuestActions = useCallback((questId: string) => {
     const quest = questsRef.current.find((q) => q.id === questId);
     if (!quest) return;
+    // Proof quests are completed by uploading photos for review.
+    if ((quest.proofCount ?? 0) > 0) {
+      setProofQuest(quest);
+      return;
+    }
     if (quest.allows_partial) {
       setSelectedQuest(quest);
       setActionModalVisible(true);
@@ -1107,6 +1161,28 @@ export default function MissionsHomeScreen() {
         onClose={() => setBuyModalVisible(false)}
         onConfirmPurchase={handleConfirmPurchase}
       />
+      <ProofSubmitModal
+        visible={!!proofQuest}
+        questId={proofQuest?.id ?? ''}
+        questTitle={proofQuest?.title ?? ''}
+        xpReward={proofQuest?.xpReward ?? 0}
+        proofCount={proofQuest?.proofCount ?? 1}
+        resubmitNote={proofQuest?.reviewStatus === 'resubmit' ? proofQuest.reviewNote : null}
+        onClose={() => setProofQuest(null)}
+        onSubmitted={(data) => {
+          const questId = proofQuest?.id;
+          setProofQuest(null);
+          setQuests((prev) =>
+            prev.map((q) => (q.id === questId ? { ...q, status: 'done', reviewStatus: 'in_review', reviewNote: null } : q))
+          );
+          // Only streak unlocks can come now; XP and other rewards follow approval.
+          if (data.streak_milestone) syncStreakBadges();
+          (data.rewards_earned ?? []).forEach(showReward);
+          showGlobalToast(`Proof sent! You'll get +${proofQuest?.xpReward ?? 0} XP once it's approved.`, 'success');
+          loadTasks();
+        }}
+      />
+
       <QuestActionModal
         visible={actionModalVisible}
         questTitle={selectedQuest?.title ?? ''}
@@ -1166,18 +1242,15 @@ export default function MissionsHomeScreen() {
         onContinue={() => setTaskBottomSheetVisible(false)}
       />
 
-      <ConfirmDialog
+      {/* System Summon Push Notifications Priming Modal */}
+      <PushPermissionModal
         visible={pushPrompt.visible}
-        title="Let the System summon you"
-        message="Get a heads-up before your streak breaks, when rewards drop and when new quests arrive. Never more than a few a day."
-        confirmLabel="Enable notifications"
-        cancelLabel="Not now"
-        onConfirm={pushPrompt.accept}
-        onCancel={pushPrompt.dismiss}
+        onEnable={pushPrompt.accept}
+        onDismiss={pushPrompt.dismiss}
       />
 
       {/* Day Complete Modal Popup */}
-      {dayCompleteModalVisible && (
+      {showDayComplete && (
         <DayCompleteScreen
           quests={quests}
           onContinue={() => setDayCompleteModalVisible(false)}
@@ -1535,7 +1608,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#FF6B00',
+    backgroundColor: '#FE5B01',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
@@ -1726,7 +1799,7 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     marginTop: 20,
-    backgroundColor: '#E5A93C',
+    backgroundColor: '#27272A',
     paddingVertical: 10,
     paddingHorizontal: 24,
     borderRadius: 8,
@@ -1734,7 +1807,7 @@ const styles = StyleSheet.create({
   retryButtonText: {
     fontFamily: fontFamilies.bold,
     fontSize: 14,
-    color: '#000000',
+    color: '#FFFFFF',
     letterSpacing: 0.5,
   },
   peakHeaderRow: {

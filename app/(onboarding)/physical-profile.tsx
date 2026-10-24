@@ -849,7 +849,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   unitToggleBtnActive: {
-    backgroundColor: colors.accentGold,
+    backgroundColor: '#FE5B01',
   },
   unitToggleText: {
     fontFamily: fontFamilies.bold,
@@ -857,7 +857,7 @@ const styles = StyleSheet.create({
     color: '#71717A',
   },
   unitToggleTextActive: {
-    color: '#000000',
+    color: '#FFFFFF',
   },
 
   /* ─── Ruler Component ─── */

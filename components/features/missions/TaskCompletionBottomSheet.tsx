@@ -30,17 +30,17 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // 12 Floating Confetti Sparkles neatly positioned around central badge
 const CONFETTI_PIECES = [
-  { id: 1, x: -55, y: -25, color: '#FFA726', size: 7, delay: 100, shape: 'rect' },
+  { id: 1, x: -55, y: -25, color: '#FE5B01', size: 7, delay: 100, shape: 'rect' },
   { id: 2, x: 58, y: -30, color: '#FE5B01', size: 6, delay: 150, shape: 'circle' },
   { id: 3, x: -65, y: 15, color: '#9D4EDD', size: 7, delay: 200, shape: 'rect' },
-  { id: 4, x: 62, y: 18, color: '#FFA726', size: 8, delay: 120, shape: 'circle' },
+  { id: 4, x: 62, y: 18, color: '#FE5B01', size: 8, delay: 120, shape: 'circle' },
   { id: 5, x: -35, y: -48, color: '#FFFFFF', size: 5, delay: 180, shape: 'circle' },
   { id: 6, x: 38, y: -50, color: '#3DDC97', size: 6, delay: 220, shape: 'rect' },
   { id: 7, x: -70, y: -8, color: '#FE5B01', size: 6, delay: 250, shape: 'rect' },
   { id: 8, x: 68, y: -5, color: '#FFFFFF', size: 5, delay: 140, shape: 'circle' },
-  { id: 9, x: -25, y: 45, color: '#FFA726', size: 6, delay: 260, shape: 'circle' },
+  { id: 9, x: -25, y: 45, color: '#FE5B01', size: 6, delay: 260, shape: 'circle' },
   { id: 10, x: 28, y: 42, color: '#9D4EDD', size: 7, delay: 190, shape: 'rect' },
-  { id: 11, x: -8, y: -58, color: '#FFA726', size: 6, delay: 210, shape: 'rect' },
+  { id: 11, x: -8, y: -58, color: '#FE5B01', size: 6, delay: 210, shape: 'rect' },
   { id: 12, x: 8, y: -60, color: '#FE5B01', size: 7, delay: 230, shape: 'circle' },
 ];
 

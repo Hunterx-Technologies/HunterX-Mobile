@@ -9,10 +9,10 @@ import {
 } from '@/services/notifications/push';
 
 /**
- * In-app explainer shown before the one-shot OS permission prompt, so the
- * system dialog isn't spent on a cold first launch. Offered once — after the
- * hunter has earned XP (i.e. completed a quest) — and never again after
- * "Not now" or an answer; System Settings covers turning it on later.
+ * In-app explainer shown before the OS permission prompt, so the system dialog
+ * isn't spent on a cold first launch. Offered once per day on the Home screen
+ * after the hunter has earned XP. Once accepted, it never prompts again;
+ * System Settings and the Notifications inbox cover turning it on anytime.
  */
 export function usePushPermissionPrompt() {
   const [visible, setVisible] = useState(false);

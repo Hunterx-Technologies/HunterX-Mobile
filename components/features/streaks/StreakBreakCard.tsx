@@ -253,8 +253,13 @@ function SmokePuff({ smoke, delay, drift, size }: { smoke: SharedValue<number> }
 }
 
 export interface StreakBreakCardProps {
-  /** Lives left after the miss: 1 or more plays "life used", 0 plays the flame going out. */
+  /** Lives left after the miss. */
   livesLeft: number;
+  /**
+   * True plays the flame going out ("Streak Lost"). Defaults to livesLeft === 0;
+   * pass false when the last life just saved the streak (0 left, streak alive).
+   */
+  streakLost?: boolean;
   /** How many lives the miss cost (the count rolls from livesLeft + livesLost). Defaults to 1. */
   livesLost?: number;
   /** The streak the life protected, or the one that ended. */
@@ -276,6 +281,7 @@ export interface StreakBreakCardProps {
 export const StreakBreakCard: React.FC<StreakBreakCardProps> = ({
   livesLeft,
   livesLost = 1,
+  streakLost,
   streakDays,
   onClose,
   haptics = true,
@@ -287,7 +293,7 @@ export const StreakBreakCard: React.FC<StreakBreakCardProps> = ({
   const cardWidth = Math.min(width - 48, 340);
   const after = Math.min(MAX_LIVES, Math.max(0, livesLeft));
   const before = Math.min(MAX_LIVES, after + Math.max(1, livesLost));
-  const burnsOut = after === 0;
+  const burnsOut = streakLost ?? after === 0;
 
   const enter = useSharedValue(0);
   /** 1 = burning, 0 = out. */
@@ -406,9 +412,13 @@ export const StreakBreakCard: React.FC<StreakBreakCardProps> = ({
 
   const lifeWord = (n: number) => (n === 1 ? 'life' : 'lives');
   const title = burnsOut ? 'Streak Lost' : 'Streak Saved';
+  const used = before - after;
+  const missed = used === 1 ? 'a day' : `${used} days`;
+  const saver = used === 1 ? (after === 0 ? 'your last streak life' : 'a streak life') : `${used} streak lives`;
+  const left = after === 0 ? 'No lives left' : `${after} ${lifeWord(after)} left`;
   const body = burnsOut
     ? `You ran out of streak lives and your ${streakDays}-day streak burned out. Light a new one today.`
-    : `You missed a day, so a streak life kept your ${streakDays}-day streak burning. ${after} ${lifeWord(after)} left. Don’t miss today.`;
+    : `You missed ${missed}, so ${saver} kept your ${streakDays}-day streak burning. ${left}. Don’t miss today.`;
 
   return (
     <View ref={rootRef} collapsable={false} style={StyleSheet.absoluteFill}>
@@ -613,7 +623,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     height: 50,
     borderRadius: 25,
-    backgroundColor: REWARD_BUTTON,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 22,
@@ -622,6 +632,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semiBold,
     fontSize: 17,
     letterSpacing: -0.43,
-    color: '#FFFFFF',
+    color: '#0D0F12',
   },
 });

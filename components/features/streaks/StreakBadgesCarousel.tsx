@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     borderWidth: 2,
-    borderColor: '#F66F28',
+    borderColor: '#FE5B01',
     top: -2,
   },
   carouselContainer: {

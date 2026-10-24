@@ -18,7 +18,7 @@ Done (2026-10-09):
 - `hooks/usePushNotifications.ts` (mounted in `app/_layout.tsx`) — registers on sign-in / every foreground / token rotation,
   refreshes unread count on receive, routes taps to `data.url` (cold start included, held until auth + index redirect finish),
   marks the tapped notification read (5.5)
-- `hooks/usePushPermissionPrompt.ts` + `ConfirmDialog` on Home — "Let the System summon you" explainer, offered once after the
+- `hooks/usePushPermissionPrompt.ts` + `PushPermissionModal` on Home — "Let the System summon you" explainer, offered once after the
   hunter has XP, never over another Home modal; "Not now" is remembered
 - Logout unregisters the device first (`useAuthStore.logout`) and zeroes the badge
 - System Settings: banner when push is off at OS level (Enable → OS prompt, or → phone Settings if denied);

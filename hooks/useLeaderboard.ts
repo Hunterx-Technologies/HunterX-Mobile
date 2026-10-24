@@ -12,7 +12,7 @@ import type {
 
 const STALE_TIME_MS = 45_000; // 30-60s window
 const PAGE_SIZE = 20;
-const SCOPES: LeaderboardScope[] = ['global', 'friends', 'genz'];
+const SCOPES: LeaderboardScope[] = ['global', 'friends'];
 
 type ScopeData = {
   entries: LeaderboardEntry[];
@@ -175,7 +175,7 @@ export function useLeaderboardScope(scope: LeaderboardScope, userId?: string | n
   // Revalidate in the background on screen focus, honoring staleTime —
   // cached data (if any) stays on screen the whole time. Only fires on
   // this screen gaining focus (e.g. switching back from another tab),
-  // not on the internal Global/Friends/Gen Z pill switch.
+  // not on the internal Global/Friends pill switch.
   useFocusEffect(
     useCallback(() => {
       refreshScope(scope);

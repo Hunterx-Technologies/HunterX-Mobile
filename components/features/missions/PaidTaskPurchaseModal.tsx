@@ -112,7 +112,7 @@ export function PaidTaskPurchaseModal({
               onPress={handleBuyPress}
             >
               <LinearGradient
-                colors={["#F59E0B", "#D97706"]}
+                colors={["#FFFFFF", "#FFFFFF"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.buyGradient}

@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   copyPillBtn: {
-    backgroundColor: '#E4E4E7',
+    backgroundColor: '#FE5B01',
     borderRadius: 20,
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     fontSize: 14,
     fontWeight: '800',
-    color: '#09090B',
+    color: '#0D0F12',
   },
   referralSubtext: {
     fontFamily: fontFamilies.regular,

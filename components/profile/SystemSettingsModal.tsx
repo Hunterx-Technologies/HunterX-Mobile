@@ -530,7 +530,7 @@ export function SystemSettingsModal({
                 <View style={styles.settingTextGroup}>
                   <Text style={styles.settingTitle}>Show me on leaderboards</Text>
                   <Text style={styles.settingSubtitle}>
-                    Let other hunters see your rank on Global & Gen Z
+                    Let other hunters see your rank on the Global leaderboard
                   </Text>
                 </View>
               </View>
@@ -1017,7 +1017,7 @@ export function SystemSettingsModal({
                   disabled={isUpdatingEmail}
                 >
                   {isUpdatingEmail ? (
-                    <ActivityIndicator size="small" color="#FE5B01" />
+                    <ActivityIndicator size="small" color="#0D0F12" />
                   ) : (
                     <Text style={styles.saveBtnText}>Save</Text>
                   )}
@@ -1367,12 +1367,12 @@ const styles = StyleSheet.create({
     color: '#A1A1AA',
   },
   saveBtn: {
-    backgroundColor: '#FE5B01',
+    backgroundColor: '#FFFFFF',
     minWidth: 70,
   },
   saveBtnText: {
     fontFamily: fontFamilies.bold,
     fontSize: 13,
-    color: '#FFFFFF',
+    color: '#0D0F12',
   },
 });

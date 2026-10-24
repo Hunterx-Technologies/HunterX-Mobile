@@ -6,8 +6,10 @@ import { router, usePathname, type Href } from 'expo-router';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { markNotificationsRead } from '@/services/api/notifications.service';
+import { syncUnseenRewards } from '@/hooks/useUnseenRewardsSync';
 import {
   configureForegroundHandling,
+  isDeviceTokenRotation,
   isPushSupported,
   registerDeviceIfPermitted,
 } from '@/services/notifications/push';
@@ -55,6 +57,9 @@ export function usePushNotifications() {
     if (typeof data.url === 'string' && data.url.startsWith('/')) {
       router.push(data.url as Href);
     }
+    // The push only names the card; the unseen list is what queues its
+    // celebration (and never carries the prize).
+    if (data.type === 'REWARD_READY') syncUnseenRewards();
   };
 
   // Capture taps (cold start + while running); route when ready.
@@ -90,8 +95,10 @@ export function usePushNotifications() {
     refreshUnreadCount();
 
     const received = Notifications.addNotificationReceivedListener(() => refreshUnreadCount());
-    const tokenRotated = Notifications.addPushTokenListener(() => {
-      registerDeviceIfPermitted({ force: true }).catch(logRegisterError);
+    const tokenRotated = Notifications.addPushTokenListener(({ data }) => {
+      if (typeof data === 'string' && isDeviceTokenRotation(data)) {
+        registerDeviceIfPermitted({ force: true }).catch(logRegisterError);
+      }
     });
     const appState = AppState.addEventListener('change', (state) => {
       if (state === 'active') {

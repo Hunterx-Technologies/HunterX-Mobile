@@ -342,7 +342,7 @@ export function EditProfileModal({
               activeOpacity={0.85}
             >
               <LinearGradient
-                colors={['#FF7A00', '#FE5B01', '#E64A00']}
+                colors={['#FE5B01', '#FE5B01', '#E64A00']}
                 style={styles.editAvatarGlowRing}
               >
                 <View style={styles.editAvatarCircleFrame}>
@@ -1458,11 +1458,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   calConfirmBtn: {
-    backgroundColor: '#FE5B01',
+    backgroundColor: '#FFFFFF',
   },
   calConfirmText: {
     fontFamily: fontFamilies.bold,
-    color: '#FFFFFF',
+    color: '#0D0F12',
     fontWeight: '800',
     fontSize: 13,
   },

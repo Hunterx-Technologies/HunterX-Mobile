@@ -14,7 +14,7 @@ export interface HunterXEmblemProps {
 export const HunterXEmblem: React.FC<HunterXEmblemProps> = ({
   size = 130,
   glow = true,
-  glowColor = '#F66F28',
+  glowColor = '#FE5B01',
   style,
   animated = true,
 }) => {
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: 999,
     opacity: 0.16,
-    shadowColor: '#F66F28',
+    shadowColor: '#FE5B01',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.65,
     shadowRadius: 28,

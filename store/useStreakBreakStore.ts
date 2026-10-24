@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { enqueueCelebration } from '@/store/useCelebrationStore';
 import type { FlightRect } from '@/components/features/streaks/StreakBadgeShowcase';
 import type { StreakBreakCardProps } from '@/components/features/streaks/StreakBreakCard';
 
@@ -15,7 +16,8 @@ type PillLocator = () => Promise<FlightRect | null>;
 interface StreakBreakState {
   visible: boolean;
   options: StreakBreakOptions | null;
-  showStreakBreak: (options: StreakBreakOptions) => void;
+  /** Opens the card now; GlobalStreakBreak calls it when the celebration queue reaches it. */
+  presentStreakBreak: (options: StreakBreakOptions) => void;
   hideStreakBreak: () => void;
 
   // The card's button flies the flame into the home header's streak pill.
@@ -30,7 +32,7 @@ interface StreakBreakState {
 export const useStreakBreakStore = create<StreakBreakState>((set, get) => ({
   visible: false,
   options: null,
-  showStreakBreak: (options) => set({ visible: true, options }),
+  presentStreakBreak: (options) => set({ visible: true, options }),
   hideStreakBreak: () => {
     const done = get().options?.onDone;
     set({ visible: false });
@@ -48,7 +50,7 @@ export const useStreakBreakStore = create<StreakBreakState>((set, get) => ({
   landOnPill: () => set({ pillLandedAt: Date.now() }),
 }));
 
-/** Shows the "streak life lost" card over whatever is on screen. */
+/** Queues the "streak life lost" card; it shows once nothing else is celebrating. */
 export const showStreakBreak = (options: StreakBreakOptions) => {
-  useStreakBreakStore.getState().showStreakBreak(options);
+  enqueueCelebration({ kind: 'streakBreak', options });
 };

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { router } from 'expo-router';
 import { useStreakBreakStore } from '@/store/useStreakBreakStore';
+import { registerCelebrationPresenter } from '@/store/useCelebrationStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { StreakBreakModal } from './StreakBreakCard';
 
@@ -22,6 +23,20 @@ export function GlobalStreakBreak() {
   const { visible, options, hideStreakBreak, landOnPill } = useStreakBreakStore();
   const soundEffectsEnabled = useSettingsStore((s) => s.soundEffectsEnabled);
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
+
+  useEffect(
+    () =>
+      registerCelebrationPresenter('streakBreak', (next, done) => {
+        useStreakBreakStore.getState().presentStreakBreak({
+          ...next,
+          onDone: () => {
+            next.onDone?.();
+            done();
+          },
+        });
+      }),
+    []
+  );
 
   if (!options || !visible) return null;
 

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -18,12 +18,17 @@ import { colors } from '@/theme/colors';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useMetricsStore } from '@/store/useMetricsStore';
 import { GlobalToast } from '@/components/common/GlobalToast';
+import { SwordSplash } from '@/components/common/SwordSplash';
 import { GlobalLevelUp } from '@/components/features/levelUp/GlobalLevelUp';
 import { GlobalStreakBadge } from '@/components/features/streaks/GlobalStreakBadge';
 import { GlobalStreakBreak } from '@/components/features/streaks/GlobalStreakBreak';
+import { GlobalReward } from '@/components/features/reward/GlobalReward';
 import { preloadAppAssets } from '@/services/media/preloadAssets';
 import { getAvatars } from '@/services/api/avatar.service';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { useUnseenRewardsSync } from '@/hooks/useUnseenRewardsSync';
+import { useStreakEventsSync } from '@/hooks/useStreakEventsSync';
+import { useLevelUpSync } from '@/hooks/useLevelUpSync';
 
 import { SettingsProvider } from '@/context/SettingsContext';
 
@@ -87,6 +92,9 @@ function ScrollToTopOnNavigate() {
 
 function PushNotificationsObserver() {
   usePushNotifications();
+  useUnseenRewardsSync();
+  useStreakEventsSync();
+  useLevelUpSync();
   return null;
 }
 
@@ -102,6 +110,8 @@ export default function RootLayout() {
   // A font that fails to load falls back to the system font; it must never
   // hold the app on the splash screen.
   const fontsReady = fontsLoaded || !!fontError;
+  // The animated launch splash plays once per cold start, over the app as it loads.
+  const [showSplash, setShowSplash] = useState(true);
 
   // Runs once on app start — reads the persisted access token and warms image cache
   useEffect(() => {
@@ -192,8 +202,10 @@ export default function RootLayout() {
           </Stack>
           <GlobalLevelUp />
           <GlobalStreakBadge />
+          <GlobalReward />
           <GlobalStreakBreak />
           <GlobalToast />
+          {showSplash && <SwordSplash onFinish={() => setShowSplash(false)} />}
         </SettingsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

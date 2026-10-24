@@ -82,7 +82,8 @@ const TEXT: TextSpec[] = [
   { key: 'title', weight: 600, size: 28, letterSpacing: -0.5, lineGap: 34, color: '#FFFFFF', baseline: 183, top: true },
   { key: 'rewardName', weight: 600, size: 22, letterSpacing: -0.45, lineGap: 28, color: '#FFFFFF', baseline: 651 },
   { key: 'description', weight: 500, size: 15, letterSpacing: -0.23, lineGap: 20, color: 'rgba(255,255,255,0.7)', baseline: 679 },
-  { key: 'buttonLabel', weight: 600, size: 17, letterSpacing: -0.43, lineGap: 22, color: '#FFFFFF', baseline: 789 },
+  // Dark on the white button (see diamondSceneEngine.ts#BUTTON_NODE).
+  { key: 'buttonLabel', weight: 600, size: 17, letterSpacing: -0.43, lineGap: 22, color: '#0D0F12', baseline: 789 },
 ];
 
 const DEFAULTS: Required<Pick<DiamondRewardSceneProps, TextSpec['key']>> = {

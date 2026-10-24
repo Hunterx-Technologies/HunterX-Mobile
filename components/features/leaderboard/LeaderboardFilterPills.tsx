@@ -4,14 +4,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { fontFamilies } from '@/theme/typography';
 
-export type MainCategoryTab = 'Global' | 'Friends' | 'Gen Z';
+export type MainCategoryTab = 'Global' | 'Friends';
 
 interface TopCategoryFilterBarProps {
   category: MainCategoryTab;
   onSelectCategory: (category: MainCategoryTab) => void;
 }
 
-const CATEGORIES: MainCategoryTab[] = ['Global', 'Friends', 'Gen Z'];
+const CATEGORIES: MainCategoryTab[] = ['Global', 'Friends'];
 
 export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
   category,

@@ -30,6 +30,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const isStacked = confirmLabel.length > 12 || (cancelLabel && cancelLabel.length > 12);
+
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onCancel}>
       <Pressable style={styles.overlay} onPress={onCancel}>
@@ -37,9 +39,14 @@ export function ConfirmDialog({
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
 
-          <View style={styles.actions}>
+          <View style={[styles.actions, isStacked && styles.actionsStacked]}>
             <Pressable
-              style={({ pressed }) => [styles.button, styles.cancelButton, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.button,
+                styles.cancelButton,
+                isStacked && styles.buttonFull,
+                pressed && styles.pressed,
+              ]}
               onPress={onCancel}
             >
               <Text style={styles.cancelLabel}>{cancelLabel}</Text>
@@ -48,6 +55,7 @@ export function ConfirmDialog({
               style={({ pressed }) => [
                 styles.button,
                 destructive ? styles.destructiveButton : styles.confirmButton,
+                isStacked && styles.buttonFull,
                 pressed && styles.pressed,
               ]}
               onPress={onConfirm}
@@ -66,7 +74,7 @@ export function ConfirmDialog({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.78)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -74,65 +82,89 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 340,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 24,
+    backgroundColor: '#0D1115',
+    borderRadius: 18,
+    borderWidth: 1.2,
+    borderColor: '#1D2530',
+    padding: 22,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    elevation: 8,
   },
   title: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 17,
+    fontFamily: fontFamilies.bold,
+    fontSize: 17.5,
     color: colors.textPrimary,
     marginBottom: 8,
     textAlign: 'center',
   },
   message: {
     fontFamily: fontFamilies.regular,
-    fontSize: 14,
+    fontSize: 13.5,
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   actions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
+  },
+  actionsStacked: {
+    flexDirection: 'column-reverse',
+    gap: 8,
   },
   button: {
     flex: 1,
-    height: 46,
+    height: 44,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  buttonFull: {
+    flex: 0,
+    width: '100%',
   },
   pressed: {
-    opacity: 0.8,
+    opacity: 0.85,
   },
   cancelButton: {
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: '#161B22',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#242D38',
   },
   cancelLabel: {
     fontFamily: fontFamilies.semiBold,
-    fontSize: 14,
-    color: colors.textPrimary,
+    fontSize: 13.5,
+    color: colors.textSecondary,
   },
   confirmButton: {
-    backgroundColor: colors.accentGold,
+    backgroundColor: '#FE5B01',
+    shadowColor: '#FE5B01',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 2,
   },
   confirmLabel: {
-    fontFamily: fontFamilies.semiBold,
+    fontFamily: fontFamilies.bold,
     fontSize: 14,
-    color: colors.background,
+    color: '#FFFFFF',
   },
   destructiveButton: {
     backgroundColor: colors.danger,
+    shadowColor: colors.danger,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 2,
   },
   destructiveLabel: {
-    fontFamily: fontFamilies.semiBold,
+    fontFamily: fontFamilies.bold,
     fontSize: 14,
-    color: colors.textPrimary,
+    color: '#FFFFFF',
   },
 });

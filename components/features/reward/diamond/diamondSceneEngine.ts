@@ -424,6 +424,10 @@ const IDENTITY: Mat = [1, 0, 0, 1, 0, 0];
 export const DIAMOND_NODE = 0;
 /** The close button's circle and X icon. */
 const CLOSE_NODES: Record<number, true> = { 35: true, 37: true };
+/** The bottom "Got it!" button. Drawn white (orange in the Rive file) so it
+ *  stands out against the orange glow at the bottom of the screen. */
+const BUTTON_NODE = 39;
+const BUTTON_PAINT: ScenePaint = { k: 0, c: 0xffffffff };
 
 /**
  * Draw commands for the whole screen at time `t`, back to front, in artboard
@@ -490,7 +494,7 @@ export function buildFrame(t: number, hideDiamond = false, closeShift = 0): Draw
         m: it.m,
         path: local,
         evenOdd: fl.rule === 1,
-        paint: fl.paint,
+        paint: it.id === BUTTON_NODE ? BUTTON_PAINT : fl.paint,
         alpha: it.alpha,
         blend: n.blend === undefined ? 3 : n.blend,
         stroke: fl.stroke || 0,

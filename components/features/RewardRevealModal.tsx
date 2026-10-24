@@ -6,93 +6,23 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  Image,
   Clipboard,
-  Share,
   Linking,
   Dimensions,
   Animated,
   Platform,
+  ActivityIndicator,
   StatusBar as RNStatusBar,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import * as Haptics from 'expo-haptics';
 import { fontFamilies } from '../../theme/typography';
+import { RewardProductImage, REWARD_IMAGE_WIDTH } from './reward/RewardProductImage';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-export interface RewardSlideItem {
-  id: string;
-  imageUrl: string;
-  offerHeading: string;
-  offerSubheading: string;
-  productName: string;
-  productCategory: string;
-  code: string;
-  minSpend?: string;
-  expiryDate?: string;
-}
-
-const DEFAULT_FITNESS_SLIDES: RewardSlideItem[] = [
-  {
-    id: '1',
-    imageUrl: 'https://images.unsplash.com/photo-1598289431512-b97b0917affc?q=80&w=800&auto=format&fit=crop',
-    offerHeading: '$25 AMAZON VOUCHER',
-    offerSubheading: 'on Amazon Fitness orders above ₹800',
-    productName: 'Pro Resistance Bands Set (5-Pack)',
-    productCategory: 'Strength & Mobility Kit',
-    code: 'AMZ-BAND-25',
-    minSpend: '₹800',
-    expiryDate: 'October 9, 2026',
-  },
-  {
-    id: '2',
-    imageUrl: 'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?q=80&w=800&auto=format&fit=crop',
-    offerHeading: '$50 AMAZON VOUCHER',
-    offerSubheading: 'on Amazon Fitness orders above ₹1,000',
-    productName: 'Stainless Steel Gym Shaker 750ml',
-    productCategory: 'Hydration & Nutrition Gear',
-    code: 'AMZ-SHAKE-50',
-    minSpend: '₹1,000',
-    expiryDate: 'October 9, 2026',
-  },
-  {
-    id: '3',
-    imageUrl: 'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?q=80&w=800&auto=format&fit=crop',
-    offerHeading: '$20 AMAZON VOUCHER',
-    offerSubheading: 'on Amazon Fitness orders above ₹600',
-    productName: 'Heavy-Duty Grip Weightlifting Gloves',
-    productCategory: 'Lifting & Hand Protection',
-    code: 'AMZ-GLOVE-20',
-    minSpend: '₹600',
-    expiryDate: 'October 9, 2026',
-  },
-  {
-    id: '4',
-    imageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?q=80&w=800&auto=format&fit=crop',
-    offerHeading: '$15 AMAZON VOUCHER',
-    offerSubheading: 'on Amazon Fitness orders above ₹500',
-    productName: 'High-Speed Bearing Skipping Rope',
-    productCategory: 'Cardio & Speed Conditioning',
-    code: 'AMZ-ROPE-15',
-    minSpend: '₹500',
-    expiryDate: 'October 9, 2026',
-  },
-  {
-    id: '5',
-    imageUrl: 'https://images.unsplash.com/photo-1600881333168-2ef49b341f30?q=80&w=800&auto=format&fit=crop',
-    offerHeading: '$35 AMAZON VOUCHER',
-    offerSubheading: 'on Amazon Fitness orders above ₹800',
-    productName: 'Deep Tissue Muscle Foam Roller',
-    productCategory: 'Recovery & Mobility Gear',
-    code: 'AMZ-ROLL-35',
-    minSpend: '₹800',
-    expiryDate: 'October 9, 2026',
-  },
-];
 
 export interface RewardRevealData {
   id?: string;
@@ -107,6 +37,9 @@ export interface RewardRevealData {
   productImages?: string[];
   expiryDate?: string;
   minSpend?: string;
+  /** Extra terms shown under Details. */
+  description?: string;
+  /** Where "Redeem now" goes. Without one, only the "Redeem reward" button is offered. */
   amazonUrl?: string;
   isUsed?: boolean;
 }
@@ -115,12 +48,18 @@ export interface RewardRevealModalProps {
   visible: boolean;
   onClose: () => void;
   reward: RewardRevealData | null;
+  /** Shows a "Redeem" button (marks the reward used, after a confirm) while the reward is unused. */
+  onMarkUsed?: () => void;
+  /** Disables the button and shows progress while the request runs. */
+  markingUsed?: boolean;
 }
 
 export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
   visible,
   onClose,
   reward,
+  onMarkUsed,
+  markingUsed = false,
 }) => {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 44 : (RNStatusBar.currentHeight || 24));
@@ -130,7 +69,7 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
   const [howToRedeemExpanded, setHowToRedeemExpanded] = useState(false);
   const [termsExpanded, setTermsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [confirmRedeem, setConfirmRedeem] = useState(false);
 
   React.useEffect(() => {
     if (visible) {
@@ -138,32 +77,10 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
     }
   }, [visible]);
 
-  // Combine passed reward with 4 other distinct gym/fitness slides for 5 total slides
-  const slides: RewardSlideItem[] = React.useMemo(() => {
-    if (!reward) return DEFAULT_FITNESS_SLIDES;
-
-    const firstSlide: RewardSlideItem = {
-      id: reward.id || '1',
-      imageUrl: reward.productImageUrl || DEFAULT_FITNESS_SLIDES[0].imageUrl,
-      offerHeading: reward.offerHeading || DEFAULT_FITNESS_SLIDES[0].offerHeading,
-      offerSubheading: reward.offerSubheading || DEFAULT_FITNESS_SLIDES[0].offerSubheading,
-      productName: reward.productName || DEFAULT_FITNESS_SLIDES[0].productName,
-      productCategory: reward.productCategory || DEFAULT_FITNESS_SLIDES[0].productCategory,
-      code: reward.code || DEFAULT_FITNESS_SLIDES[0].code,
-      minSpend: reward.minSpend || DEFAULT_FITNESS_SLIDES[0].minSpend,
-      expiryDate: reward.expiryDate || DEFAULT_FITNESS_SLIDES[0].expiryDate,
-    };
-
-    const remainingSlides = DEFAULT_FITNESS_SLIDES.filter(
-      (s) => s.id !== firstSlide.id && s.code !== firstSlide.code
-    ).slice(0, 4);
-
-    return [firstSlide, ...remainingSlides];
-  }, [reward]);
-
   if (!reward) return null;
 
-  const currentSlide = slides[activeSlideIndex] || slides[0];
+  // Only the reward's own data is shown — never placeholder offers or codes.
+  const currentSlide = reward;
 
   const handleCopyCode = () => {
     Clipboard.setString(currentSlide.code);
@@ -174,26 +91,10 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
     }, 2500);
   };
 
-  const handleShare = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const shareImage = reward?.productImageUrl || currentSlide.imageUrl;
-    const offerHeading = currentSlide.offerHeading || 'Exclusive Reward';
-    const productName = currentSlide.productName || 'Fitness Gear';
-
-    const message = `🎯 Grab this offer that I got on HunterX!\n\n🎁 Reward: ${offerHeading}\n📦 Product: ${productName}\n\nIf you're not a part of HunterX yet, join us today and start earning real rewards!\n\n${shareImage ? `🔗 View Offer: ${shareImage}` : ''}`;
-
-    Share.share({
-      title: `HunterX Reward: ${offerHeading}`,
-      message,
-      url: shareImage || undefined,
-    }).catch(() => {});
-  };
-
   const handleRedeemNow = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     handleCopyCode();
-    const targetUrl = reward.amazonUrl || 'https://www.amazon.com';
-    Linking.openURL(targetUrl).catch(() => {});
+    if (reward.amazonUrl) Linking.openURL(reward.amazonUrl).catch(() => {});
   };
 
   return (
@@ -206,43 +107,27 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
     >
       <StatusBar style="light" backgroundColor="#121316" />
       <View style={styles.root}>
-        {/* 1. TOP HEADER BAR */}
+        {/* 1. HEADER (fixed above the scrolling content) */}
         <View style={[styles.headerBar, { paddingTop: topInset + 6 }]}>
-          {/* Left: Close Button */}
           <TouchableOpacity
             style={styles.headerIconBtn}
             onPress={onClose}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
           >
             <Ionicons name="close" size={24} color="#FFFFFF" />
           </TouchableOpacity>
 
-          {/* Center: Brand Info (Amazon) */}
-          <View style={styles.headerBrandCol}>
-            <View style={styles.brandAvatarBox}>
-              <FontAwesome5 name="amazon" size={16} color="#0D0F12" />
-            </View>
-            <View style={styles.brandTextCol}>
-              <Text style={styles.brandNameText}>
-                {reward.brandName || 'Amazon'}
-              </Text>
-              <View style={styles.sponsoredRow}>
-                <Text style={styles.sponsoredText}>Sponsored</Text>
-                <Ionicons name="information-circle-outline" size={13} color="#8E8E93" />
-              </View>
-            </View>
+          <View style={styles.headerTitleCol}>
+            <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">
+              {reward.brandName || 'HunterX Reward'}
+            </Text>
+            {!!reward.brandName && <Text style={styles.sponsoredText}>Sponsored</Text>}
           </View>
 
-          {/* Right: Action (Share Only) */}
-          <View style={styles.headerActionsRow}>
-            <TouchableOpacity
-              style={styles.headerIconBtn}
-              onPress={handleShare}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="share-social-outline" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+          {/* Balances the ✕ so the title stays centered */}
+          <View style={styles.headerIconBtn} />
         </View>
 
         {/* MAIN SCROLLABLE CONTENT */}
@@ -254,11 +139,7 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
             {/* 2. PRODUCT HERO IMAGE (SINGLE IMAGE PER REWARD) */}
             <View style={styles.heroCarouselContainer}>
               <View style={styles.heroCardSlide}>
-                <Image
-                  source={{ uri: reward.productImageUrl || currentSlide.imageUrl }}
-                  style={styles.heroProductImage}
-                  resizeMode="cover"
-                />
+                <RewardProductImage uri={reward.productImageUrl} width={REWARD_IMAGE_WIDTH.details} />
               </View>
             </View>
 
@@ -267,12 +148,16 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
               <Text style={styles.offerHeadingText}>
                 {currentSlide.offerHeading}
               </Text>
-              <Text style={styles.offerSubheadingText}>
-                {currentSlide.offerSubheading}
-              </Text>
-              <Text style={styles.productNameHighlight}>
-                {currentSlide.productName}
-              </Text>
+              {!!currentSlide.offerSubheading && (
+                <Text style={styles.offerSubheadingText}>
+                  {currentSlide.offerSubheading}
+                </Text>
+              )}
+              {!!currentSlide.productName && (
+                <Text style={styles.productNameHighlight}>
+                  {currentSlide.productName}
+                </Text>
+              )}
             </View>
 
             {/* 4. PROMO CODE / CLAIM PILL BOX (SYNCS WITH ACTIVE SLIDE) */}
@@ -308,40 +193,24 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
 
               {detailsExpanded && (
                 <View style={styles.accordionBody}>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>•</Text>
-                    <Text style={styles.bulletText}>
-                      Expires on {currentSlide.expiryDate || 'October 9, 2026'}
-                    </Text>
-                  </View>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>•</Text>
-                    <Text style={styles.bulletText}>
-                      Minimum {currentSlide.minSpend || '₹800'} spend.
-                    </Text>
-                  </View>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>•</Text>
-                    <Text style={styles.bulletText}>
-                      Amazon Fitness is a high-performance verified gear & equipment store.
-                    </Text>
-                  </View>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>•</Text>
-                    <Text style={styles.bulletText}>Offer valid for all users.</Text>
-                  </View>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>•</Text>
-                    <Text style={styles.bulletText}>
-                      The voucher cannot be clubbed with any Free Gift offer on the website.
-                    </Text>
-                  </View>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>•</Text>
-                    <Text style={styles.bulletText}>
-                      Free shipping on eligible Prime & prepaid orders.
-                    </Text>
-                  </View>
+                  {!!currentSlide.expiryDate && (
+                    <View style={styles.bulletItem}>
+                      <Text style={styles.bulletDot}>•</Text>
+                      <Text style={styles.bulletText}>Expires on {currentSlide.expiryDate}</Text>
+                    </View>
+                  )}
+                  {!!currentSlide.minSpend && (
+                    <View style={styles.bulletItem}>
+                      <Text style={styles.bulletDot}>•</Text>
+                      <Text style={styles.bulletText}>Minimum {currentSlide.minSpend} spend.</Text>
+                    </View>
+                  )}
+                  {!!reward.description && (
+                    <View style={styles.bulletItem}>
+                      <Text style={styles.bulletDot}>•</Text>
+                      <Text style={styles.bulletText}>{reward.description}</Text>
+                    </View>
+                  )}
                   <View style={styles.bulletItem}>
                     <Text style={styles.bulletDot}>•</Text>
                     <Text style={styles.bulletText}>
@@ -374,13 +243,13 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
                   <View style={styles.bulletItem}>
                     <Text style={styles.bulletDot}>1.</Text>
                     <Text style={styles.bulletText}>
-                      Tap 'Redeem now' below or copy the code from above.
+                      {reward.amazonUrl ? "Tap 'Redeem now' below or copy the code from above." : 'Copy the code from above.'}
                     </Text>
                   </View>
                   <View style={styles.bulletItem}>
                     <Text style={styles.bulletDot}>2.</Text>
                     <Text style={styles.bulletText}>
-                      Add your gym gear ({reward.productName}) to the Amazon cart.
+                      Add {reward.productName ? `the ${reward.productName}` : 'your items'} to the cart.
                     </Text>
                   </View>
                   <View style={styles.bulletItem}>
@@ -421,13 +290,7 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
                   <View style={styles.bulletItem}>
                     <Text style={styles.bulletDot}>•</Text>
                     <Text style={styles.bulletText}>
-                      Valid only on eligible products in the fitness & sports category.
-                    </Text>
-                  </View>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>•</Text>
-                    <Text style={styles.bulletText}>
-                      Standard Amazon terms and return policies apply.
+                      Valid only on eligible products, until the expiry date.
                     </Text>
                   </View>
                 </View>
@@ -437,30 +300,66 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
 
           {/* 8. BOTTOM STICKY CTA: REDEEM NOW */}
           <View style={[styles.stickyFooterContainer, { paddingBottom: bottomInset + 12 }]}>
-            <TouchableOpacity
-              style={[
-                styles.redeemNowBtn,
-                reward.isUsed && styles.disabledRedeemBtn,
-              ]}
-              onPress={handleRedeemNow}
-              disabled={reward.isUsed}
-              activeOpacity={0.88}
-            >
-              <Ionicons
-                name={reward.isUsed ? 'checkmark-circle' : 'open-outline'}
-                size={18}
-                color={reward.isUsed ? '#8E8E93' : '#0D0F12'}
-              />
-              <Text
+            {(reward.isUsed || !!reward.amazonUrl) && (
+              <TouchableOpacity
                 style={[
-                  styles.redeemNowBtnText,
-                  reward.isUsed && styles.disabledRedeemBtnText,
+                  styles.redeemNowBtn,
+                  reward.isUsed && styles.disabledRedeemBtn,
                 ]}
+                onPress={handleRedeemNow}
+                disabled={reward.isUsed}
+                activeOpacity={0.88}
               >
-                {reward.isUsed ? 'REDEEMED' : 'Redeem now'}
-              </Text>
-            </TouchableOpacity>
+                <Ionicons
+                  name={reward.isUsed ? 'checkmark-circle' : 'open-outline'}
+                  size={18}
+                  color={reward.isUsed ? '#8E8E93' : '#0D0F12'}
+                />
+                <Text
+                  style={[
+                    styles.redeemNowBtnText,
+                    reward.isUsed && styles.disabledRedeemBtnText,
+                  ]}
+                >
+                  {reward.isUsed ? 'REDEEMED' : 'Redeem now'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!reward.isUsed && onMarkUsed && (
+              <TouchableOpacity
+                style={[
+                  reward.amazonUrl ? styles.markUsedSecondaryBtn : styles.redeemNowBtn,
+                  markingUsed && styles.markUsedBusy,
+                ]}
+                onPress={() => setConfirmRedeem(true)}
+                disabled={markingUsed}
+                activeOpacity={0.88}
+              >
+                {markingUsed ? (
+                  <ActivityIndicator size="small" color={reward.amazonUrl ? '#FFFFFF' : '#0D0F12'} />
+                ) : (
+                  <Ionicons name={reward.amazonUrl ? 'checkmark-done' : 'gift'} size={18} color={reward.amazonUrl ? '#FFFFFF' : '#0D0F12'} />
+                )}
+                <Text style={reward.amazonUrl ? styles.markUsedSecondaryText : styles.redeemNowBtnText}>
+                  {markingUsed ? 'Redeeming...' : reward.amazonUrl ? 'Mark as redeemed' : 'Redeem reward'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
+
+          {/* Redeeming moves the card to Used: make sure the code was used first. */}
+          <ConfirmDialog
+            visible={confirmRedeem}
+            title="Redeem this reward?"
+            message="Use your code at checkout first. Once redeemed, this reward moves to your Used tab."
+            confirmLabel="Redeem"
+            cancelLabel="Not yet"
+            onConfirm={() => {
+              setConfirmRedeem(false);
+              onMarkUsed?.();
+            }}
+            onCancel={() => setConfirmRedeem(false)}
+          />
         </View>
       </Modal>
   );
@@ -481,8 +380,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    backgroundColor: '#121316',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#26282E',
+  },
+  headerTitleCol: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  headerTitle: {
+    fontFamily: fontFamilies.bold,
+    color: '#FFFFFF',
+    fontSize: 17,
   },
   headerIconBtn: {
     width: 38,
@@ -490,44 +402,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerBrandCol: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginLeft: 6,
-  },
-  brandAvatarBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandTextCol: {
-    justifyContent: 'center',
-  },
-  brandNameText: {
-    fontFamily: fontFamilies.bold,
-    color: '#FFFFFF',
-    fontSize: 15,
-  },
-  sponsoredRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 1,
-  },
   sponsoredText: {
     fontFamily: fontFamilies.regular,
     color: '#8E8E93',
     fontSize: 11.5,
-  },
-  headerActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
   },
 
   /* MAIN SCROLL */
@@ -559,10 +437,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-  },
-  heroProductImage: {
-    width: '100%',
-    height: '100%',
   },
   slideIndicatorBadge: {
     position: 'absolute',
@@ -627,7 +501,7 @@ const styles = StyleSheet.create({
   },
   codeActionText: {
     fontFamily: fontFamilies.bold,
-    color: '#F66F28',
+    color: '#FE5B01',
     fontSize: 14,
     letterSpacing: 0.5,
   },
@@ -690,6 +564,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
     paddingVertical: 14,
+  },
+  markUsedSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    borderRadius: 28,
+    paddingVertical: 13,
+    borderWidth: 1,
+    borderColor: '#2A2C33',
+  },
+  markUsedSecondaryText: {
+    fontFamily: fontFamilies.bold,
+    color: '#FFFFFF',
+    fontSize: 15,
+  },
+  markUsedBusy: {
+    opacity: 0.7,
   },
   disabledRedeemBtn: {
     backgroundColor: '#1E2024',

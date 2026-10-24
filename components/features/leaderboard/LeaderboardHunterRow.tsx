@@ -1,5 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { Image as ExpoImage } from 'expo-image';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -24,12 +35,243 @@ export interface LeaderboardHunter {
   level: number;
   avatarUrl: string | null;
   isCurrentUser?: boolean;
+  /** Current daily streak, shown under the name; hidden when unknown. */
+  streak?: number | null;
 }
+
+/** The name with the user's streak count under it ("🔥 1,240"). */
+const NameWithStreak: React.FC<{ name: string; streak?: number | null; nameStyle: object }> = ({ name, streak, nameStyle }) => (
+  <View style={styles.nameBlock}>
+    <Text style={nameStyle} numberOfLines={1}>
+      {name}
+    </Text>
+    {typeof streak === 'number' && (
+      <View style={styles.streakRow}>
+        <Ionicons name="flame" size={12} color={streak > 0 ? '#FE5B01' : '#52525B'} />
+        <Text style={[styles.streakText, streak === 0 && styles.streakTextNone]} numberOfLines={1}>
+          {streak.toLocaleString('en-US')}
+        </Text>
+      </View>
+    )}
+  </View>
+);
 
 interface LeaderboardHunterRowProps {
   hunter: LeaderboardHunter;
   onPress?: (hunter: LeaderboardHunter) => void;
 }
+
+// ── Top 3: gold, silver and bronze ───────────────────────────
+// A polished metal frame, a metal-tinted card, a light sweep that runs
+// across every few seconds (1st, 2nd, 3rd in turn) and the rank icon in a
+// metal coin that glows. The crown also floats and sparkles. Motion is
+// skipped when the device asks for reduced motion.
+
+type Metal = {
+  /** Metal text/icon color. */
+  accent: string;
+  /** Frame: light catching the edge of polished metal. */
+  frame: readonly [string, string, ...string[]];
+  /** Card body, metal-tinted on the left fading to dark. */
+  body: readonly [string, string, ...string[]];
+  /** The coin behind the rank icon. */
+  coin: readonly [string, string, ...string[]];
+  /** Icon on the coin. */
+  coinIcon: string;
+  glow: string;
+  shine: string;
+  levelBg: string;
+  levelBorder: string;
+  icon: 'crown' | 'medal' | 'award';
+};
+
+const METALS: Record<1 | 2 | 3, Metal> = {
+  1: {
+    accent: '#FFD54A',
+    frame: ['#FFF4B8', '#F5C542', '#B8860B', '#FFE58A', '#8B6508', '#F5C542'],
+    body: ['#6B4E06', '#3D2C04', '#171103', '#0B0802'],
+    coin: ['#FFF1A8', '#F2C230', '#A87A06'],
+    coinIcon: '#5A3F00',
+    glow: '#FFC83D',
+    shine: 'rgba(255, 245, 200, 0.42)',
+    levelBg: 'rgba(255, 213, 74, 0.12)',
+    levelBorder: 'rgba(255, 213, 74, 0.45)',
+    icon: 'crown',
+  },
+  2: {
+    accent: '#E6ECF2',
+    frame: ['#FFFFFF', '#C9D1DA', '#7D8794', '#EEF2F6', '#5F6875', '#C9D1DA'],
+    body: ['#4C545F', '#2A2F37', '#121418', '#090A0D'],
+    coin: ['#FFFFFF', '#C3CBD5', '#7A8491'],
+    coinIcon: '#2F3640',
+    glow: '#D7DEE7',
+    shine: 'rgba(255, 255, 255, 0.38)',
+    levelBg: 'rgba(230, 236, 242, 0.08)',
+    levelBorder: 'rgba(230, 236, 242, 0.40)',
+    icon: 'medal',
+  },
+  3: {
+    accent: '#E9A464',
+    frame: ['#FFD8AE', '#D08A45', '#8A4F1E', '#F2B57E', '#6B3A14', '#D08A45'],
+    body: ['#6A3D19', '#3D220D', '#170D05', '#0B0603'],
+    coin: ['#FFD3A1', '#C97E3A', '#7E4618'],
+    coinIcon: '#4A2508',
+    glow: '#E59650',
+    shine: 'rgba(255, 220, 185, 0.36)',
+    levelBg: 'rgba(233, 164, 100, 0.10)',
+    levelBorder: 'rgba(233, 164, 100, 0.42)',
+    icon: 'award',
+  },
+};
+
+const SHINE_WIDTH = 70;
+const SHINE_EVERY_MS = 3600;
+
+const Top3Card: React.FC<{
+  hunter: LeaderboardHunter;
+  rank: 1 | 2 | 3;
+  onPress?: (hunter: LeaderboardHunter) => void;
+  formatScore: (val: number) => string;
+}> = ({ hunter, rank, onPress, formatScore }) => {
+  const metal = METALS[rank];
+  const reduceMotion = useReducedMotion();
+  const [cardWidth, setCardWidth] = React.useState(0);
+
+  const shine = useSharedValue(0);
+  const pulse = useSharedValue(0);
+  const float = useSharedValue(0);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    // 1st, 2nd and 3rd sweep one after another, then all wait for the next round.
+    shine.value = withDelay(
+      400 + (rank - 1) * 450,
+      withRepeat(
+        withSequence(
+          withTiming(1, { duration: 900, easing: Easing.inOut(Easing.cubic) }),
+          withTiming(1, { duration: SHINE_EVERY_MS - 900 }),
+          withTiming(0, { duration: 0 })
+        ),
+        -1,
+        false
+      )
+    );
+    pulse.value = withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.sin) }), -1, true);
+    float.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.sin) }), -1, true);
+  }, [reduceMotion, rank, shine, pulse, float]);
+
+  const shineStyle = useAnimatedStyle(() => ({
+    opacity: shine.value > 0 && shine.value < 1 ? 1 : 0,
+    transform: [
+      { translateX: interpolate(shine.value, [0, 1], [-SHINE_WIDTH * 1.5, cardWidth + SHINE_WIDTH]) },
+      { skewX: '-22deg' },
+    ],
+  }));
+  const coinGlowStyle = useAnimatedStyle(() => ({
+    opacity: 0.35 + pulse.value * 0.45,
+    transform: [{ scale: 1 + pulse.value * 0.22 }],
+  }));
+  const crownStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: rank === 1 ? -1.5 * float.value : 0 }, { rotate: rank === 1 ? `${(float.value - 0.5) * 6}deg` : '0deg' }],
+  }));
+  const sparkleStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(pulse.value, [0, 0.6, 1], [0, 0.2, 1]),
+    transform: [{ scale: 0.5 + pulse.value * 0.6 }, { rotate: `${pulse.value * 90}deg` }],
+  }));
+
+  const content = (
+    <View style={[styles.top3Shadow, { shadowColor: metal.glow }]}>
+      <LinearGradient colors={metal.frame} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.top3Frame}>
+        <LinearGradient
+          colors={metal.body}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.top3Card}
+          onLayout={(e) => setCardWidth(e.nativeEvent.layout.width)}
+        >
+          {/* Top-edge sheen, like light on polished metal */}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0)']}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 0.6 }}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+
+          {/* Rank coin + number */}
+          <View style={styles.rankCol}>
+            <View style={styles.coinWrap}>
+              <Animated.View style={[styles.coinGlow, { backgroundColor: metal.glow }, coinGlowStyle]} />
+              <Animated.View style={crownStyle}>
+                <LinearGradient colors={metal.coin} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={styles.coin}>
+                  <FontAwesome5 name={metal.icon} size={12} color={metal.coinIcon} />
+                </LinearGradient>
+              </Animated.View>
+              {rank === 1 && (
+                <Animated.Text style={[styles.sparkle, sparkleStyle]} pointerEvents="none">
+                  ✦
+                </Animated.Text>
+              )}
+            </View>
+            <Text style={[styles.topRankText, { color: metal.accent, textShadowColor: metal.glow }]}>{rank}</Text>
+          </View>
+
+          {/* Avatar in a metal ring + name */}
+          <View style={styles.userCol}>
+            <LinearGradient colors={metal.coin} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarRing}>
+              <ExpoImage
+                source={{ uri: hunter.avatarUrl || FALLBACK_AVATAR }}
+                style={styles.top3Avatar}
+                contentFit="cover"
+                placeholder={{ blurhash: BLURHASH }}
+                cachePolicy="disk"
+              />
+            </LinearGradient>
+            <NameWithStreak name={hunter.displayName} streak={hunter.streak} nameStyle={styles.displayNameText} />
+          </View>
+
+          <View style={styles.levelCol}>
+            <View style={[styles.levelPill, { backgroundColor: metal.levelBg, borderColor: metal.levelBorder }]}>
+              <Text style={[styles.top3LevelText, { color: metal.accent }]}>Lv. {hunter.level}</Text>
+            </View>
+          </View>
+
+          <View style={styles.xpCol}>
+            <Text style={[styles.lightningIcon, { color: metal.accent }]}>⚡</Text>
+            <Text style={styles.xpScoreText}>{formatScore(hunter.score)}</Text>
+          </View>
+
+          {onPress ? (
+            <View style={styles.chevronCol}>
+              <Ionicons name="chevron-forward" size={16} color={metal.accent} />
+            </View>
+          ) : null}
+
+          {/* Light sweep */}
+          {cardWidth > 0 && (
+            <Animated.View style={[styles.shine, shineStyle]} pointerEvents="none">
+              <LinearGradient
+                colors={['rgba(255,255,255,0)', metal.shine, 'rgba(255,255,255,0)']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+            </Animated.View>
+          )}
+        </LinearGradient>
+      </LinearGradient>
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity activeOpacity={0.85} onPress={() => onPress(hunter)} style={styles.cardWrapper}>
+        {content}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={styles.cardWrapper}>{content}</View>;
+};
 
 const LeaderboardHunterRowComponent: React.FC<LeaderboardHunterRowProps> = ({
   hunter,
@@ -42,152 +284,9 @@ const LeaderboardHunterRowComponent: React.FC<LeaderboardHunterRowProps> = ({
   const isTop3 = hunter.rank !== null && hunter.rank >= 1 && hunter.rank <= 3;
   const isCurrentUser = hunter.isCurrentUser;
 
-  // Themes for Top 3 Cards
-  const getRankTheme = () => {
-    if (hunter.rank === 1) {
-      return {
-        accent: '#FFD700',
-        border: 'rgba(255, 215, 0, 0.85)',
-        shadow: '#FFD700',
-        gradient: ['rgba(255, 215, 0, 0.38)', 'rgba(160, 110, 0, 0.22)', '#0E0B04', '#080602'] as const,
-        glowGradient: ['rgba(255, 215, 0, 0.35)', 'rgba(255, 215, 0, 0.08)', 'transparent'] as const,
-        levelBg: 'rgba(255, 215, 0, 0.08)',
-        levelBorder: 'rgba(255, 215, 0, 0.30)',
-        quoteColor: '#FFD700',
-        chevronColor: '#FFD700',
-      };
-    }
-    if (hunter.rank === 2) {
-      return {
-        accent: '#E2E8F0',
-        border: 'rgba(226, 232, 240, 0.70)',
-        shadow: '#94A3B8',
-        gradient: ['rgba(148, 163, 184, 0.35)', 'rgba(51, 65, 85, 0.20)', '#07090D', '#040508'] as const,
-        glowGradient: ['rgba(226, 232, 240, 0.35)', 'rgba(226, 232, 240, 0.08)', 'transparent'] as const,
-        levelBg: 'rgba(255, 255, 255, 0.04)',
-        levelBorder: 'rgba(226, 232, 240, 0.30)',
-        quoteColor: '#CBD5E1',
-        chevronColor: '#CBD5E1',
-      };
-    }
-    if (hunter.rank === 3) {
-      return {
-        accent: '#CD7F32',
-        border: 'rgba(205, 127, 50, 0.75)',
-        shadow: '#CD7F32',
-        gradient: ['rgba(205, 127, 50, 0.38)', 'rgba(95, 50, 15, 0.22)', '#090503', '#060302'] as const,
-        glowGradient: ['rgba(205, 127, 50, 0.35)', 'rgba(205, 127, 50, 0.08)', 'transparent'] as const,
-        levelBg: 'rgba(255, 255, 255, 0.04)',
-        levelBorder: 'rgba(205, 127, 50, 0.30)',
-        quoteColor: '#CD7F32',
-        chevronColor: '#CD7F32',
-      };
-    }
-    return {
-      accent: '#A1A1AA',
-      border: 'rgba(255, 255, 255, 0.06)',
-      shadow: 'transparent',
-      gradient: ['#141418', '#101014', '#0B0B0E', 'transparent'] as const,
-      glowGradient: ['transparent', 'transparent', 'transparent'] as const,
-      levelBg: '#16161A',
-      levelBorder: '#242428',
-      quoteColor: '#71717A',
-      chevronColor: '#71717A',
-    };
-  };
-
-  const rankTheme = getRankTheme();
-
-  // 1. TOP 3 FEATURED CARDS (Ranks 1, 2, 3) - ALWAYS styled in Gold, Silver, Bronze
+  // 1. TOP 3 (gold, silver, bronze)
   if (isTop3) {
-    const Top3Content = (
-      <LinearGradient
-        colors={rankTheme.gradient}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={[
-          styles.top3Card,
-          {
-            borderColor: rankTheme.border,
-            shadowColor: rankTheme.shadow,
-          },
-        ]}
-      >
-        {/* Left Atmospheric Ambient Glow Overlay */}
-        <LinearGradient
-          colors={rankTheme.glowGradient}
-          start={{ x: 0, y: 0.1 }}
-          end={{ x: 0.6, y: 0.9 }}
-          style={StyleSheet.absoluteFillObject}
-          pointerEvents="none"
-        />
-
-        {/* Icon + Rank Number Column */}
-        <View style={styles.rankCol}>
-          {hunter.rank === 1 ? (
-            <FontAwesome5 name="crown" size={15} color={rankTheme.accent} />
-          ) : hunter.rank === 2 ? (
-            <FontAwesome5 name="medal" size={15} color={rankTheme.accent} />
-          ) : (
-            <FontAwesome5 name="award" size={15} color={rankTheme.accent} />
-          )}
-          <Text style={[styles.topRankText, { color: rankTheme.accent }]}>
-            {hunter.rank ?? "–"}
-          </Text>
-        </View>
-
-        {/* User Column (Avatar + Display Name) */}
-        <View style={styles.userCol}>
-          <ExpoImage
-            source={{ uri: hunter.avatarUrl || FALLBACK_AVATAR }}
-            style={[
-              styles.avatarImage,
-              { borderColor: rankTheme.accent, borderWidth: 1.8 },
-            ]}
-            contentFit="cover"
-            placeholder={{ blurhash: BLURHASH }}
-            cachePolicy="disk"
-          />
-          <Text style={styles.displayNameText} numberOfLines={1}>
-            {hunter.displayName}
-          </Text>
-        </View>
-
-        {/* Level Column */}
-        <View style={styles.levelCol}>
-          <View style={[styles.levelPill, { backgroundColor: rankTheme.levelBg, borderColor: rankTheme.levelBorder }]}>
-            <Text style={styles.top3LevelText}>Lv. {hunter.level}</Text>
-          </View>
-        </View>
-
-        {/* XP Column */}
-        <View style={styles.xpCol}>
-          <Text style={[styles.lightningIcon, { color: rankTheme.accent }]}>⚡</Text>
-          <Text style={styles.xpScoreText}>{formatScore(hunter.score)}</Text>
-        </View>
-
-        {/* Chevron Column — only shown when the row is actually tappable */}
-        {onPress ? (
-          <View style={styles.chevronCol}>
-            <Ionicons name="chevron-forward" size={16} color={rankTheme.chevronColor} />
-          </View>
-        ) : null}
-      </LinearGradient>
-    );
-
-    if (onPress) {
-      return (
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => onPress(hunter)}
-          style={styles.cardWrapper}
-        >
-          {Top3Content}
-        </TouchableOpacity>
-      );
-    }
-
-    return <View style={styles.cardWrapper}>{Top3Content}</View>;
+    return <Top3Card hunter={hunter} rank={hunter.rank as 1 | 2 | 3} onPress={onPress} formatScore={formatScore} />;
   }
 
   // 2. CURRENT USER HIGHLIGHTED CARD (Ranks 4+)
@@ -214,9 +313,7 @@ const LeaderboardHunterRowComponent: React.FC<LeaderboardHunterRowProps> = ({
             placeholder={{ blurhash: BLURHASH }}
             cachePolicy="disk"
           />
-          <Text style={styles.currentUserDisplayNameText} numberOfLines={1}>
-            {hunter.displayName}
-          </Text>
+          <NameWithStreak name={hunter.displayName} streak={hunter.streak} nameStyle={styles.currentUserDisplayNameText} />
         </View>
 
         {/* Level Column */}
@@ -292,9 +389,7 @@ const LeaderboardHunterRowComponent: React.FC<LeaderboardHunterRowProps> = ({
           placeholder={{ blurhash: BLURHASH }}
           cachePolicy="disk"
         />
-        <Text style={styles.displayNameText} numberOfLines={1}>
-          {hunter.displayName}
-        </Text>
+        <NameWithStreak name={hunter.displayName} streak={hunter.streak} nameStyle={styles.displayNameText} />
       </View>
 
       {/* Level Column (Level Pill) */}
@@ -363,19 +458,75 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 10,
   },
+  top3Shadow: {
+    borderRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  top3Frame: {
+    borderRadius: 18,
+    padding: 1.6,
+  },
   top3Card: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 18,
-    borderWidth: 1.4,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 10,
-    elevation: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 11,
+    borderRadius: 16.5,
     overflow: 'hidden',
     position: 'relative',
+  },
+  coinWrap: {
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  coinGlow: {
+    position: 'absolute',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+  },
+  coin: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.55)',
+  },
+  sparkle: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    fontSize: 10,
+    color: '#FFF6CC',
+  },
+  avatarRing: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  top3Avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#16161A',
+  },
+  shine: {
+    position: 'absolute',
+    top: -20,
+    bottom: -20,
+    left: 0,
+    width: SHINE_WIDTH,
   },
   currentUserCard: {
     flexDirection: 'row',
@@ -428,8 +579,10 @@ const styles = StyleSheet.create({
   },
   topRankText: {
     fontFamily: fontFamilies.bold,
-    fontSize: 13.5,
+    fontSize: 14,
     fontWeight: '900',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   regularRankText: {
     fontFamily: fontFamilies.bold,
@@ -487,6 +640,26 @@ const styles = StyleSheet.create({
     borderColor: '#F59E0B',
     borderWidth: 1.8,
   },
+  nameBlock: {
+    flexShrink: 1,
+    justifyContent: 'center',
+  },
+  streakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  streakText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#D4D4D8',
+    letterSpacing: 0.2,
+  },
+  streakTextNone: {
+    color: '#52525B',
+  },
   displayNameText: {
     fontFamily: fontFamilies.bold,
     fontSize: 14,
@@ -501,7 +674,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.2,
-    marginBottom: 2,
   },
 
   /* LEVEL COLUMN */

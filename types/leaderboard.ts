@@ -1,4 +1,4 @@
-export type LeaderboardScope = 'global' | 'friends' | 'genz';
+export type LeaderboardScope = 'global' | 'friends';
 
 export type LeaderboardMeStatus = 'ranked' | 'unranked_no_xp' | 'hidden';
 
@@ -12,6 +12,8 @@ export type LeaderboardMe = {
   avatarThumbUrl: string | null;
   totalRanked: number | null;
   topPercent: number | null;
+  /** Current daily streak (0 if broken); null if it couldn't be loaded. Missing on older backends. */
+  streak?: number | null;
 };
 
 export type LeaderboardEntry = {
@@ -23,6 +25,8 @@ export type LeaderboardEntry = {
   rankName: string | null;
   totalXp: number;
   isMe: boolean;
+  /** Current daily streak (0 if broken); null if it couldn't be loaded. Missing on older backends. */
+  streak?: number | null;
 };
 
 export type LeaderboardEmptyState = null | 'no_friends' | 'no_entries';

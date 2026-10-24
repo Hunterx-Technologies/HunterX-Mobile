@@ -18,7 +18,7 @@ import { registerPushDevice, sendTestPush, unregisterPushDevice } from '@/servic
 
 export const isPushSupported = Platform.OS === 'ios' || Platform.OS === 'android';
 
-const PROMPTED_KEY = 'hunterx.pushPermissionPrompted';
+const PROMPTED_DATE_KEY = 'hunterx.pushPermissionPromptedDate';
 const REGISTER_THROTTLE_MS = 30 * 60 * 1000;
 
 // Must match config/notificationTypes.js `channel` values in HunterX-Backend.
@@ -91,7 +91,10 @@ export async function requestPushPermission(): Promise<PushPermission> {
 
 export async function hasPromptedForPush(): Promise<boolean> {
   try {
-    return (await AsyncStorage.getItem(PROMPTED_KEY)) === 'true';
+    const lastDate = await AsyncStorage.getItem(PROMPTED_DATE_KEY);
+    if (!lastDate) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    return lastDate === today;
   } catch {
     return false;
   }
@@ -99,12 +102,33 @@ export async function hasPromptedForPush(): Promise<boolean> {
 
 export async function markPushPrompted(): Promise<void> {
   try {
-    await AsyncStorage.setItem(PROMPTED_KEY, 'true');
+    const today = new Date().toISOString().slice(0, 10);
+    await AsyncStorage.setItem(PROMPTED_DATE_KEY, today);
+  } catch {}
+}
+
+export async function resetPushPrompted(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(PROMPTED_DATE_KEY);
   } catch {}
 }
 
 let currentToken: string | null = null;
 let lastRegisteredAt = 0;
+let registerInFlight: Promise<string | null> | null = null;
+let lastDeviceToken: string | null = null;
+
+/**
+ * For Notifications.addPushTokenListener. On Android the listener fires on
+ * every token fetch, not only on a real rotation — and registering fetches
+ * the token, so re-registering on every event loops forever. True only when
+ * the device token actually differs from the one seen before.
+ */
+export function isDeviceTokenRotation(deviceToken: string): boolean {
+  const rotated = lastDeviceToken !== null && lastDeviceToken !== deviceToken;
+  lastDeviceToken = deviceToken;
+  return rotated;
+}
 
 async function getExpoToken(): Promise<string | null> {
   const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
@@ -119,7 +143,15 @@ async function getExpoToken(): Promise<string | null> {
  * refreshes the backend's last-seen time used by win-back pushes) and on
  * token rotation (force).
  */
-export async function registerDeviceIfPermitted({ force = false }: { force?: boolean } = {}): Promise<string | null> {
+export function registerDeviceIfPermitted({ force = false }: { force?: boolean } = {}): Promise<string | null> {
+  // Sign-in, foreground and the permission prompt can overlap: share one call.
+  registerInFlight ??= registerDevice(force).finally(() => {
+    registerInFlight = null;
+  });
+  return registerInFlight;
+}
+
+async function registerDevice(force: boolean): Promise<string | null> {
   if ((await getPushPermission()) !== 'granted') return null;
   if (!force && currentToken && Date.now() - lastRegisteredAt < REGISTER_THROTTLE_MS) return currentToken;
 
@@ -148,6 +180,7 @@ export async function unregisterDevice(): Promise<void> {
   } finally {
     currentToken = null;
     lastRegisteredAt = 0;
+    lastDeviceToken = null;
   }
 }
 

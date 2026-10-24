@@ -8,6 +8,7 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withRepeat,
   withSequence,
   withTiming,
@@ -31,7 +32,7 @@ import { STREAK_BADGES_DATA, StreakBadgeImage, type StreakBadgeItem } from './St
 // mounted in the root layout); <StreakBadgeShowcaseModal /> and
 // <StreakBadgeShowcase /> are there for screens that manage it themselves.
 
-const ORANGE = '#F66F28';
+const ORANGE = '#FE5B01';
 const STONE = '#1B1C21';
 const STONE_EDGE = '#34353D';
 
@@ -59,8 +60,6 @@ const BADGE_COPY: Record<number, { sealed: string; unlocked: string }> = {
 
 const TAPS_TO_OPEN = 3;
 
-/** The reward screens' button color. */
-const REWARD_BUTTON = '#FE5B01';
 
 // Vertical layout (points), matching the reward screens: the copy sits just
 // under the ✕, the badge is centered in the space left, and the button keeps
@@ -74,6 +73,15 @@ const BUTTON_BOTTOM_GAP = 48;
 const BLOCK_GAP = 20;
 /** Room under the badge for the "TAP TO CRACK" prompt, as a share of the badge size. */
 const PROMPT_SPACE = 0.32;
+
+// Opening → the badge flies from its home slot to the center, the stone seal
+// locks over it, then the vault fades in around it (ms).
+const INTRO_FLY_MS = 850;
+const INTRO_SEAL_MS = 520;
+const INTRO_REVEAL_MS = 480;
+/** How long to wait for the home slot before opening without the flight. */
+const INTRO_SOURCE_TIMEOUT_MS = 1500;
+const INTRO_ARC = 90;
 
 // Continue → fly to the home badge slot (ms).
 const FLY_MS = 760;
@@ -326,6 +334,101 @@ const Ember: React.FC<{ ember: (typeof EMBERS)[number]; width: number; height: n
   );
 };
 
+/**
+ * Opening: Home dims, the badge leaves its home slot and arcs to the center,
+ * then stone closes over it (flash, shake) — the seal locks. It's drawn at
+ * the center slot's size and position, so the vault fading in on top lines
+ * up exactly.
+ */
+const IntroFlight: React.FC<{
+  badge: StreakBadgeItem;
+  accent: string;
+  from: FlightRect;
+  to: FlightRect;
+  dim: SharedValue<number>;
+  fly: SharedValue<number>;
+  seal: SharedValue<number>;
+  reveal: SharedValue<number>;
+}> = ({ badge, accent, from, to, dim, fly, seal, reveal }) => {
+  const dx = from.x + from.width / 2 - (to.x + to.width / 2);
+  const dy = from.y + from.height / 2 - (to.y + to.height / 2);
+  const startScale = Math.max(0.15, Math.min(from.width, from.height) / to.width);
+
+  const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value * 0.78 * (1 - reveal.value) }));
+  const layerStyle = useAnimatedStyle(() => ({ opacity: 1 - reveal.value }));
+
+  const badgeStyle = useAnimatedStyle(() => {
+    const f = fly.value;
+    const e = cubicOut(f);
+    // A heavy settle: a short shake while the seal closes.
+    const jolt = seal.value > 0 && seal.value < 1 ? Math.sin(seal.value * Math.PI * 7) * (1 - seal.value) * 7 : 0;
+    const settle = interpolate(seal.value, [0, 0.18, 0.5, 1], [1, 0.92, 1.03, 1], clamp);
+    return {
+      transform: [
+        { translateX: dx * (1 - e) + jolt },
+        { translateY: dy * (1 - e) - INTRO_ARC * Math.sin(Math.PI * f) },
+        { scale: (startScale + (1 - startScale) * e) * (1 + 0.1 * Math.sin(Math.PI * f)) * settle },
+      ],
+    };
+  });
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(fly.value, [0, 0.3, 1], [0.2, 0.85, 0.6], clamp) * (1 - seal.value * 0.75),
+  }));
+  const stoneStyle = useAnimatedStyle(() => ({ opacity: interpolate(seal.value, [0, 0.35], [0, 1], clamp) }));
+  const flashStyle = useAnimatedStyle(() => ({ opacity: interpolate(seal.value, [0, 0.08, 0.45], [0, 0.85, 0], clamp) }));
+  const ringStyle = useAnimatedStyle(() => {
+    const u = interpolate(seal.value, [0.02, 0.7], [0, 1], clamp);
+    return { opacity: u > 0 && u < 1 ? (1 - u) * 0.8 : 0, transform: [{ scale: 0.7 + cubicOut(u) * 0.9 }] };
+  });
+
+  const box = { position: 'absolute' as const, left: to.x, top: to.y, width: to.width, height: to.height };
+
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, layerStyle]} pointerEvents="none">
+      <Animated.View style={[StyleSheet.absoluteFill, styles.introDim, dimStyle]} />
+      <Animated.View style={[box, badgeStyle]}>
+        <Animated.View style={[styles.slotGlow, { width: to.width * 1.7, height: to.width * 1.7, left: -to.width * 0.35, top: -to.width * 0.35 }, glowStyle]}>
+          <Svg width="100%" height="100%" viewBox="0 0 100 100">
+            <Defs>
+              <RadialGradient id="sbIntroGlow" cx="50%" cy="50%" r="50%">
+                <Stop offset="0" stopColor={accent} stopOpacity={0.75} />
+                <Stop offset="0.5" stopColor={accent} stopOpacity={0.2} />
+                <Stop offset="1" stopColor={accent} stopOpacity={0} />
+              </RadialGradient>
+            </Defs>
+            <Circle cx={50} cy={50} r={50} fill="url(#sbIntroGlow)" />
+          </Svg>
+        </Animated.View>
+        <StreakBadgeImage badge={badge} style={styles.fill} />
+        {/* The seal: same stone as the vault's sealed badge */}
+        <Animated.View style={[StyleSheet.absoluteFill, stoneStyle]}>
+          <StreakBadgeImage badge={badge} style={[styles.fill, { transform: [{ translateY: -2 }] }]} tintColor={STONE_EDGE} />
+          <StreakBadgeImage badge={badge} style={[StyleSheet.absoluteFill, styles.fill]} tintColor={STONE} />
+          <StreakBadgeImage badge={badge} style={[StyleSheet.absoluteFill, styles.fill]} tintColor={STONE} />
+          <StreakBadgeImage badge={badge} style={[StyleSheet.absoluteFill, styles.fill, { opacity: 0.09 }]} />
+        </Animated.View>
+        <Animated.View style={[styles.slotGlow, { width: to.width * 1.4, height: to.width * 1.4, left: -to.width * 0.2, top: -to.width * 0.2 }, flashStyle]}>
+          <Svg width="100%" height="100%" viewBox="0 0 100 100">
+            <Defs>
+              <RadialGradient id="sbIntroFlash" cx="50%" cy="50%" r="50%">
+                <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.9} />
+                <Stop offset="0.5" stopColor={accent} stopOpacity={0.4} />
+                <Stop offset="1" stopColor={accent} stopOpacity={0} />
+              </RadialGradient>
+            </Defs>
+            <Circle cx={50} cy={50} r={50} fill="url(#sbIntroFlash)" />
+          </Svg>
+        </Animated.View>
+        <Animated.View style={[StyleSheet.absoluteFill, ringStyle]}>
+          <Svg width="100%" height="100%" viewBox="0 0 100 100">
+            <Circle cx={50} cy={50} r={46} stroke={accent} strokeWidth={2} fill="none" />
+          </Svg>
+        </Animated.View>
+      </Animated.View>
+    </Animated.View>
+  );
+};
+
 /** The badge lifting off, flying along an arc with a trail, and landing in its slot. */
 const FlyingBadge: React.FC<{
   badge: StreakBadgeItem;
@@ -485,7 +588,10 @@ export interface StreakBadgeShowcaseProps {
   /** Called by the button once the badge is open. */
   onContinue?: (badge: StreakBadgeItem) => void;
   continueLabel?: string;
-  /** The ✕ button; hidden when not given. */
+  /**
+   * The ✕ button (and Android back); hidden when not given. The earned-badge
+   * popup leaves it out, so the badge has to be cracked open to move on.
+   */
   onClose?: () => void;
   /**
    * When given, Continue flies the badge to this spot (window coordinates,
@@ -494,6 +600,12 @@ export interface StreakBadgeShowcaseProps {
   getFlightTarget?: (badge: StreakBadgeItem) => Promise<FlightRect | null>;
   /** Called the moment the flying badge lands. */
   onLanded?: (badge: StreakBadgeItem) => void;
+  /**
+   * When given, the popup opens with the badge flying from this spot (window
+   * coordinates, e.g. its home slot) to the center, where the seal locks over
+   * it before the vault fades in. Opens straight away if it can't be found.
+   */
+  getIntroSource?: (badge: StreakBadgeItem) => Promise<FlightRect | null>;
   sound?: boolean;
   haptics?: boolean;
 }
@@ -507,6 +619,7 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   onClose,
   getFlightTarget,
   onLanded,
+  getIntroSource,
   sound = true,
   haptics = true,
 }) => {
@@ -514,6 +627,7 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   const insets = useSafeAreaInsets();
   const [stageHeight, setStageHeight] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(110);
+  const [headerMeasured, setHeaderMeasured] = useState(false);
   const [taps, setTaps] = useState(0);
   const [unlockedAt, setUnlockedAt] = useState<Date | null>(null);
 
@@ -582,7 +696,8 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   const rootRef = useRef<View>(null);
   const [leaving, setLeaving] = useState(false);
   const [flight, setFlight] = useState<{ from: FlightRect; to: FlightRect | null } | null>(null);
-  const sceneFade = useSharedValue(1);
+  // Hidden while the opening flight plays.
+  const sceneFade = useSharedValue(getIntroSource ? 0 : 1);
   const lift = useSharedValue(0);
   const fly = useSharedValue(0);
   const land = useSharedValue(0);
@@ -676,8 +791,10 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   const spacing = width / 2 + size * 0.12;
   const dragStart = useSharedValue(0);
   const shattering = taps >= TAPS_TO_OPEN && !opened;
+  // Browsing waits for the opening flight (state for it is declared below).
+  const introFinishedRef = useRef(!getIntroSource);
   const pan = Gesture.Pan()
-    .enabled(!shattering)
+    .enabled(!shattering && !(getIntroSource && !introFinishedRef.current))
     .activeOffsetX([-12, 12])
     .failOffsetY([-14, 14])
     .onStart(() => {
@@ -708,7 +825,7 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   const step = (dir: number) => setViewIndex((v) => Math.min(last, Math.max(0, v + dir)));
   const rowTop = stageTop;
   const sideTap = Gesture.Tap()
-    .enabled(!shattering)
+    .enabled(!shattering && !(getIntroSource && !introFinishedRef.current))
     .maxDistance(10)
     .onEnd((e, success) => {
       if (!success || e.y < rowTop || e.y > rowTop + size) return;
@@ -723,7 +840,73 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   const bgW = Math.max(width, 1);
   const bgH = (bgW * VAULT_BG_H) / VAULT_BG_W;
   const bgTop = restY - (bgW * VAULT_BG_PLINTH_Y) / VAULT_BG_W;
-  const showTapPrompt = viewingCurrent && !opened && taps < TAPS_TO_OPEN;
+  // Opening flight (see IntroFlight). Waits for the layout so the center
+  // slot's position is final, then for the home slot to be found.
+  const [intro, setIntro] = useState<'pending' | 'playing' | 'done'>(getIntroSource ? 'pending' : 'done');
+  const [introRects, setIntroRects] = useState<{ from: FlightRect; to: FlightRect } | null>(null);
+  const introDim = useSharedValue(0);
+  const introFly = useSharedValue(0);
+  const introSeal = useSharedValue(0);
+  const introReveal = useSharedValue(0);
+  const introStarted = useRef(false);
+
+  const showScene = () => {
+    sceneFade.value = withTiming(1, { duration: INTRO_REVEAL_MS, easing: Easing.out(Easing.quad) });
+  };
+  const finishIntro = () => {
+    introFinishedRef.current = true;
+    setIntro('done');
+  };
+  const introSealed = () => {
+    showScene();
+    introReveal.value = withTiming(1, { duration: INTRO_REVEAL_MS, easing: Easing.out(Easing.quad) }, (done) => {
+      if (done) runOnJS(finishIntro)();
+    });
+  };
+  const introArrived = () => {
+    buzz('heavy');
+    play(crackSound);
+    introSeal.value = withTiming(1, { duration: INTRO_SEAL_MS, easing: Easing.out(Easing.quad) }, (done) => {
+      if (done) runOnJS(introSealed)();
+    });
+  };
+
+  useEffect(() => {
+    if (intro !== 'pending' || !getIntroSource || stageHeight === 0 || !headerMeasured || introStarted.current) return;
+    introStarted.current = true;
+    let cancelled = false;
+    (async () => {
+      const origin = await measureInWindow(rootRef.current);
+      const to = { x: (origin?.x ?? 0) + width / 2 - size / 2, y: (origin?.y ?? 0) + stageTop, width: size, height: size };
+      const from = await Promise.race([
+        getIntroSource(STREAK_BADGES_DATA[currentIndex]).catch(() => null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), INTRO_SOURCE_TIMEOUT_MS)),
+      ]);
+      if (cancelled) return;
+      if (!from) {
+        // Home slot not found: open the vault without the flight.
+        showScene();
+        finishIntro();
+        return;
+      }
+      setIntroRects({ from, to });
+      setIntro('playing');
+      introDim.value = withTiming(1, { duration: 280 });
+      introFly.value = withDelay(
+        140,
+        withTiming(1, { duration: INTRO_FLY_MS, easing: Easing.inOut(Easing.cubic) }, (done) => {
+          if (done) runOnJS(introArrived)();
+        })
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, when the layout is ready
+  }, [intro, stageHeight, headerMeasured]);
+
+  const introDone = intro === 'done';
+  const showTapPrompt = introDone && viewingCurrent && !opened && taps < TAPS_TO_OPEN;
 
   return (
     <GestureDetector gesture={browse}>
@@ -779,7 +962,7 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
               </View>
 
               {/* Tap target over the center badge */}
-              {viewingCurrent && !opened && (
+              {introDone && viewingCurrent && !opened && (
                 <Pressable
                   style={{ position: 'absolute', left: width / 2 - size / 2, top: stageTop, width: size, height: size }}
                   onPress={tapStone}
@@ -801,7 +984,10 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
         <Animated.View
           style={[styles.header, { top: headerTop }, textStyle]}
           pointerEvents="none"
-          onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+          onLayout={(e) => {
+            setHeaderHeight(e.nativeEvent.layout.height);
+            setHeaderMeasured(true);
+          }}
         >
           <Text style={styles.title}>{badge.title}</Text>
           <Text style={styles.subtitle}>{viewState === 'unlocked' ? copy.unlocked : copy.sealed}</Text>
@@ -837,6 +1023,19 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
         )}
         </Animated.View>
 
+        {intro === 'playing' && introRects && (
+          <IntroFlight
+            badge={STREAK_BADGES_DATA[currentIndex]}
+            accent={BADGE_ACCENT[STREAK_BADGES_DATA[currentIndex].id] || ORANGE}
+            from={introRects.from}
+            to={introRects.to}
+            dim={introDim}
+            fly={introFly}
+            seal={introSeal}
+            reveal={introReveal}
+          />
+        )}
+
         {flight && (
           <FlyingBadge badge={badge} accent={accent} from={flight.from} to={flight.to} lift={lift} fly={fly} land={land} />
         )}
@@ -849,12 +1048,15 @@ export interface StreakBadgeShowcaseModalProps extends StreakBadgeShowcaseProps 
   visible: boolean;
 }
 
+const ignoreBack = () => {};
+
 /**
  * Popup version: fades in over the current screen and starts fresh each time
- * it opens. Android's back button calls `onClose`.
+ * it opens. Android's back button calls `onClose`, and does nothing when
+ * there's no ✕ (the badge has to be opened and continued).
  */
 export const StreakBadgeShowcaseModal: React.FC<StreakBadgeShowcaseModalProps> = ({ visible, ...props }) => (
-  <Modal visible={visible} animationType="fade" transparent={true} statusBarTranslucent={true} onRequestClose={props.onClose}>
+  <Modal visible={visible} animationType="fade" transparent={true} statusBarTranslucent={true} onRequestClose={props.onClose ?? ignoreBack}>
     {/* Gestures inside a Modal need their own root on Android */}
     <GestureHandlerRootView style={styles.modalRoot}>
       <StreakBadgeShowcase {...props} />
@@ -868,6 +1070,9 @@ const styles = StyleSheet.create({
   },
   modalRoot: {
     flex: 1,
+  },
+  introDim: {
+    backgroundColor: '#000000',
   },
   closeBtn: {
     position: 'absolute',
@@ -984,12 +1189,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: REWARD_BUTTON,
+    backgroundColor: '#FFFFFF',
   },
   buttonText: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 17,
     letterSpacing: -0.43,
-    color: '#FFFFFF',
+    color: '#0D0F12',
   },
 });

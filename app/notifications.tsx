@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -18,6 +19,12 @@ import { Screen } from '@/components/common/Screen';
 import { Skeleton } from '@/components/common/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchNotifications, markNotificationsRead } from '@/services/api/notifications.service';
+import {
+  getPushPermission,
+  requestPushPermission,
+  registerDeviceIfPermitted,
+  type PushPermission,
+} from '@/services/notifications/push';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { palette } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
@@ -27,22 +34,22 @@ import { formatRelativeTime } from '@/utils/formatters';
 type IconName = keyof typeof Ionicons.glyphMap;
 
 const TYPE_ICON: Record<string, { icon: IconName; color: string }> = {
-  DAILY_MOTIVATION:   { icon: 'flash-outline',          color: palette.gold },
-  TASK_REMINDER:      { icon: 'list-outline',           color: palette.gold },
-  NEW_QUEST:          { icon: 'compass-outline',        color: palette.gold },
-  STREAK_AT_RISK:     { icon: 'flame',                  color: palette.red },
-  STREAK_MILESTONE:   { icon: 'flame',                  color: palette.orange },
-  STREAK_FREEZE_USED: { icon: 'shield-half-outline',    color: palette.blue },
-  MONTHLY_FREEZE:     { icon: 'snow-outline',           color: palette.blue },
-  STREAK_BROKEN:      { icon: 'heart-dislike-outline',  color: palette.red },
-  LEVEL_UP:           { icon: 'sparkles-outline',       color: palette.purple },
-  REWARD_READY:       { icon: 'gift-outline',           color: palette.green },
-  FRIEND_JOINED:      { icon: 'people-outline',         color: palette.blue },
-  LEADERBOARD_UPDATE: { icon: 'podium-outline',         color: palette.silver },
-  BROADCAST:          { icon: 'megaphone-outline',      color: palette.silver },
-  FEEDBACK_UPDATE:    { icon: 'chatbox-ellipses-outline', color: palette.green },
-  HEALTH_SYNC:        { icon: 'pulse-outline',          color: palette.red },
-  WIN_BACK:           { icon: 'hourglass-outline',      color: palette.gold },
+  DAILY_MOTIVATION: { icon: 'flash-outline', color: palette.gold },
+  TASK_REMINDER: { icon: 'list-outline', color: palette.gold },
+  NEW_QUEST: { icon: 'compass-outline', color: palette.gold },
+  STREAK_AT_RISK: { icon: 'flame', color: palette.red },
+  STREAK_MILESTONE: { icon: 'flame', color: palette.orange },
+  STREAK_FREEZE_USED: { icon: 'shield-half-outline', color: palette.blue },
+  MONTHLY_FREEZE: { icon: 'snow-outline', color: palette.blue },
+  STREAK_BROKEN: { icon: 'heart-dislike-outline', color: palette.red },
+  LEVEL_UP: { icon: 'sparkles-outline', color: palette.purple },
+  REWARD_READY: { icon: 'gift-outline', color: palette.green },
+  FRIEND_JOINED: { icon: 'people-outline', color: palette.blue },
+  LEADERBOARD_UPDATE: { icon: 'podium-outline', color: palette.silver },
+  BROADCAST: { icon: 'megaphone-outline', color: palette.silver },
+  FEEDBACK_UPDATE: { icon: 'chatbox-ellipses-outline', color: palette.green },
+  HEALTH_SYNC: { icon: 'pulse-outline', color: palette.red },
+  WIN_BACK: { icon: 'hourglass-outline', color: palette.gold },
 };
 const DEFAULT_ICON = { icon: 'notifications-outline' as IconName, color: palette.silver };
 
@@ -57,7 +64,25 @@ export default function NotificationsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [pushPermission, setPushPermission] = useState<PushPermission>('unsupported');
   const loadingMoreRef = useRef(false);
+
+  useEffect(() => {
+    getPushPermission().then(setPushPermission).catch(() => { });
+  }, []);
+
+  const handleEnablePushFromBanner = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
+    if (pushPermission === 'denied') {
+      Linking.openSettings().catch(() => { });
+      return;
+    }
+    const result = await requestPushPermission();
+    setPushPermission(result);
+    if (result === 'granted') {
+      registerDeviceIfPermitted({ force: true }).catch(() => { });
+    }
+  }, [pushPermission]);
 
   const loadFirstPage = useCallback(async () => {
     try {
@@ -99,11 +124,11 @@ export default function NotificationsScreen() {
   }, [nextCursor]);
 
   const handlePressItem = useCallback(async (item: AppNotification) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
     if (!item.is_read) {
       setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n)));
       setUnreadCount(unreadCount - 1);
-      markNotificationsRead([item.id]).then(setUnreadCount).catch(() => {});
+      markNotificationsRead([item.id]).then(setUnreadCount).catch(() => { });
     }
     if (item.url) {
       router.push(item.url as Href);
@@ -111,10 +136,10 @@ export default function NotificationsScreen() {
   }, [setUnreadCount, unreadCount]);
 
   const handleMarkAllRead = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
     setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
-    markNotificationsRead('all').then(setUnreadCount).catch(() => {});
+    markNotificationsRead('all').then(setUnreadCount).catch(() => { });
   }, [setUnreadCount]);
 
   const navigateBack = () => {
@@ -176,6 +201,30 @@ export default function NotificationsScreen() {
           <View style={styles.headerAction} />
         )}
       </View>
+
+      {/* Push Notification Opt-in Banner if disabled */}
+      {pushPermission !== 'granted' && pushPermission !== 'unsupported' && (
+        <TouchableOpacity
+          style={styles.pushBanner}
+          onPress={handleEnablePushFromBanner}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="notifications-outline" size={20} color="#FE5B01" />
+          <View style={styles.pushBannerTextGroup}>
+            <Text style={styles.pushBannerTitle}>
+              {pushPermission === 'denied' ? 'Notifications are off on device' : 'Push notifications are off'}
+            </Text>
+            <Text style={styles.pushBannerSubtitle}>
+              {pushPermission === 'denied'
+                ? 'Tap to allow alerts in phone settings'
+                : 'Turn on alerts so streak & reward drops can reach you'}
+            </Text>
+          </View>
+          <Text style={styles.pushBannerAction}>
+            {pushPermission === 'denied' ? 'Settings' : 'Enable'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {isInitialLoading ? (
         <View style={styles.skeletonList}>
@@ -369,11 +418,46 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: palette.gold,
+    borderColor: '#3F3F46',
   },
   retryText: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 14,
-    color: palette.gold,
+    color: '#FFFFFF',
+  },
+  pushBanner: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(254, 91, 1, 0.08)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(254, 91, 1, 0.35)',
+    padding: 12,
+  },
+  pushBannerTextGroup: {
+    flex: 1,
+    gap: 2,
+  },
+  pushBannerTitle: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13,
+    color: '#F4F5F6',
+  },
+  pushBannerSubtitle: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 11.5,
+    color: '#8D98A3',
+    lineHeight: 15,
+  },
+  pushBannerAction: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13,
+    color: '#FE5B01',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
   },
 });

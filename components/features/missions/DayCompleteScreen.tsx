@@ -135,11 +135,11 @@ function TaskRowAnimated({ quest, index }: TaskRowAnimatedProps) {
       <View style={styles.rowLeftGroup}>
         {isCompleted ? (
           <View style={styles.checkIconCircle}>
-            <Ionicons name="checkmark" size={12} color="#FFA726" />
+            <Ionicons name="checkmark" size={12} color="#FE5B01" />
           </View>
         ) : (
           <View style={styles.pendingIconSquare}>
-            <Ionicons name="square-outline" size={13} color="#FFA726" />
+            <Ionicons name="square-outline" size={13} color="#FE5B01" />
           </View>
         )}
         <View style={styles.verticalDivider} />
@@ -387,7 +387,7 @@ export function DayCompleteScreen({ quests, onContinue }: DayCompleteScreenProps
             <View style={styles.cardHeaderRow}>
               <View style={styles.dateGroup}>
                 <View style={styles.calendarSquare}>
-                  <Ionicons name="calendar-outline" size={14} color="#FFA726" />
+                  <Ionicons name="calendar-outline" size={14} color="#FE5B01" />
                 </View>
                 <Text style={styles.dateText}>{dateFormatted}</Text>
               </View>
@@ -395,7 +395,7 @@ export function DayCompleteScreen({ quests, onContinue }: DayCompleteScreenProps
               {/* HunterX Counter Badge */}
               <View style={styles.lifeResetCard}>
                 <View style={styles.lifeResetHeader}>
-                  <Ionicons name="flash" size={10} color="#FFA726" />
+                  <Ionicons name="flash" size={10} color="#FE5B01" />
                   <Text style={styles.lifeResetLabel}>HunterX</Text>
                 </View>
                 <Text style={styles.lifeResetDays}>9</Text>
@@ -412,7 +412,7 @@ export function DayCompleteScreen({ quests, onContinue }: DayCompleteScreenProps
 
             {/* Progress Bar Header */}
             <View style={styles.progressHeaderRow}>
-              <Ionicons name="checkmark-circle" size={16} color="#FFA726" />
+              <Ionicons name="checkmark-circle" size={16} color="#FE5B01" />
               <Text style={styles.progressText}>
                 {completedQuests.length} TASKS COMPLETED
               </Text>
@@ -454,7 +454,7 @@ export function DayCompleteScreen({ quests, onContinue }: DayCompleteScreenProps
                 style={styles.secondaryShareBtn}
                 onPress={handleSharePress}
               >
-                <Ionicons name="share-outline" size={16} color="#FFA726" />
+                <Ionicons name="share-outline" size={16} color="#FE5B01" />
                 <Text style={styles.secondaryShareText}>SHARE</Text>
               </Pressable>
             </Animated.View>
@@ -500,8 +500,8 @@ const styles = StyleSheet.create({
   emberParticle: {
     position: 'absolute',
     bottom: 50,
-    backgroundColor: '#FFA726',
-    shadowColor: '#FFA726',
+    backgroundColor: '#FE5B01',
+    shadowColor: '#FE5B01',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 6,
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 15, 18, 0.88)',
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(255, 167, 38, 0.18)',
+    borderColor: 'rgba(254, 91, 1, 0.18)',
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
   },
   amberXpHighlight: {
     fontFamily: fontFamilies.bold,
-    color: '#FFA726',
+    color: '#FE5B01',
   },
 
   /* Card Header Info Row */
@@ -570,16 +570,16 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 6,
-    backgroundColor: 'rgba(255, 167, 38, 0.12)',
+    backgroundColor: 'rgba(254, 91, 1, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 167, 38, 0.3)',
+    borderColor: 'rgba(254, 91, 1, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   dateText: {
     fontFamily: fontFamilies.bold,
     fontSize: 10,
-    color: '#FFA726',
+    color: '#FE5B01',
     letterSpacing: 0.8,
   },
 
@@ -587,9 +587,9 @@ const styles = StyleSheet.create({
   lifeResetCard: {
     width: 50,
     height: 50,
-    backgroundColor: 'rgba(255, 167, 38, 0.08)',
+    backgroundColor: 'rgba(254, 91, 1, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 167, 38, 0.25)',
+    borderColor: 'rgba(254, 91, 1, 0.25)',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
   lifeResetDays: {
     fontFamily: fontFamilies.bold,
     fontSize: 16,
-    color: '#FFA726',
+    color: '#FE5B01',
     lineHeight: 18,
   },
   lifeResetSubtext: {
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
   accentSparkles: {
     fontFamily: fontFamilies.bold,
     fontSize: 13,
-    color: '#FFA726',
+    color: '#FE5B01',
     marginLeft: 4,
   },
   perfectDaySubtext: {
@@ -668,9 +668,9 @@ const styles = StyleSheet.create({
   progressFill: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#FFA726',
+    backgroundColor: '#FE5B01',
     borderRadius: 2,
-    shadowColor: '#FFA726',
+    shadowColor: '#FE5B01',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 6,
@@ -703,8 +703,8 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
     borderWidth: 1.5,
-    borderColor: '#FFA726',
-    backgroundColor: 'rgba(255, 167, 38, 0.1)',
+    borderColor: '#FE5B01',
+    backgroundColor: 'rgba(254, 91, 1, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -713,8 +713,8 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 5,
     borderWidth: 1.5,
-    borderColor: '#FFA726',
-    backgroundColor: 'rgba(255, 167, 38, 0.05)',
+    borderColor: '#FE5B01',
+    backgroundColor: 'rgba(254, 91, 1, 0.05)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -747,7 +747,7 @@ const styles = StyleSheet.create({
   taskXpText: {
     fontFamily: fontFamilies.bold,
     fontSize: 12,
-    color: '#FFA726',
+    color: '#FE5B01',
   },
 
   /* Bottom Actions Container */
@@ -767,7 +767,7 @@ const styles = StyleSheet.create({
     maxWidth: 340,
   },
   primaryContinueBtn: {
-    backgroundColor: '#FFA726',
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -776,7 +776,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     elevation: 4,
-    shadowColor: '#FFA726',
+    shadowColor: '#FFFFFF',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -789,7 +789,7 @@ const styles = StyleSheet.create({
   },
   secondaryShareBtn: {
     borderWidth: 1.5,
-    borderColor: '#FFA726',
+    borderColor: '#FE5B01',
     backgroundColor: 'rgba(10, 10, 10, 0.6)',
     borderRadius: 24,
     paddingVertical: 11,
@@ -802,7 +802,7 @@ const styles = StyleSheet.create({
   secondaryShareText: {
     fontFamily: fontFamilies.bold,
     fontSize: 13,
-    color: '#FFA726',
+    color: '#FE5B01',
     letterSpacing: 0.8,
   },
 });

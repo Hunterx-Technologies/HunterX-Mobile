@@ -113,8 +113,8 @@ export function RecentActivityModal({
         label: 'CURRENT STREAK',
         value: currentStreakPadded,
         subtitle: 'DAYS ACTIVE',
-        icon: <MaterialCommunityIcons name="fire" size={18} color="#FF7A00" />,
-        accentColor: '#FF7A00',
+        icon: <MaterialCommunityIcons name="fire" size={18} color="#FE5B01" />,
+        accentColor: '#FE5B01',
       },
     ],
     [

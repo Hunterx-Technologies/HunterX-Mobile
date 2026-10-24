@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   centeredCloseBtn: {
-    backgroundColor: '#FE5B01',
+    backgroundColor: '#27272A',
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 28,

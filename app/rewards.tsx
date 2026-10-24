@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,28 +6,29 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  Share,
   Clipboard,
   Dimensions,
-  Image,
   BackHandler,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter, Redirect } from 'expo-router';
+import { useRouter, Redirect, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 
-import { ScratchCard, ScratchRarity } from '../components/features/ScratchCard';
+import { ScratchCard, ScratchRarity, type ScratchCardStatus } from '../components/features/ScratchCard';
 import { HunterXCard } from '../components/features/HunterXCard';
 import { HunterXEmblem } from '../components/features/HunterXEmblem';
 import { RewardRevealModal } from '../components/features/RewardRevealModal';
-import { TopographyPattern } from '../components/ui/TopographyPattern';
+import { RewardProductImage, REWARD_IMAGE_WIDTH } from '../components/features/reward/RewardProductImage';
 import { fontFamilies } from '../theme/typography';
 import { useAuth } from '@/hooks/useAuth';
+import { fetchRewards, markRewardUsed, scratchReward } from '@/services/api/rewards.service';
+import { showGlobalToast } from '@/store/useToastStore';
+import { hasPrize, rewardOriginLabel, type RewardTab, type RevealedReward, type UserReward } from '@/types/reward';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_CARD_WIDTH = (SCREEN_WIDTH - 32 - 14) / 2;
@@ -36,7 +37,11 @@ const GRID_CARD_HEIGHT = GRID_CARD_WIDTH * 1.54;
 const CENTER_CARD_WIDTH = Math.min(SCREEN_WIDTH - 48, 310);
 const CENTER_CARD_HEIGHT = CENTER_CARD_WIDTH * 1.52;
 
-export type WalletTab = 'ACTIVE' | 'USED' | 'EXPIRED';
+const TABS: RewardTab[] = ['ACTIVE', 'USED', 'EXPIRED'];
+/** Start loading the next page this far (px) before the end of the list. */
+const LOAD_MORE_OFFSET = 400;
+
+export type WalletTab = RewardTab;
 
 export interface CouponReward {
   id: string;
@@ -47,9 +52,10 @@ export interface CouponReward {
   subtitle?: string;
   productName: string;
   productCategory: string;
-  productIcon: keyof typeof MaterialCommunityIcons.glyphMap;
   productImageUrl?: string;
   expiresIn: string;
+  /** Long-form expiry for the details screen, e.g. "October 9, 2026"; null = no expiry. */
+  expiryDate: string | null;
   code: string;
   isScratched: boolean;
   isUsed: boolean;
@@ -57,169 +63,80 @@ export interface CouponReward {
   rarity?: ScratchRarity;
 }
 
-const INITIAL_COUPONS: CouponReward[] = [
-  {
-    id: '1',
-    badge: '$25 AMAZON VOUCHER',
-    badgeType: 'voucher',
-    iconName: 'amazon',
-    title: 'AMAZON FITNESS STORE',
-    subtitle: 'Redeemable on Gym & Fitness Gear',
-    productName: 'Pro Resistance Bands Set (5-Pack)',
-    productCategory: 'Strength & Mobility Kit',
-    productIcon: 'dumbbell',
-    productImageUrl: 'https://images.unsplash.com/photo-1598289431512-b97b0917affc?q=80&w=400&auto=format&fit=crop',
-    expiresIn: '47:59:12',
-    code: 'AMZ-BAND-25',
-    isScratched: false,
-    isUsed: false,
-    isExpired: false,
-    rarity: 'legendary',
-  },
-  {
-    id: '2',
-    badge: '$50 AMAZON VOUCHER',
-    badgeType: 'voucher',
-    iconName: 'amazon',
-    title: 'AMAZON FITNESS STORE',
-    subtitle: 'Redeemable on Gym & Fitness Gear',
-    productName: 'Stainless Steel Gym Shaker 750ml',
-    productCategory: 'Hydration & Nutrition Gear',
-    productIcon: 'bottle-tonic-outline',
-    productImageUrl: 'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?q=80&w=400&auto=format&fit=crop',
-    expiresIn: '23:14:00',
-    code: 'AMZ-SHAKE-50',
-    isScratched: false,
-    isUsed: false,
-    isExpired: false,
-    rarity: 'legendary',
-  },
-  {
-    id: '3',
-    badge: '$20 AMAZON VOUCHER',
-    badgeType: 'voucher',
-    iconName: 'amazon',
-    title: 'AMAZON FITNESS STORE',
-    subtitle: 'Redeemable on Gym & Fitness Gear',
-    productName: 'Heavy-Duty Grip Weightlifting Gloves',
-    productCategory: 'Lifting & Hand Protection',
-    productIcon: 'hand-back-right',
-    productImageUrl: 'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?q=80&w=400&auto=format&fit=crop',
-    expiresIn: '12:15:44',
-    code: 'AMZ-GLOVE-20',
-    isScratched: true,
-    isUsed: false,
-    isExpired: false,
-    rarity: 'epic',
-  },
-  {
-    id: '4',
-    badge: '$15 AMAZON VOUCHER',
-    badgeType: 'voucher',
-    iconName: 'amazon',
-    title: 'AMAZON FITNESS STORE',
-    subtitle: 'Redeemable on Gym & Fitness Gear',
-    productName: 'High-Speed Bearing Skipping Rope',
-    productCategory: 'Cardio & Speed Conditioning',
-    productIcon: 'lightning-bolt',
-    productImageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?q=80&w=400&auto=format&fit=crop',
-    expiresIn: '08:42:19',
-    code: 'AMZ-ROPE-15',
-    isScratched: true,
-    isUsed: false,
-    isExpired: false,
-    rarity: 'rare',
-  },
-  {
-    id: '5',
-    badge: '$30 AMAZON VOUCHER',
-    badgeType: 'voucher',
-    iconName: 'amazon',
-    title: 'AMAZON FITNESS STORE',
-    subtitle: 'Redeemable on Gym & Fitness Gear',
-    productName: 'Heavy-Duty Wrist Support Wraps',
-    productCategory: 'Powerlifting Accessories',
-    productIcon: 'arm-flex',
-    productImageUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=400&auto=format&fit=crop',
-    expiresIn: 'REDEEMED',
-    code: 'AMZ-WRIST-30',
-    isScratched: true,
-    isUsed: true,
-    isExpired: false,
-    rarity: 'epic',
-  },
-  {
-    id: '6',
-    badge: '$10 AMAZON VOUCHER',
-    badgeType: 'voucher',
-    iconName: 'amazon',
-    title: 'AMAZON FITNESS STORE',
-    subtitle: 'Redeemable on Gym & Fitness Gear',
-    productName: 'Electrolyte & Hydration Pack (30ct)',
-    productCategory: 'Recovery Fuel & Minerals',
-    productIcon: 'pill',
-    productImageUrl: 'https://images.unsplash.com/photo-1546483875-ad9014c88eba?q=80&w=400&auto=format&fit=crop',
-    expiresIn: 'CLAIMED',
-    code: 'AMZ-ELECT-10',
-    isScratched: true,
-    isUsed: true,
-    isExpired: false,
-    rarity: 'common',
-  },
-  {
-    id: '7',
-    badge: '$40 AMAZON VOUCHER',
-    badgeType: 'voucher',
-    iconName: 'amazon',
-    title: 'AMAZON FITNESS STORE',
-    subtitle: 'Unopened Missed Drop',
-    productName: 'Adjustable Forearm Grip Trainer',
-    productCategory: 'Grip Strength Equipment',
-    productIcon: 'dumbbell',
-    productImageUrl: 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?q=80&w=400&auto=format&fit=crop',
-    expiresIn: 'EXPIRED',
-    code: 'AMZ-GRIP-40',
-    isScratched: false,
-    isUsed: false,
-    isExpired: true,
-    rarity: 'rare',
-  },
-  {
-    id: '8',
-    badge: '$35 AMAZON VOUCHER',
-    badgeType: 'voucher',
-    iconName: 'amazon',
-    title: 'AMAZON FITNESS STORE',
-    subtitle: 'Hunter Launch Special',
-    productName: 'Deep Tissue Muscle Foam Roller',
-    productCategory: 'Recovery & Mobility Gear',
-    productIcon: 'circle-slice-8',
-    productImageUrl: 'https://images.unsplash.com/photo-1600881333168-2ef49b341f30?q=80&w=400&auto=format&fit=crop',
-    expiresIn: 'EXPIRED',
-    code: 'AMZ-ROLL-35',
-    isScratched: true,
-    isUsed: false,
-    isExpired: true,
-    rarity: 'common',
-  },
-];
+const formatDate = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null;
+
+function formatDiscount(r: RevealedReward) {
+  if (r.discount_value == null || !r.discount_type) return r.reward_text ?? 'REWARD';
+  return r.discount_type === 'PERCENT' ? `${r.discount_value}% OFF` : `${r.currency ?? ''}${r.discount_value} OFF`;
+}
+
+/** Maps an API reward onto the wallet's card UI. Prize fields only exist once scratched. */
+export function toCouponReward(r: UserReward): CouponReward {
+  const prize = hasPrize(r) ? r : null;
+  const expiryDate = formatDate(prize?.valid_until ?? r.expires_at);
+  const isUsed = r.status === 'USED';
+  const isExpired = r.status === 'EXPIRED';
+
+  return {
+    id: r.id,
+    badge: prize ? formatDiscount(prize) : 'SCRATCH CARD',
+    badgeType: prize?.discount_type === 'PERCENT' ? 'percent' : 'voucher',
+    title: rewardOriginLabel(r),
+    subtitle: r.description ?? undefined,
+    productName: prize?.product_name ?? '',
+    productCategory: prize?.product_category ?? '',
+    productImageUrl: prize?.product_image_url,
+    expiresIn: isUsed ? 'REDEEMED' : isExpired ? 'EXPIRED' : expiryDate ? `Expires ${expiryDate}` : 'No expiry',
+    expiryDate,
+    code: prize?.code ?? '',
+    isScratched: !!prize,
+    isUsed,
+    isExpired,
+    rarity: r.rarity,
+  };
+}
+
+interface TabData {
+  items: UserReward[];
+  nextCursor: string | null;
+  loaded: boolean;
+  error: string | null;
+}
+
+const EMPTY_TAB: TabData = { items: [], nextCursor: null, loaded: false, error: null };
+
+const errorCode = (err: unknown) => (err as { code?: string } | null)?.code;
+const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message) || fallback;
 
 export default function RewardsScreen() {
   const { isAuthenticated, isBootstrapping } = useAuth();
   const router = useRouter();
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
 
-  const [coupons, setCoupons] = useState<CouponReward[]>(INITIAL_COUPONS);
   const [activeTab, setActiveTab] = useState<WalletTab>('ACTIVE');
+  const [tabs, setTabs] = useState<Record<WalletTab, TabData>>({ ACTIVE: EMPTY_TAB, USED: EMPTY_TAB, EXPIRED: EMPTY_TAB });
+  const [counts, setCounts] = useState<Record<WalletTab, number> | null>(null);
+  const [loading, setLoading] = useState<'initial' | 'refresh' | 'more' | null>(null);
 
   // Centered Active Scratch Card State (Card moves to center)
   const [activeCenterCard, setActiveCenterCard] = useState<CouponReward | null>(null);
+  const [scratchStatus, setScratchStatus] = useState<ScratchCardStatus>('locked');
+  /** Shown over the centered card; retry re-asks for the prize. */
+  const [scratchNotice, setScratchNotice] = useState<{ message: string; retry: boolean } | null>(null);
+  // One scratch request per card at a time.
+  const scratchInFlight = useRef(new Set<string>());
 
   // Coupon detail modal state (for viewing full terms on already scratched cards)
   const [selectedDetailsCard, setSelectedDetailsCard] = useState<CouponReward | null>(null);
+  const [markingUsed, setMarkingUsed] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(0);
+  // Ignores responses for a tab that were overtaken by a newer request.
+  const requestIds = useRef<Record<WalletTab, number>>({ ACTIVE: 0, USED: 0, EXPIRED: 0 });
+  const focusHandled = useRef(false);
 
   useEffect(() => {
     const onBackPress = () => {
@@ -230,6 +147,76 @@ export default function RewardsScreen() {
     return () => sub.remove();
   }, [router]);
 
+  const load = useCallback(async (tab: WalletTab, mode: 'initial' | 'refresh' | 'more', cursor?: string | null) => {
+    const requestId = ++requestIds.current[tab];
+    setLoading(mode);
+    try {
+      const page = await fetchRewards(tab, mode === 'more' ? cursor : null);
+      if (requestId !== requestIds.current[tab]) return null;
+      setTabs((prev) => ({
+        ...prev,
+        [tab]: {
+          items: mode === 'more' ? [...prev[tab].items, ...page.items] : page.items,
+          nextCursor: page.next_cursor,
+          loaded: true,
+          error: null,
+        },
+      }));
+      if (page.counts) setCounts({ ACTIVE: page.counts.active, USED: page.counts.used, EXPIRED: page.counts.expired });
+      return page.items;
+    } catch (err) {
+      if (requestId !== requestIds.current[tab]) return null;
+      setTabs((prev) => ({ ...prev, [tab]: { ...prev[tab], loaded: true, error: errorText(err, 'Could not load your rewards.') } }));
+      return null;
+    } finally {
+      if (requestId === requestIds.current[tab]) setLoading(null);
+    }
+  }, []);
+
+  const refreshTab = useCallback((tab: WalletTab) => load(tab, 'refresh'), [load]);
+
+  const openCard = useCallback((card: CouponReward) => {
+    if (card.isExpired) return;
+    Haptics.selectionAsync().catch(() => { });
+    if (!card.isScratched) {
+      setScratchStatus('locked');
+      setScratchNotice(null);
+      setActiveCenterCard(card);
+    } else {
+      setSelectedDetailsCard(card);
+    }
+  }, []);
+
+  // First load, then ?focus=<id> (from the reward screen or a push): find
+  // the card's tab and open it straight away.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      const active = await load('ACTIVE', 'initial');
+      if (cancelled || !focus || focusHandled.current) return;
+      focusHandled.current = true;
+      let match = active?.find((r) => r.id === focus);
+      let tab: WalletTab = 'ACTIVE';
+      for (const other of ['USED', 'EXPIRED'] as WalletTab[]) {
+        if (match || cancelled) break;
+        match = (await load(other, 'initial'))?.find((r) => r.id === focus);
+        tab = other;
+      }
+      if (!match || cancelled) return;
+      setActiveTab(tab);
+      openCard(toCouponReward(match));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, focus, load, openCard]);
+
+  // Other tabs load the first time they're opened (ACTIVE is loaded above).
+  useEffect(() => {
+    if (isAuthenticated && activeTab !== 'ACTIVE' && !tabs[activeTab].loaded && loading === null) load(activeTab, 'initial');
+  }, [isAuthenticated, activeTab, tabs, loading, load]);
+
   if (isBootstrapping) {
     return null;
   }
@@ -238,21 +225,18 @@ export default function RewardsScreen() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  const activeCards = coupons.filter((c) => !c.isUsed && !c.isExpired);
-  const usedCards = coupons.filter((c) => c.isUsed);
-  const expiredCards = coupons.filter((c) => c.isExpired);
+  const current = tabs[activeTab];
+  const currentCards = current.items.map(toCouponReward);
+  const tabCount = (tab: WalletTab) => counts?.[tab] ?? tabs[tab].items.length;
 
-  const getCurrentTabCards = () => {
-    switch (activeTab) {
-      case 'ACTIVE':
-        return activeCards;
-      case 'USED':
-        return usedCards;
-      case 'EXPIRED':
-        return expiredCards;
-      default:
-        return activeCards;
-    }
+  const replaceReward = (updated: UserReward) => {
+    setTabs((prev) => {
+      const next = { ...prev };
+      for (const tab of TABS) {
+        next[tab] = { ...prev[tab], items: prev[tab].items.map((r) => (r.id === updated.id ? updated : r)) };
+      }
+      return next;
+    });
   };
 
   const handleCopyCode = (code: string) => {
@@ -264,46 +248,78 @@ export default function RewardsScreen() {
     }, 2500);
   };
 
-  // Tap Scratch Card -> If unscratched, open center to scratch. If already scratched, open full reward details. (Expired cards non-interactive)
-  const handleCardPress = (card: CouponReward) => {
-    if (card.isExpired) return;
+  const closeCenterCard = () => {
+    setActiveCenterCard(null);
+    setScratchNotice(null);
+  };
 
-    Haptics.selectionAsync().catch(() => { });
-    if (!card.isScratched) {
-      setActiveCenterCard(card);
-    } else {
-      setSelectedDetailsCard(card);
+  // First touch on the foil: the backend picks (or returns the already
+  // picked) prize; it's drawn under the foil once it arrives.
+  const startScratch = async () => {
+    const card = activeCenterCard;
+    if (!card || scratchInFlight.current.has(card.id)) return;
+    scratchInFlight.current.add(card.id);
+    setScratchStatus('loading');
+    setScratchNotice(null);
+    try {
+      const revealed = await scratchReward(card.id);
+      replaceReward(revealed);
+      setActiveCenterCard((open) => (open?.id === card.id ? { ...toCouponReward(revealed), isScratched: false } : open));
+      setScratchStatus('ready');
+    } catch (err) {
+      const code = errorCode(err);
+      if (code === 'REWARD_EXPIRED' || code === 'REWARD_USED') {
+        closeCenterCard();
+        showGlobalToast(code === 'REWARD_EXPIRED' ? 'This reward has expired.' : 'This reward has already been used.', 'warning');
+        refreshTab(activeTab);
+      } else if (code === 'NO_COUPON_AVAILABLE') {
+        setScratchStatus('locked');
+        setScratchNotice({ message: 'Rewards are being restocked, try again later.', retry: false });
+      } else {
+        setScratchStatus('error');
+        setScratchNotice({ message: "Couldn't reveal your card. Check your connection.", retry: true });
+      }
+    } finally {
+      scratchInFlight.current.delete(card.id);
     }
   };
 
   // Scratch completed directly on the centered card -> Immediately show the full reward reveal screen
   const handleCenterScratchComplete = () => {
     if (!activeCenterCard) return;
-
-    const completedCard = activeCenterCard;
-    const updatedCard: CouponReward = { ...completedCard, isScratched: true };
-
+    const completedCard: CouponReward = { ...activeCenterCard, isScratched: true };
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
-    setCoupons((prev) =>
-      prev.map((c) => (c.id === completedCard.id ? updatedCard : c))
-    );
-
-    // Dismiss centered scratch layer and open the full Google Pay style reward reveal screen
-    setActiveCenterCard(null);
-    setSelectedDetailsCard(updatedCard);
+    closeCenterCard();
+    setSelectedDetailsCard(completedCard);
   };
 
   const handleBack = () => {
     router.replace('/(tabs)/profile');
   };
 
-  const handleMarkAsUsed = (cardId: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
-    setCoupons((prev) =>
-      prev.map((c) => (c.id === cardId ? { ...c, isUsed: true, expiresIn: 'REDEEMED' } : c))
-    );
-    setSelectedDetailsCard(null);
+  const handleMarkAsUsed = async (cardId: string) => {
+    setMarkingUsed(true);
+    try {
+      await markRewardUsed(cardId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
+      setSelectedDetailsCard(null);
+      showGlobalToast('Reward redeemed.', 'success');
+    } catch (err) {
+      const code = errorCode(err);
+      if (code === 'REWARD_EXPIRED') {
+        setSelectedDetailsCard(null);
+        showGlobalToast('This reward has expired.', 'warning');
+      } else {
+        showGlobalToast(errorText(err, 'Could not redeem this reward.'), 'error');
+      }
+    } finally {
+      setMarkingUsed(false);
+      // The card moves between tabs, so every tab is reloaded.
+      TABS.forEach((tab) => (tab === activeTab ? refreshTab(tab) : setTabs((prev) => ({ ...prev, [tab]: { ...prev[tab], loaded: false } }))));
+    }
   };
+
+  const showSkeleton = !current.loaded && !current.error;
 
   return (
     <View style={styles.rootView}>
@@ -336,27 +352,34 @@ export default function RewardsScreen() {
         </View>
 
         <ScrollView
-          bounces={false}
           overScrollMode="never"
           ref={scrollRef}
           contentContainerStyle={styles.scrollGridContent}
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[0]}
           scrollEventThrottle={32}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading === 'refresh'}
+              onRefresh={() => refreshTab(activeTab)}
+              tintColor="#FE5B01"
+              colors={['#FE5B01']}
+            />
+          }
           onScroll={(e) => {
-            scrollYRef.current = e.nativeEvent.contentOffset.y;
+            const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+            scrollYRef.current = contentOffset.y;
+            const nearEnd = contentOffset.y + layoutMeasurement.height >= contentSize.height - LOAD_MORE_OFFSET;
+            if (nearEnd && current.nextCursor && loading === null) load(activeTab, 'more', current.nextCursor);
           }}
         >
           {/* Sticky tabs: solid background so cards don't show through */}
           <View style={styles.stickyTabsWrap}>
             {/* SEGMENTED 3 TABS (ACTIVE, USED, EXPIRED) */}
             <View style={styles.tabBarContainer}>
-              {(['ACTIVE', 'USED', 'EXPIRED'] as WalletTab[]).map((tab) => {
+              {TABS.map((tab) => {
                 const isActive = activeTab === tab;
-                let count = 0;
-                if (tab === 'ACTIVE') count = activeCards.length;
-                if (tab === 'USED') count = usedCards.length;
-                if (tab === 'EXPIRED') count = expiredCards.length;
+                const count = tabCount(tab);
 
                 return (
                   <TouchableOpacity
@@ -385,9 +408,30 @@ export default function RewardsScreen() {
             </View>
           </View>
 
+          {/* LOADING SKELETON */}
+          {showSkeleton && (
+            <View style={styles.gridContainer}>
+              {[0, 1, 2, 3].map((i) => (
+                <View key={i} style={[styles.skeletonCard, { width: GRID_CARD_WIDTH, height: GRID_CARD_HEIGHT }]} />
+              ))}
+            </View>
+          )}
+
+          {/* ERROR STATE */}
+          {current.error && current.items.length === 0 && (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cloud-offline-outline" size={44} color="#777777" />
+              <Text style={styles.emptyTitle}>Couldn&apos;t load rewards</Text>
+              <Text style={styles.emptySub}>{current.error}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={() => load(activeTab, 'initial')} activeOpacity={0.8}>
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* 2-COLUMN SCRATCH CARD GRID */}
           <View style={styles.gridContainer}>
-            {getCurrentTabCards().map((item) => {
+            {currentCards.map((item) => {
               // 1. UNSCRATCHED CARD: Tapping moves it to the center of the screen
               if (!item.isScratched) {
                 return (
@@ -397,7 +441,7 @@ export default function RewardsScreen() {
                     height={GRID_CARD_HEIGHT}
                     isExpired={item.isExpired}
                     footerText={item.isExpired ? 'EXPIRED' : 'DRAG TO SCRATCH'}
-                    onPress={() => handleCardPress(item)}
+                    onPress={() => openCard(item)}
                   />
                 );
               }
@@ -416,26 +460,11 @@ export default function RewardsScreen() {
                     },
                     (item.isUsed || item.isExpired) && styles.dimmedCardOuter,
                   ]}
-                  onPress={() => handleCardPress(item)}
+                  onPress={() => openCard(item)}
                 >
                   {/* Top Image Section */}
                   <View style={styles.gridTopImageSection}>
-                    {item.productImageUrl ? (
-                      <Image
-                        source={{ uri: item.productImageUrl }}
-                        style={styles.gridHeroProductImg}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.gridHeroFallback}>
-                        <MaterialCommunityIcons name={item.productIcon || 'dumbbell'} size={32} color="#FF9900" />
-                      </View>
-                    )}
-
-                    {/* Top-Left Circular Brand Badge (Amazon) */}
-                    <View style={styles.gridBrandBadge}>
-                      <FontAwesome5 name="amazon" size={12} color="#0D0F12" />
-                    </View>
+                    <RewardProductImage uri={item.productImageUrl} width={REWARD_IMAGE_WIDTH.grid} />
 
                     {/* Top-Right Status Tag */}
                     <View
@@ -469,10 +498,10 @@ export default function RewardsScreen() {
                       {item.badge}
                     </Text>
                     <Text style={styles.gridOfferSubtext} numberOfLines={1}>
-                      on orders above ₹800
+                      {item.expiresIn}
                     </Text>
                     <Text style={styles.gridProductName} numberOfLines={1}>
-                      {item.productName}
+                      {item.productName || item.title}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -480,14 +509,16 @@ export default function RewardsScreen() {
             })}
           </View>
 
+          {loading === 'more' && <ActivityIndicator style={styles.loadMoreSpinner} color="#FE5B01" />}
+
           {/* EMPTY STATE */}
-          {getCurrentTabCards().length === 0 && (
+          {current.loaded && !current.error && currentCards.length === 0 && (
             <View style={styles.emptyContainer}>
               <HunterXEmblem size={64} glow={false} />
               <Text style={styles.emptyTitle}>No {activeTab.toLowerCase()} cards</Text>
               <Text style={styles.emptySub}>
                 {activeTab === 'ACTIVE'
-                  ? 'Complete daily hunter quests to earn Amazon fitness scratch cards!'
+                  ? 'Earn scratch cards at streak milestones, on level-ups and on your birthday!'
                   : activeTab === 'USED'
                     ? 'Redeemed coupons and claimed rewards will appear here.'
                     : 'Expired scratch cards and rewards will be archived here.'}
@@ -503,33 +534,44 @@ export default function RewardsScreen() {
           visible={!!activeCenterCard}
           transparent
           animationType="fade"
-          onRequestClose={() => setActiveCenterCard(null)}
+          onRequestClose={closeCenterCard}
         >
           <View style={styles.centeredCardOverlay}>
             {/* Background Backdrop (Tap outside to close) */}
             <TouchableOpacity
               style={StyleSheet.absoluteFillObject}
               activeOpacity={1}
-              onPress={() => setActiveCenterCard(null)}
+              onPress={closeCenterCard}
             />
 
             {/* The Scratch Card Centered Directly (No Dialog/Popup Chrome) */}
             {activeCenterCard && (
               <View style={styles.centeredCardContainer}>
                 <ScratchCard
+                  key={activeCenterCard.id}
                   width={CENTER_CARD_WIDTH}
                   height={CENTER_CARD_HEIGHT}
-                  isScratched={activeCenterCard.isScratched}
+                  status={scratchStatus}
+                  onScratchStart={startScratch}
                   rewardText={activeCenterCard.badge}
-                  rewardSubtitle={activeCenterCard.title}
-                  productName={activeCenterCard.productName}
-                  productCategory={activeCenterCard.productCategory}
-                  productIcon={activeCenterCard.productIcon}
+                  rewardSubtitle={activeCenterCard.expiresIn}
+                  productName={activeCenterCard.productName || activeCenterCard.title}
                   productImageUrl={activeCenterCard.productImageUrl}
-                  code={activeCenterCard.code}
+                  code={activeCenterCard.code || undefined}
                   rarity={activeCenterCard.rarity || 'legendary'}
                   onComplete={handleCenterScratchComplete}
                 />
+                {scratchNotice && (
+                  <View style={styles.scratchNotice}>
+                    <Ionicons name="alert-circle-outline" size={16} color="#FE5B01" />
+                    <Text style={styles.scratchNoticeText}>{scratchNotice.message}</Text>
+                    {scratchNotice.retry && (
+                      <TouchableOpacity onPress={startScratch} activeOpacity={0.7}>
+                        <Text style={styles.scratchNoticeRetry}>Retry</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -539,20 +581,19 @@ export default function RewardsScreen() {
         <RewardRevealModal
           visible={!!selectedDetailsCard}
           onClose={() => setSelectedDetailsCard(null)}
+          onMarkUsed={selectedDetailsCard ? () => handleMarkAsUsed(selectedDetailsCard.id) : undefined}
+          markingUsed={markingUsed}
           reward={
             selectedDetailsCard
               ? {
                 id: selectedDetailsCard.id,
-                brandName: 'Amazon',
                 offerHeading: selectedDetailsCard.badge,
-                offerSubheading: 'on Amazon Fitness orders above ₹800',
                 code: selectedDetailsCard.code,
                 productName: selectedDetailsCard.productName,
                 productCategory: selectedDetailsCard.productCategory,
                 productImageUrl: selectedDetailsCard.productImageUrl,
-                expiryDate: selectedDetailsCard.expiresIn === 'EXPIRED' ? 'Expired' : 'October 9, 2026',
-                minSpend: '₹800',
-                amazonUrl: 'https://www.amazon.com',
+                expiryDate: selectedDetailsCard.expiryDate ?? undefined,
+                description: selectedDetailsCard.subtitle,
                 isUsed: selectedDetailsCard.isUsed,
               }
               : null
@@ -630,7 +671,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(246, 111, 40, 0.25)',
+    borderColor: 'rgba(254, 91, 1, 0.25)',
     overflow: 'hidden',
   },
   statsBannerGradient: {
@@ -684,7 +725,7 @@ const styles = StyleSheet.create({
   tabItemActive: {
     backgroundColor: '#292829',
     borderWidth: 1,
-    borderColor: 'rgba(246, 111, 40, 0.6)',
+    borderColor: 'rgba(254, 91, 1, 0.6)',
   },
   tabText: {
     fontFamily: fontFamilies.bold,
@@ -702,7 +743,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   tabBadgeActive: {
-    backgroundColor: '#F66F28',
+    backgroundColor: '#FE5B01',
   },
   tabBadgeText: {
     fontFamily: fontFamilies.bold,
@@ -749,16 +790,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1C20',
     position: 'relative',
     overflow: 'hidden',
-  },
-  gridHeroProductImg: {
-    width: '100%',
-    height: '100%',
-  },
-  gridHeroFallback: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1A1C20',
   },
   gridBrandBadge: {
     position: 'absolute',
@@ -858,6 +889,52 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  retryBtn: {
+    marginTop: 4,
+    paddingHorizontal: 22,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#27272A',
+  },
+  retryBtnText: {
+    fontFamily: fontFamilies.bold,
+    color: '#FFFFFF',
+    fontSize: 13,
+    letterSpacing: 0.4,
+  },
+  skeletonCard: {
+    borderRadius: 18,
+    backgroundColor: '#16181C',
+    borderWidth: 1,
+    borderColor: '#1E2024',
+  },
+  loadMoreSpinner: {
+    marginVertical: 20,
+  },
+  scratchNotice: {
+    marginTop: 16,
+    maxWidth: CENTER_CARD_WIDTH,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#16181C',
+    borderWidth: 1,
+    borderColor: '#2A2C33',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  scratchNoticeText: {
+    flexShrink: 1,
+    fontFamily: fontFamilies.medium,
+    color: '#F2F2F2',
+    fontSize: 12.5,
+  },
+  scratchNoticeRetry: {
+    fontFamily: fontFamilies.bold,
+    color: '#FE5B01',
+    fontSize: 13,
   },
 
   /* ============================================================== */
@@ -988,7 +1065,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F66F28',
+    backgroundColor: '#FE5B01',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -1006,7 +1083,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   useNowBtn: {
-    backgroundColor: '#F66F28',
+    backgroundColor: '#FFFFFF',
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',

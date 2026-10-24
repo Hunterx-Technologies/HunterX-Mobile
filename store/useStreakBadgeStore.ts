@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { enqueueCelebration } from '@/store/useCelebrationStore';
 import type { FlightRect, StreakBadgeShowcaseProps } from '@/components/features/streaks/StreakBadgeShowcase';
 
 export type StreakBadgeOptions = Omit<
@@ -64,7 +65,10 @@ export const useStreakBadgeStore = create<StreakBadgeState>((set, get) => ({
     })),
 }));
 
-/** Shows the streak badge popup over whatever is on screen. */
+/**
+ * Shows the streak badge popup over whatever is on screen, after any
+ * celebration already showing (see useCelebrationStore).
+ */
 export const showStreakBadge = (options: StreakBadgeOptions) => {
-  useStreakBadgeStore.getState().showStreakBadge(options);
+  enqueueCelebration({ kind: 'streakBadge', options });
 };

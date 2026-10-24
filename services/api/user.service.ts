@@ -1,4 +1,5 @@
 import type { ApiResponse } from '@/types/api';
+import type { LevelUpInfo } from '@/types/task';
 import { apiClient } from './client';
 
 export interface UserActivitySummary {
@@ -112,3 +113,44 @@ export async function exportUserData(): Promise<{ message: string; downloadUrl?:
   }
 }
 
+/** Level-ups not shown yet (an approved proof, a referral bonus, a screen cut short), as one screen. */
+export async function fetchPendingLevelUp(): Promise<LevelUpInfo | null> {
+  const { data } = await apiClient.get<ApiResponse<{ level_up: LevelUpInfo | null }>>('/users/me/level-up');
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to fetch level-up');
+  }
+  return data.data.level_up;
+}
+
+export async function markLevelUpsSeen(ids: string[]): Promise<void> {
+  const { data } = await apiClient.post<ApiResponse<{ marked: number }>>('/users/me/level-up/seen', { ids });
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to mark level-up seen');
+  }
+}
+
+/** A streak badge earned but not shown yet (GET /users/me/streak-badges/unseen). */
+export interface UnseenStreakBadge {
+  id: string;
+  badge_id: string;
+  name: string;
+  description: string | null;
+  /** The milestone, e.g. 30 — matches STREAK_BADGES_DATA's dayNumber. */
+  streak_days: number;
+  earned_at: string | null;
+}
+
+export async function fetchUnseenStreakBadges(): Promise<UnseenStreakBadge[]> {
+  const { data } = await apiClient.get<ApiResponse<{ badges: UnseenStreakBadge[] }>>('/users/me/streak-badges/unseen');
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to fetch streak badges');
+  }
+  return data.data.badges;
+}
+
+export async function markStreakBadgesSeen(ids: string[]): Promise<void> {
+  const { data } = await apiClient.post<ApiResponse<{ marked: number }>>('/users/me/streak-badges/seen', { ids });
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to mark streak badges seen');
+  }
+}

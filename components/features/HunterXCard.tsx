@@ -97,8 +97,8 @@ export const HunterXCard: React.FC<HunterXCardProps> = ({
         {
           width,
           height: cardHeight,
-          borderColor: isExpired ? '#2A2C33' : '#F66F28',
-          shadowColor: isExpired ? '#000000' : '#F66F28',
+          borderColor: isExpired ? '#2A2C33' : '#FE5B01',
+          shadowColor: isExpired ? '#000000' : '#FE5B01',
         },
         style,
       ]}
@@ -142,7 +142,7 @@ export const HunterXCard: React.FC<HunterXCardProps> = ({
         {/* 3. Very Mild, Subtle Orange Perimeter Tint (Top Edge Only) */}
         {!isExpired && (
           <LinearGradient
-            colors={['rgba(246, 111, 40, 0.05)', 'transparent']}
+            colors={['rgba(254, 91, 1, 0.05)', 'transparent']}
             start={{ x: 0.1, y: 0.01 }}
             end={{ x: 0.4, y: 0.25 }}
             style={StyleSheet.absoluteFillObject}

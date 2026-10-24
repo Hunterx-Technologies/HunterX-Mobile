@@ -34,7 +34,7 @@ const ICON_CONFIG: Record<
   calories: {
     family: 'MaterialCommunityIcons',
     name: 'fire',
-    color: '#FF6B00',
+    color: '#FE5B01',
   },
   distance: {
     family: 'Ionicons',

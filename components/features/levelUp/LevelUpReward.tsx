@@ -33,7 +33,7 @@ import { DiamondRewardScene } from '../reward/diamond/DiamondRewardScene';
 // it. <LevelUpRewardModal /> and <LevelUpReward /> are there for screens that
 // manage it themselves.
 
-const ORANGE = '#F66F28';
+const ORANGE = '#FE5B01';
 
 // Timeline (ms). The sound's impact lands at IMPACT.
 const IMPACT = 900;
@@ -46,6 +46,9 @@ const LOAD_TIMEOUT_MS = 1200;
 const CENTER_X = 201;
 const BADGE_Y = 421;
 const BADGE_BOX = 300;
+// The rank line and description sit this much higher than in the Rive
+// file, to make room for the XP line above the button.
+const LOWER_LIFT = 12;
 
 export interface LevelUpRewardProps {
   /** The level just reached. */
@@ -60,6 +63,12 @@ export interface LevelUpRewardProps {
   tierLabel?: string;
   /** Use "\n" for line breaks. */
   description?: string;
+  /** Under the description, e.g. "+40 XP". Hidden when empty. */
+  xpEarnedText?: string;
+  /** Next to it, e.g. "405 XP to Dormant IV". Hidden when empty. */
+  nextLevelText?: string;
+  /** The big word on the opening band. Defaults to "LEVEL UP!". */
+  bandLabel?: string;
   buttonLabel?: string;
   /** The ✕ button. */
   onClose?: () => void;
@@ -74,7 +83,7 @@ export interface LevelUpRewardProps {
 export const LEVEL_UP_DEFAULTS = {
   eyebrow: 'LEVEL UP!',
   rankName: 'Dormant III',
-  tierLabel: 'DORMANT',
+  tierLabel: '',
   description: 'Your power is growing. Keep going,\nHunter.',
   buttonLabel: 'Continue',
 };
@@ -259,8 +268,8 @@ const LevelBadge: React.FC<{
           <Defs>
             <RadialGradient id="luGlow" cx="50%" cy="50%" r="50%">
               <Stop offset="0" stopColor="#FF7A1A" stopOpacity={0.75} />
-              <Stop offset="0.45" stopColor="#F66F28" stopOpacity={0.28} />
-              <Stop offset="1" stopColor="#F66F28" stopOpacity={0} />
+              <Stop offset="0.45" stopColor="#FE5B01" stopOpacity={0.28} />
+              <Stop offset="1" stopColor="#FE5B01" stopOpacity={0} />
             </RadialGradient>
           </Defs>
           <Circle cx={220} cy={220} r={220} fill="url(#luGlow)" />
@@ -359,11 +368,14 @@ const LevelUpText: React.FC<{
   rankName: string;
   tierLabel: string;
   description: string;
-}> = ({ clock, topShift, eyebrow, title, rankName, tierLabel, description }) => {
+  xpEarnedText: string;
+  nextLevelText: string;
+}> = ({ clock, topShift, eyebrow, title, rankName, tierLabel, description, xpEarnedText, nextLevelText }) => {
   const eyebrowStyle = useRollIn(clock, 120, 10);
   const titleStyle = useRollIn(clock, IMPACT + 160);
   const rankStyle = useRollIn(clock, IMPACT + 380);
   const descStyle = useRollIn(clock, IMPACT + 620, 10);
+  const xpStyle = useRollIn(clock, IMPACT + 820, 8);
   const pillStyle = useAnimatedStyle(() => {
     const u = seg(clock.value, IMPACT + 560, IMPACT + 900);
     return { opacity: seg(clock.value, IMPACT + 560, IMPACT + 640), transform: [{ scale: 0.4 + 0.6 * backOut(u) }] };
@@ -381,7 +393,7 @@ const LevelUpText: React.FC<{
       >
         {title}
       </Animated.Text>
-      <Animated.View style={[styles.rankRow, { top: 651 - 18 - 0.35 * 24 }, rankStyle]}>
+      <Animated.View style={[styles.rankRow, { top: 651 - 18 - 0.35 * 24 - LOWER_LIFT }, rankStyle]}>
         <Text style={styles.rankName} numberOfLines={1}>
           {rankName}
         </Text>
@@ -391,7 +403,23 @@ const LevelUpText: React.FC<{
           </Animated.View>
         )}
       </Animated.View>
-      <Animated.Text style={[styles.description, { top: textTop(685, 15, 22) }, descStyle]}>{description}</Animated.Text>
+      {/* Description and the XP line stack, so a two-line description pushes the XP line down. */}
+      <View style={[styles.lowerColumn, { top: textTop(685, 15, 22) - LOWER_LIFT }]}>
+        <Animated.Text style={[styles.description, descStyle]} numberOfLines={2}>
+          {description}
+        </Animated.Text>
+        {(!!xpEarnedText || !!nextLevelText) && (
+          <Animated.View style={[styles.xpRow, xpStyle]}>
+            {!!xpEarnedText && <Text style={styles.xpEarned}>{xpEarnedText}</Text>}
+            {!!xpEarnedText && !!nextLevelText && <View style={styles.xpDivider} />}
+            {!!nextLevelText && (
+              <Text style={styles.xpNext} numberOfLines={1}>
+                {nextLevelText}
+              </Text>
+            )}
+          </Animated.View>
+        )}
+      </View>
     </>
   );
 };
@@ -410,10 +438,11 @@ const BAND_HEIGHT = 132;
  * slides open across the middle, then the band grows to fill the screen and
  * becomes the level-up scene (`children`).
  */
-const BandIntro: React.FC<{ band: SharedValue<number>; width: number; height: number; children: ReactNode }> = ({
+const BandIntro: React.FC<{ band: SharedValue<number>; width: number; height: number; label: string; children: ReactNode }> = ({
   band,
   width,
   height,
+  label,
   children,
 }) => {
   const backdropStyle = useAnimatedStyle(() => ({ opacity: seg(band.value, 0, BAND_IN) }));
@@ -469,7 +498,9 @@ const BandIntro: React.FC<{ band: SharedValue<number>; width: number; height: nu
         <Animated.View style={[styles.bandEdge, { bottom: 0 }, edgeStyle]} pointerEvents="none" />
       </Animated.View>
       <Animated.View style={[StyleSheet.absoluteFill, styles.bandLabelWrap, labelStyle]} pointerEvents="none">
-        <Text style={styles.bandLabel}>LEVEL UP!</Text>
+        <Text style={styles.bandLabel} numberOfLines={1} adjustsFontSizeToFit>
+          {label}
+        </Text>
       </Animated.View>
     </View>
   );
@@ -483,6 +514,9 @@ export const LevelUpReward: React.FC<LevelUpRewardProps> = ({
   rankName = LEVEL_UP_DEFAULTS.rankName,
   tierLabel = LEVEL_UP_DEFAULTS.tierLabel,
   description = LEVEL_UP_DEFAULTS.description,
+  xpEarnedText = '',
+  nextLevelText = '',
+  bandLabel = LEVEL_UP_DEFAULTS.eyebrow,
   buttonLabel = LEVEL_UP_DEFAULTS.buttonLabel,
   onClose,
   onPress,
@@ -553,7 +587,7 @@ export const LevelUpReward: React.FC<LevelUpRewardProps> = ({
       }}
     >
       {started && (
-        <BandIntro band={band} width={size.w} height={size.h}>
+        <BandIntro band={band} width={size.w} height={size.h} label={bandLabel}>
           <DiamondRewardScene
             eyebrow=""
             title=""
@@ -574,6 +608,8 @@ export const LevelUpReward: React.FC<LevelUpRewardProps> = ({
                   rankName={rankName}
                   tierLabel={tierLabel}
                   description={description}
+                  xpEarnedText={xpEarnedText}
+                  nextLevelText={nextLevelText}
                 />
               </>
             )}
@@ -646,7 +682,7 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     color: '#FFFFFF',
     includeFontPadding: false,
-    textShadowColor: 'rgba(246, 111, 40, 0.9)',
+    textShadowColor: 'rgba(254, 91, 1, 0.9)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 18,
   },
@@ -701,7 +737,7 @@ const styles = StyleSheet.create({
     // Optical centering: the italic leans right and the digits sit low.
     marginLeft: -4,
     marginTop: 8,
-    textShadowColor: 'rgba(246, 111, 40, 0.55)',
+    textShadowColor: 'rgba(254, 91, 1, 0.55)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 14,
   },
@@ -768,10 +804,38 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6,
     color: '#1A0D06',
   },
-  description: {
+  lowerColumn: {
     position: 'absolute',
     left: 24,
     right: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  xpRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  xpEarned: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 14,
+    lineHeight: 20,
+    color: ORANGE,
+  },
+  xpDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  xpNext: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 13,
+    lineHeight: 20,
+    color: 'rgba(255, 255, 255, 0.7)',
+    flexShrink: 1,
+  },
+  description: {
+    alignSelf: 'stretch',
     textAlign: 'center',
     fontFamily: 'Poppins_400Regular',
     fontSize: 15,

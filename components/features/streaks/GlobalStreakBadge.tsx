@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { router } from 'expo-router';
 import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { registerCelebrationPresenter } from '@/store/useCelebrationStore';
 import { StreakBadgeShowcaseModal } from './StreakBadgeShowcase';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -23,6 +24,21 @@ export function GlobalStreakBadge() {
   const soundEffectsEnabled = useSettingsStore((s) => s.soundEffectsEnabled);
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
 
+  // showStreakBadge() queues; the celebration queue opens it here when its turn comes.
+  useEffect(
+    () =>
+      registerCelebrationPresenter('streakBadge', (queued, done) =>
+        useStreakBadgeStore.getState().showStreakBadge({
+          ...queued,
+          onDone: () => {
+            queued.onDone?.();
+            done();
+          },
+        })
+      ),
+    []
+  );
+
   if (!options) return null;
 
   return (
@@ -31,8 +47,9 @@ export function GlobalStreakBadge() {
       visible={visible}
       sound={soundEffectsEnabled}
       haptics={hapticsEnabled}
-      onClose={hideStreakBadge}
+      // No ✕: an earned badge has to be cracked open, then continued.
       onContinue={hideStreakBadge}
+      getIntroSource={(badge) => findHomeSlot(badge.id)}
       getFlightTarget={(badge) => findHomeSlot(badge.id)}
       onLanded={(badge) => landBadge(badge.id)}
     />

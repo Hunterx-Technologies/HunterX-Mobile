@@ -131,12 +131,12 @@ const styles = StyleSheet.create({
     color: '#A1A1AA',
   },
   saveBtn: {
-    backgroundColor: '#FE5B01',
+    backgroundColor: '#FFFFFF',
   },
   saveBtnText: {
     fontFamily: fontFamilies.bold,
     fontSize: 14,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#0D0F12',
   },
 });

@@ -1,5 +1,5 @@
 import type { ApiResponse } from '@/types/api';
-import type { TasksTodayData, CompleteTaskData, TaskStatus, ReopenTaskData } from '@/types/task';
+import type { TasksTodayData, CompleteTaskData, TaskStatus, ReopenTaskData, SubmitProofData, StreakEvent } from '@/types/task';
 
 import { apiClient } from './client';
 
@@ -47,4 +47,35 @@ export async function reopenTask(taskId: string): Promise<ReopenTaskData> {
     throw new Error(data.error?.message || 'Failed to reopen task');
   }
   return data.data;
+}
+
+/**
+ * Sends proof for a proof task: the URLs of photos already uploaded to
+ * Cloudinary (uploadImageToCloudinary(uri, 'task-proof')). Exactly the
+ * task's proof_count. The task goes IN_REVIEW until an admin decides.
+ */
+export async function submitTaskProof(taskId: string, proofUrls: string[]): Promise<SubmitProofData> {
+  const { data } = await apiClient.post<ApiResponse<SubmitProofData>>(`/tasks/${taskId}/proof`, {
+    proof_urls: proofUrls,
+  });
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to send proof');
+  }
+  return data.data;
+}
+
+/** Streak lives spent / streaks broken not shown yet. Also applies a pending missed-day gap. */
+export async function fetchStreakEvents(): Promise<StreakEvent[]> {
+  const { data } = await apiClient.get<ApiResponse<{ events: StreakEvent[] }>>('/tasks/streak/events');
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to fetch streak events');
+  }
+  return data.data.events;
+}
+
+export async function markStreakEventsSeen(ids: string[]): Promise<void> {
+  const { data } = await apiClient.post<ApiResponse<{ marked: number }>>('/tasks/streak/events/seen', { ids });
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to mark streak events seen');
+  }
 }
