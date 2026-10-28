@@ -68,6 +68,12 @@ export type User = {
     earned_at?: string;
     milestone_days?: number;
   }>;
+  /** Account deletion (30-day grace period): when it was requested and when it happens; null if not pending. */
+  deletionRequestedAt?: string | null;
+  deleteAt?: string | null;
+  daysLeft?: number | null;
+  /** deleteAt in ms (Profile's countdown). */
+  delete_at?: number | null;
 };
 
 export type AuthSession = {

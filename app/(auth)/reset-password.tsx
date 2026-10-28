@@ -19,93 +19,9 @@ import Feather from '@expo/vector-icons/Feather';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { resetPassword } from '@/services/api/auth.service';
+import { PasswordStrengthMeter, meetsPasswordRules } from '@/components/common/PasswordStrengthMeter';
 
 const easeOut = Easing.out(Easing.cubic);
-
-// ── Password requirements ────────────────────────────────────────────────────
-const REQUIREMENTS = [
-  { key: 'length',    label: 'AT LEAST 8 CHARACTERS',  test: (p: string) => p.length >= 8 },
-  { key: 'upper',     label: 'ONE UPPERCASE LETTER',    test: (p: string) => /[A-Z]/.test(p) },
-  { key: 'number',    label: 'ONE NUMBER',              test: (p: string) => /[0-9]/.test(p) },
-  { key: 'special',   label: 'ONE SPECIAL CHARACTER',   test: (p: string) => /[^A-Za-z0-9]/.test(p) },
-];
-
-// ── Animated requirement row ─────────────────────────────────────────────────
-function Requirement({ label, met }: { label: string; met: boolean }) {
-  // Only animate opacity + scale — these work with useNativeDriver: true on web
-  const checkOpacity = useRef(new Animated.Value(0)).current;
-  const checkScale   = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(checkOpacity, {
-        toValue: met ? 1 : 0,
-        duration: 220,
-        easing: easeOut,
-        useNativeDriver: true,
-      }),
-      Animated.timing(checkScale, {
-        toValue: met ? 1 : 0.4,
-        duration: 220,
-        easing: easeOut,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [met]);
-
-  return (
-    <View style={reqStyles.row}>
-      {/* Circle — color via conditional style, not animated color interpolation */}
-      <View style={[reqStyles.circle, met && reqStyles.circleMet]}>
-        <Animated.View
-          style={{
-            opacity: checkOpacity,
-            transform: [{ scale: checkScale }],
-          }}
-        >
-          <Feather name="check" size={9} color="#000000" />
-        </Animated.View>
-      </View>
-      {/* Label — color via conditional style */}
-      <Text style={[reqStyles.label, met && reqStyles.labelMet]}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-const reqStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  circle: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: '#3A3A3E',
-    backgroundColor: '#2A2A2E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  circleMet: {
-    borderColor: colors.accentGold,
-    backgroundColor: colors.accentGold,
-  },
-  label: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 12,
-    letterSpacing: 0.8,
-    color: '#52525B',
-  },
-  labelMet: {
-    color: '#FFFFFF',
-  },
-});
-
 
 // ── Main Screen ──────────────────────────────────────────────────────────────
 export default function ResetPasswordScreen() {
@@ -163,8 +79,7 @@ export default function ResetPasswordScreen() {
     ]).start();
   }, []);
 
-  const requirements = REQUIREMENTS.map(r => ({ ...r, met: r.test(newPassword) }));
-  const allMet       = requirements.every(r => r.met);
+  const allMet       = meetsPasswordRules(newPassword);
   const passwordsMatch = newPassword === confirmPassword && confirmPassword.length > 0;
   const canSubmit    = allMet && passwordsMatch;
 
@@ -320,9 +235,7 @@ export default function ResetPasswordScreen() {
                 { opacity: reqOp, transform: [{ translateY: reqY }] },
               ]}
             >
-              {requirements.map(r => (
-                <Requirement key={r.key} label={r.label} met={r.met} />
-              ))}
+              <PasswordStrengthMeter password={newPassword} />
             </Animated.View>
 
             {/* ── Error Banner ─────────────────────────────────────────── */}

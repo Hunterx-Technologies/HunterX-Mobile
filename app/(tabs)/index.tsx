@@ -49,6 +49,8 @@ import { useAvatarsReady } from '@/services/api/avatar.service';
 import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
 import { setCelebrationHold, showReward, useCelebrationStore } from '@/store/useCelebrationStore';
 import { syncStreakBadges, useStreakBadgeSync } from '@/hooks/useStreakBadgeSync';
+import { DeletionPendingBanner } from '@/components/common/DeletionPendingBanner';
+import { API_ERROR, PENDING_DELETION_MESSAGE, getApiErrorCode } from '@/services/api/errors';
 import { showLevelUpFromApi } from '@/store/useLevelUpStore';
 import { useStreakBreakStore } from '@/store/useStreakBreakStore';
 import { StreakPillLanding } from '@/components/features/streaks/StreakPillLanding';
@@ -400,23 +402,26 @@ export default function MissionsHomeScreen() {
   // Earned streak badges (crack-the-seal popup) show here on home.
   useStreakBadgeSync(!!user?.id);
 
+  // The "allow notifications" prompt, offered once the hunter has earned XP.
+  const pushPrompt = usePushPermissionPrompt();
+
   // Celebrations (level-up, badge, reward…) wait while one of home's own
   // popups is up, instead of opening on top of it. Day Complete waits its
   // turn in the other direction: it opens once nothing is celebrating.
   const celebrating = useCelebrationStore((s) => s.current !== null || s.queue.length > 0);
   const showDayComplete = dayCompleteModalVisible && !celebrating;
-  const holdCelebrations = taskBottomSheetVisible || showDayComplete || showBlackIntroOverlay;
+  const holdCelebrations = taskBottomSheetVisible || showDayComplete || showBlackIntroOverlay || pushPrompt.visible;
   useEffect(() => {
     setCelebrationHold('home', holdCelebrations);
   }, [holdCelebrations]);
   useEffect(() => () => setCelebrationHold('home', false), []);
 
   // Offer push notifications once the hunter has earned XP — never over
-  // another Home modal or the post-Ascension intro fade.
-  const pushPrompt = usePushPermissionPrompt();
+  // another Home modal, the post-Ascension intro fade, or a celebration
+  // (the first XP is exactly when level-up / reward screens play).
   const maybeOfferPush = pushPrompt.maybeOffer;
   const isHomeModalOpen =
-    dropVisible || actionModalVisible || dayCompleteModalVisible || taskBottomSheetVisible || showBlackIntroOverlay || !!proofQuest;
+    dropVisible || actionModalVisible || dayCompleteModalVisible || taskBottomSheetVisible || showBlackIntroOverlay || !!proofQuest || celebrating;
   useEffect(() => {
     if (isHomeModalOpen) return;
     const timer = setTimeout(() => maybeOfferPush((user?.xp ?? 0) > 0), 1500);
@@ -499,10 +504,25 @@ export default function MissionsHomeScreen() {
     }
   }, [loading, todoQuests.length, quests.length]);
 
+  // While the account waits to be deleted, quest actions are off (the
+  // server refuses them too, with ACCOUNT_PENDING_DELETION).
+  const deletionPending = !!user?.deleteAt;
+  const deletionPendingRef = useRef(deletionPending);
+  deletionPendingRef.current = deletionPending;
+  const showDeletionPendingNotice = useCallback(() => {
+    setErrorToastTitle('Account Deletion Pending');
+    setErrorToastSubtitle(PENDING_DELETION_MESSAGE);
+    setErrorToastVisible(true);
+  }, []);
+
   const handleCompleteTask = useCallback(async (
     questId: string,
     actionStatus: 'COMPLETED' | 'PARTIAL' | 'SKIPPED' | 'PENDING'
   ) => {
+    if (deletionPendingRef.current) {
+      showDeletionPendingNotice();
+      return;
+    }
     const previousQuests = questsRef.current;
     const mappedStatus = actionStatus === 'COMPLETED' ? 'done' : actionStatus === 'PARTIAL' ? 'partial' : actionStatus === 'SKIPPED' ? 'skipped' : 'todo';
 
@@ -604,6 +624,12 @@ export default function MissionsHomeScreen() {
         return;
       }
 
+      if (getApiErrorCode(err) === API_ERROR.ACCOUNT_PENDING_DELETION) {
+        showDeletionPendingNotice();
+        getCurrentUser().then(useAuthStore.getState().setUser).catch(() => {});
+        return;
+      }
+
       if (status === 403) {
         setErrorToastTitle('Task Stale');
         setErrorToastSubtitle('This task is not assigned to you for the current period. Refreshing...');
@@ -616,13 +642,17 @@ export default function MissionsHomeScreen() {
       setErrorToastSubtitle(message);
       setErrorToastVisible(true);
     }
-  }, [loadTasks]);
+  }, [loadTasks, showDeletionPendingNotice]);
 
   // Takes a questId (not a full QuestItem) and stays referentially stable
   // ([handleCompleteTask] never changes identity — see above) specifically
   // so <QuestListCard>'s React.memo isn't defeated by a new function prop
   // on every render.
   const handleOpenQuestActions = useCallback((questId: string) => {
+    if (deletionPendingRef.current) {
+      showDeletionPendingNotice();
+      return;
+    }
     const quest = questsRef.current.find((q) => q.id === questId);
     if (!quest) return;
     // Proof quests are completed by uploading photos for review.
@@ -636,9 +666,9 @@ export default function MissionsHomeScreen() {
     } else {
       handleCompleteTask(quest.id, 'COMPLETED');
     }
-  }, [handleCompleteTask]);
+  }, [handleCompleteTask, showDeletionPendingNotice]);
 
-    const handleOpenBuyModal = useCallback((quest: QuestItem) => {
+  const handleOpenBuyModal = useCallback((quest: QuestItem) => {
     setSelectedBuyQuest(quest);
     setBuyModalVisible(true);
   }, []);
@@ -655,6 +685,10 @@ export default function MissionsHomeScreen() {
   }, [handleCompleteTask]);
 
   const handleResetQuest = useCallback(async (questId: string) => {
+    if (deletionPendingRef.current) {
+      showDeletionPendingNotice();
+      return;
+    }
     const previousQuests = questsRef.current;
     setQuests((prev) =>
       prev.map((q) =>
@@ -685,7 +719,7 @@ export default function MissionsHomeScreen() {
       setErrorToastSubtitle(message);
       setErrorToastVisible(true);
     }
-  }, [loadTasks]);
+  }, [loadTasks, showDeletionPendingNotice]);
 
   return (
     <Screen style={styles.screen}>
@@ -722,8 +756,10 @@ export default function MissionsHomeScreen() {
             </View>
 
             <View style={styles.userTitles}>
-              <Text style={styles.greetingText}>HEY, {displayName}!</Text>
-              <Text style={styles.xpSubtext}>{displayXP} XP · ARISE, HUNTER.</Text>
+              <Text style={styles.greetingText} numberOfLines={1} ellipsizeMode="tail">
+                HEY, {displayName}!
+              </Text>
+              <Text style={styles.xpSubtext} numberOfLines={1}>{displayXP} XP · ARISE, HUNTER.</Text>
             </View>
           </TouchableOpacity>
 
@@ -753,6 +789,9 @@ export default function MissionsHomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Account deletion pending */}
+        <DeletionPendingBanner />
 
         {/* ACTIVE CAMPAIGN SECTION */}
         <View style={styles.sectionHeaderRow}>
@@ -877,7 +916,7 @@ export default function MissionsHomeScreen() {
             <ActivityIndicator size="large" color="#E5A93C" />
           </View>
         ) : error ? (
-          <View style={styles.emptyStateCard}>
+          <View style={[styles.emptyStateCard, styles.errorCard]}>
             <Ionicons name="alert-circle-outline" size={56} color="#FF4D6D" />
             <Text style={styles.emptyStateTitle}>Error Loading Tasks</Text>
             <Text style={styles.emptyStateSubtext}>{error}</Text>
@@ -933,6 +972,7 @@ export default function MissionsHomeScreen() {
                         <Text style={styles.sectionMonoLabel}>DAILY QUESTS</Text>
                         {dailyTodoQuests.map((quest) => (
                           <QuestListCard
+                            actionsDisabled={deletionPending}
                             key={quest.id}
                             quest={quest}
                             variant="todo"
@@ -951,6 +991,7 @@ export default function MissionsHomeScreen() {
                         <Text style={[styles.sectionMonoLabel, { marginTop: 24 }]}>WEEKLY QUESTS</Text>
                         {weeklyTodoQuests.map((quest) => (
                           <QuestListCard
+                            actionsDisabled={deletionPending}
                             key={quest.id}
                             quest={quest}
                             variant="todo"
@@ -969,6 +1010,7 @@ export default function MissionsHomeScreen() {
                         <Text style={[styles.sectionMonoLabel, { marginTop: 24 }]}>MONTHLY QUESTS</Text>
                         {monthlyTodoQuests.map((quest) => (
                           <QuestListCard
+                            actionsDisabled={deletionPending}
                             key={quest.id}
                             quest={quest}
                             variant="todo"
@@ -987,6 +1029,7 @@ export default function MissionsHomeScreen() {
                         <Text style={[styles.sectionMonoLabel, { marginTop: 24 }]}>SPECIAL OFFERS</Text>
                         {lockedQuests.map((quest) => (
                           <QuestListCard
+                            actionsDisabled={deletionPending}
                             key={quest.id}
                             quest={quest}
                             variant="locked"
@@ -1023,6 +1066,7 @@ export default function MissionsHomeScreen() {
                         <Text style={styles.sectionMonoLabel}>DAILY QUESTS</Text>
                         {dailyDoneQuests.map((quest) => (
                           <QuestListCard
+                            actionsDisabled={deletionPending}
                             key={quest.id}
                             quest={quest}
                             variant="done"
@@ -1041,6 +1085,7 @@ export default function MissionsHomeScreen() {
                         <Text style={[styles.sectionMonoLabel, { marginTop: dailyDoneQuests.length > 0 ? 24 : 0 }]}>WEEKLY QUESTS</Text>
                         {weeklyDoneQuests.map((quest) => (
                           <QuestListCard
+                            actionsDisabled={deletionPending}
                             key={quest.id}
                             quest={quest}
                             variant="done"
@@ -1061,6 +1106,7 @@ export default function MissionsHomeScreen() {
                         </Text>
                         {monthlyDoneQuests.map((quest) => (
                           <QuestListCard
+                            actionsDisabled={deletionPending}
                             key={quest.id}
                             quest={quest}
                             variant="done"
@@ -1096,6 +1142,7 @@ export default function MissionsHomeScreen() {
                         <Text style={styles.sectionMonoLabel}>DAILY QUESTS</Text>
                         {dailySkippedQuests.map((quest) => (
                           <QuestListCard
+                            actionsDisabled={deletionPending}
                             key={quest.id}
                             quest={quest}
                             variant="skipped"
@@ -1114,6 +1161,7 @@ export default function MissionsHomeScreen() {
                         <Text style={[styles.sectionMonoLabel, { marginTop: dailySkippedQuests.length > 0 ? 24 : 0 }]}>WEEKLY QUESTS</Text>
                         {weeklySkippedQuests.map((quest) => (
                           <QuestListCard
+                            actionsDisabled={deletionPending}
                             key={quest.id}
                             quest={quest}
                             variant="skipped"
@@ -1134,6 +1182,7 @@ export default function MissionsHomeScreen() {
                         </Text>
                         {monthlySkippedQuests.map((quest) => (
                           <QuestListCard
+                            actionsDisabled={deletionPending}
                             key={quest.id}
                             quest={quest}
                             variant="skipped"
@@ -1339,9 +1388,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   userProfileGroup: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginRight: 12,
   },
   avatarWrapper: {
     width: 44,
@@ -1374,6 +1426,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   userTitles: {
+    flex: 1,
+    minWidth: 0,
     justifyContent: 'center',
   },
   greetingText: {
@@ -1390,6 +1444,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   headerActions: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -1755,11 +1810,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#27272A',
-    paddingVertical: 56,
+    height: 248,
     paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 16,
+  },
+  errorCard: {
+    height: undefined,
+    minHeight: 248,
+    paddingVertical: 32,
   },
   emptyStateTitle: {
     fontFamily: fontFamilies.bold,

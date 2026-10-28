@@ -29,6 +29,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { fetchRewards, markRewardUsed, scratchReward } from '@/services/api/rewards.service';
 import { showGlobalToast } from '@/store/useToastStore';
 import { hasPrize, rewardOriginLabel, type RewardTab, type RevealedReward, type UserReward } from '@/types/reward';
+import { useAuthStore } from '@/store/useAuthStore';
+import { API_ERROR, PENDING_DELETION_MESSAGE } from '@/services/api/errors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_CARD_WIDTH = (SCREEN_WIDTH - 32 - 14) / 2;
@@ -111,6 +113,10 @@ const errorText = (err: unknown, fallback: string) => (err instanceof Error && e
 
 export default function RewardsScreen() {
   const { isAuthenticated, isBootstrapping } = useAuth();
+  // While the account waits to be deleted, cards can't be scratched or redeemed.
+  const deletionPending = useAuthStore((s) => !!s.user?.deleteAt);
+  const deletionPendingRef = useRef(deletionPending);
+  deletionPendingRef.current = deletionPending;
   const router = useRouter();
   const { focus } = useLocalSearchParams<{ focus?: string }>();
 
@@ -177,6 +183,10 @@ export default function RewardsScreen() {
 
   const openCard = useCallback((card: CouponReward) => {
     if (card.isExpired) return;
+    if (!card.isScratched && deletionPendingRef.current) {
+      showGlobalToast(PENDING_DELETION_MESSAGE, 'warning', 4000);
+      return;
+    }
     Haptics.selectionAsync().catch(() => { });
     if (!card.isScratched) {
       setScratchStatus('locked');
@@ -268,7 +278,10 @@ export default function RewardsScreen() {
       setScratchStatus('ready');
     } catch (err) {
       const code = errorCode(err);
-      if (code === 'REWARD_EXPIRED' || code === 'REWARD_USED') {
+      if (code === API_ERROR.ACCOUNT_PENDING_DELETION) {
+        closeCenterCard();
+        showGlobalToast(PENDING_DELETION_MESSAGE, 'warning', 4000);
+      } else if (code === 'REWARD_EXPIRED' || code === 'REWARD_USED') {
         closeCenterCard();
         showGlobalToast(code === 'REWARD_EXPIRED' ? 'This reward has expired.' : 'This reward has already been used.', 'warning');
         refreshTab(activeTab);
@@ -306,7 +319,9 @@ export default function RewardsScreen() {
       showGlobalToast('Reward redeemed.', 'success');
     } catch (err) {
       const code = errorCode(err);
-      if (code === 'REWARD_EXPIRED') {
+      if (code === API_ERROR.ACCOUNT_PENDING_DELETION) {
+        showGlobalToast(PENDING_DELETION_MESSAGE, 'warning', 4000);
+      } else if (code === 'REWARD_EXPIRED') {
         setSelectedDetailsCard(null);
         showGlobalToast('This reward has expired.', 'warning');
       } else {
@@ -581,7 +596,7 @@ export default function RewardsScreen() {
         <RewardRevealModal
           visible={!!selectedDetailsCard}
           onClose={() => setSelectedDetailsCard(null)}
-          onMarkUsed={selectedDetailsCard ? () => handleMarkAsUsed(selectedDetailsCard.id) : undefined}
+          onMarkUsed={selectedDetailsCard && !deletionPending ? () => handleMarkAsUsed(selectedDetailsCard.id) : undefined}
           markingUsed={markingUsed}
           reward={
             selectedDetailsCard

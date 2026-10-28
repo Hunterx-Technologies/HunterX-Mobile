@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { Linking } from 'react-native';
 
 import {
   getPushPermission,
@@ -27,8 +28,13 @@ export function usePushPermissionPrompt() {
 
   const accept = useCallback(async () => {
     setVisible(false);
-    if ((await requestPushPermission()) === 'granted') {
+    const result = await requestPushPermission();
+    if (result === 'granted') {
       registerDeviceIfPermitted({ force: true }).catch(() => {});
+    } else if (result === 'denied') {
+      // The OS won't show its dialog any more (blocked earlier): the only
+      // way to turn notifications on is the app's system settings page.
+      Linking.openSettings().catch(() => {});
     }
   }, []);
 

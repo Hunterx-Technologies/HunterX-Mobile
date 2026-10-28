@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#020203"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": false,
@@ -21,15 +21,29 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Allow HunterX to access your photos to attach screenshots to your feedback."
+      },
+      "icon": {
+        "light": "./assets/images/icon.png",
+        "dark": "./assets/images/icon-dark.png",
+        "tinted": "./assets/images/icon-tinted.png"
       }
     },
     "android": {
       "package": "com.hunterx.mobile",
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_EXERCISE"
+      ],
       "googleServicesFile": "./google-services.json",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#0A0E17",
-        "foregroundImage": "./assets/images/app_logo.png"
+        "foregroundImage": "./assets/images/adaptive-icon-foreground.png",
+        "monochromeImage": "./assets/images/adaptive-icon-monochrome.png",
+        "backgroundColor": "#000000"
       }
     },
     "web": {
@@ -53,9 +67,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#020203",
+          "backgroundColor": "#000000",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 160
+          "imageWidth": 200
         }
       ],
       "expo-audio",
@@ -80,10 +94,11 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/android-icon-monochrome.png",
+          "icon": "./assets/images/notification-icon.png",
           "color": "#FE5B01"
         }
-      ]
+      ],
+      "./plugins/withXcode27Compat"
     ],
     "experiments": {
       "typedRoutes": true

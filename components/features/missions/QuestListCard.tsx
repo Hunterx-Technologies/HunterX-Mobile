@@ -87,6 +87,8 @@ export interface QuestListCardProps {
   onSkip: (questId: string) => void;
   onReset: (questId: string) => void;
   onBuy?: (quest: QuestItem) => void;
+  /** Dims the card while quest actions are unavailable (account pending deletion). */
+  actionsDisabled?: boolean;
 }
 
 function QuestListCardComponent({
@@ -97,6 +99,7 @@ function QuestListCardComponent({
   onSkip,
   onReset,
   onBuy,
+  actionsDisabled = false,
 }: QuestListCardProps) {
   const targetValue = getQuestTargetValue(quest, proteinGoal);
   const typeLabel =
@@ -114,6 +117,7 @@ function QuestListCardComponent({
         styles.questCard,
         variant === "skipped" && styles.questCardSkipped,
         variant === "locked" && styles.questCardLocked,
+        actionsDisabled && styles.questCardDisabled,
       ]}
     >
       <View style={styles.questImageWrapper}>
@@ -283,6 +287,9 @@ const styles = StyleSheet.create({
   },
   questCardSkipped: {
     opacity: 0.55,
+  },
+  questCardDisabled: {
+    opacity: 0.45,
   },
   questCardLocked: {
     borderColor: "rgba(245, 158, 11, 0.35)",

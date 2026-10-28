@@ -9,7 +9,11 @@
     "ios": "expo start --ios --port 8081",
     "web": "expo start --web --port 8081",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "licenses": "node scripts/generate-licenses.js",
+    "eas-build-post-install": "npm run licenses",
+    "assets": "node scripts/generate-assets.mjs",
+    "assets:verify": "node scripts/verify-assets.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -63,6 +67,10 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
+    "license-checker-rseidelsohn": "^4.4.2",
+    "opentype.js": "^1.3.4",
+    "potrace": "^2.1.8",
+    "sharp": "^0.34.5",
     "typescript": "~5.9.2"
   }
 }

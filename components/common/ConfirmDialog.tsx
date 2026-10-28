@@ -1,4 +1,4 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
@@ -13,6 +13,8 @@ export type ConfirmDialogProps = {
   destructive?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Shows a spinner on the confirm button and ignores taps while the action runs. */
+  loading?: boolean;
 };
 
 /**
@@ -29,12 +31,16 @@ export function ConfirmDialog({
   destructive = false,
   onConfirm,
   onCancel,
+  loading = false,
 }: ConfirmDialogProps) {
+  const cancel = () => {
+    if (!loading) onCancel();
+  };
   const isStacked = confirmLabel.length > 12 || (cancelLabel && cancelLabel.length > 12);
 
   return (
-    <Modal animationType="fade" transparent visible={visible} onRequestClose={onCancel}>
-      <Pressable style={styles.overlay} onPress={onCancel}>
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={cancel}>
+      <Pressable style={styles.overlay} onPress={cancel}>
         <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
@@ -46,8 +52,10 @@ export function ConfirmDialog({
                 styles.cancelButton,
                 isStacked && styles.buttonFull,
                 pressed && styles.pressed,
+                loading && styles.disabled,
               ]}
-              onPress={onCancel}
+              onPress={cancel}
+              disabled={loading}
             >
               <Text style={styles.cancelLabel}>{cancelLabel}</Text>
             </Pressable>
@@ -59,10 +67,16 @@ export function ConfirmDialog({
                 pressed && styles.pressed,
               ]}
               onPress={onConfirm}
+              disabled={loading}
+              accessibilityState={{ busy: loading }}
             >
-              <Text style={destructive ? styles.destructiveLabel : styles.confirmLabel}>
-                {confirmLabel}
-              </Text>
+              {loading ? (
+                <ActivityIndicator size="small" color={destructive ? '#FFFFFF' : '#000000'} />
+              ) : (
+                <Text style={destructive ? styles.destructiveLabel : styles.confirmLabel}>
+                  {confirmLabel}
+                </Text>
+              )}
             </Pressable>
           </View>
         </Pressable>
@@ -72,6 +86,9 @@ export function ConfirmDialog({
 }
 
 const styles = StyleSheet.create({
+  disabled: {
+    opacity: 0.5,
+  },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.78)',

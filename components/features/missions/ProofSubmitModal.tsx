@@ -18,6 +18,7 @@ import { fontFamilies } from '@/theme/typography';
 import { uploadImageToCloudinary } from '@/services/media/cloudinary';
 import { submitTaskProof } from '@/services/api/tasks.service';
 import type { SubmitProofData } from '@/types/task';
+import { API_ERROR, PENDING_DELETION_MESSAGE, getApiErrorCode } from '@/services/api/errors';
 
 // Photo proof for a quest that needs it (proof_count > 0). The hunter picks
 // exactly `proofCount` photos; each is uploaded straight to Cloudinary
@@ -99,7 +100,8 @@ export function ProofSubmitModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       onSubmitted(data);
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : 'Could not send your proof. Please try again.');
+      if (getApiErrorCode(err) === API_ERROR.ACCOUNT_PENDING_DELETION) setError(PENDING_DELETION_MESSAGE);
+      else setError(err instanceof Error && err.message ? err.message : 'Could not send your proof. Please try again.');
     } finally {
       setProgress(null);
     }

@@ -5,6 +5,7 @@ import type { User } from '@/types/user';
 
 import { apiClient } from './client';
 import { tokenStorage } from './tokenStorage';
+import { getApiErrorCode } from './errors';
 import { AVATAR_THUMB_WIDTH, optimizeCloudinaryUrl } from '@/services/media/cloudinary';
 
 type LoginResponse = {
@@ -78,7 +79,21 @@ export function mapBackendUserToUser(u: any): User {
     authProvider: normalizedProvider,
     provider: normalizedProvider,
     onboarding_done: !!isOnboarded,
+    // Account deletion (30-day grace period on the server). delete_at in ms
+    // for the Profile banner; null when nothing is pending.
+    deletionRequestedAt: u.deletionRequestedAt ?? null,
+    deleteAt: u.deleteAt ?? null,
+    daysLeft: u.daysLeft ?? null,
+    delete_at: u.deleteAt ? Date.parse(u.deleteAt) : null,
   };
+}
+
+/** An Error with the server's message, keeping its error code (err.code) for callers to branch on. */
+function apiFailure(err: any): Error & { code?: string | null; status?: number } {
+  const failure = new Error(extractErrorMessage(err)) as Error & { code?: string | null; status?: number };
+  failure.code = getApiErrorCode(err);
+  failure.status = err?.status ?? err?.response?.status;
+  return failure;
 }
 
 function extractErrorMessage(err: any): string {
@@ -157,10 +172,10 @@ export async function signup(payload: RegisterPayload): Promise<User> {
         if (innerErr?.response?.status === 404) {
           return mapBackendUserToUser({ id: 'user_1', email: payload.email, name: payload.name });
         }
-        throw new Error(extractErrorMessage(innerErr));
+        throw apiFailure(innerErr);
       }
     }
-    throw new Error(extractErrorMessage(err));
+    throw apiFailure(err);
   }
 }
 
@@ -210,7 +225,7 @@ async function socialLogin(
     if (isNotFound) {
       return post(`/api${path}`);
     }
-    throw new Error(extractErrorMessage(err));
+    throw apiFailure(err);
   }
 }
 
@@ -268,10 +283,10 @@ export async function getCurrentUser(): Promise<User> {
           const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
           return mapBackendUserToUser(rawUser);
         } catch (innerErr: any) {
-          throw new Error(extractErrorMessage(innerErr));
+          throw apiFailure(innerErr);
         }
       }
-      throw new Error(extractErrorMessage(err));
+      throw apiFailure(err);
     } finally {
       inFlightCurrentUser = null;
     }
@@ -315,7 +330,7 @@ export async function sendOtp(email: string): Promise<string> {
         if (innerErr?.response?.status === 404) {
           return 'Verification code sent to your email. It expires in 10 minutes.';
         }
-        throw new Error(extractErrorMessage(innerErr));
+        throw apiFailure(innerErr);
       }
     }
 
@@ -323,7 +338,7 @@ export async function sendOtp(email: string): Promise<string> {
       return 'Verification code sent to your email. It expires in 10 minutes.';
     }
 
-    throw new Error(extractErrorMessage(err));
+    throw apiFailure(err);
   }
 }
 
@@ -353,7 +368,7 @@ export async function verifyOtp(email: string, otp: string): Promise<void> {
           if (otp === '123456') return;
           throw new Error('Invalid or expired verification code. Please request a new one.');
         }
-        throw new Error(extractErrorMessage(innerErr));
+        throw apiFailure(innerErr);
       }
     }
 
@@ -362,7 +377,7 @@ export async function verifyOtp(email: string, otp: string): Promise<void> {
       throw new Error('Invalid or expired verification code. Please request a new one.');
     }
 
-    throw new Error(extractErrorMessage(err));
+    throw apiFailure(err);
   }
 }
 
@@ -407,6 +422,37 @@ export async function forgotPassword(email: string): Promise<string> {
   }
 }
 
+const PASSWORD_RULE_TEXT: Record<string, string> = {
+  AT_LEAST_8_CHARACTERS: 'at least 8 characters',
+  ONE_UPPERCASE_LETTER: 'an uppercase letter',
+  ONE_NUMBER: 'a number',
+  ONE_SPECIAL_CHARACTER: 'a special character',
+};
+
+/**
+ * Signed-in password change. The backend signs out every other device and
+ * returns new tokens for this one, which are saved here so it stays signed in.
+ * Throws an Error with a message ready to show the user.
+ */
+export async function changePassword(currentPassword: string, newPassword: string, confirmPassword: string): Promise<void> {
+  try {
+    const { data } = await apiClient.post('/auth/change-password', { currentPassword, newPassword, confirmPassword });
+    const accessToken = data?.data?.access_token;
+    const refreshToken = data?.data?.refresh_token;
+    if (!data?.success || !accessToken || !refreshToken) {
+      throw new Error(data?.message || 'Could not change your password. Please try again.');
+    }
+    await tokenStorage.setTokens(accessToken, refreshToken);
+  } catch (err: any) {
+    const body = err?.response?.data;
+    if (Array.isArray(body?.errors) && body.errors.length > 0) {
+      const missing = body.errors.map((code: string) => PASSWORD_RULE_TEXT[code] ?? code).join(', ');
+      throw new Error(`New password needs ${missing}.`);
+    }
+    throw new Error(body?.message || body?.error?.message || err?.message || 'Could not change your password. Please try again.');
+  }
+}
+
 export async function resetPassword(token: string, newPassword: string, confirmPassword: string): Promise<string> {
   try {
     const { data } = await apiClient.post('/auth/reset-password', { token, newPassword, confirmPassword });
@@ -436,11 +482,11 @@ export async function resetPassword(token: string, newPassword: string, confirmP
         if (data?.message) return data.message;
         return 'Password reset successfully.';
       } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
+        throw apiFailure(innerErr);
       }
     }
 
-    throw new Error(extractErrorMessage(err));
+    throw apiFailure(err);
   }
 }
 
@@ -484,10 +530,10 @@ export async function updateProfile(payload: UpdateProfilePayload): Promise<User
         const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
         return mapBackendUserToUser(rawUser);
       } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
+        throw apiFailure(innerErr);
       }
     }
-    throw new Error(extractErrorMessage(err));
+    throw apiFailure(err);
   }
 }
 
@@ -513,10 +559,10 @@ export async function updateUserAvatar(avatarId: number | string): Promise<User>
         const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
         return mapBackendUserToUser(rawUser);
       } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
+        throw apiFailure(innerErr);
       }
     }
-    throw new Error(extractErrorMessage(err));
+    throw apiFailure(err);
   }
 }
 
@@ -541,12 +587,33 @@ export async function updateUserEmail(email: string): Promise<User> {
         const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
         return mapBackendUserToUser(rawUser);
       } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
+        throw apiFailure(innerErr);
       }
     }
-    throw new Error(extractErrorMessage(err));
+    throw apiFailure(err);
   }
 }
 
+/**
+ * One-time (10-minute) link to confirm account deletion on the website
+ * (POST /account/delete/link). The website schedules the deletion.
+ */
+export async function createAccountDeletionLink(): Promise<string> {
+  try {
+    const { data } = await apiClient.post('/account/delete/link');
+    if (!data?.success || !data?.data?.url) throw new Error(data?.message || 'Could not start account deletion.');
+    return data.data.url;
+  } catch (err) {
+    throw apiFailure(err);
+  }
+}
 
-
+/** Cancels a pending account deletion (POST /account/delete/cancel). */
+export async function cancelAccountDeletion(): Promise<void> {
+  try {
+    const { data } = await apiClient.post('/account/delete/cancel');
+    if (!data?.success) throw new Error(data?.message || 'Could not cancel account deletion.');
+  } catch (err) {
+    throw apiFailure(err);
+  }
+}

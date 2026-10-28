@@ -28,7 +28,22 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const YEARS_LIST = Array.from({ length: 81 }, (_, i) => 1950 + i);
+// HunterX is for ages 18 to 80 (enforced by the backend too). The year grid
+// only offers birth years in that range.
+const MIN_AGE = 18;
+const MAX_AGE = 80;
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS_LIST = Array.from({ length: MAX_AGE - MIN_AGE + 1 }, (_, i) => CURRENT_YEAR - MAX_AGE + i);
+
+/** Age today for a birth date (month 0-based), or null if the date doesn't exist (e.g. 31 Feb). */
+function ageOn(day: number, monthIndex: number, year: number): number | null {
+  const dob = new Date(year, monthIndex, day);
+  if (dob.getFullYear() !== year || dob.getMonth() !== monthIndex || dob.getDate() !== day) return null;
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  if (today.getMonth() < monthIndex || (today.getMonth() === monthIndex && today.getDate() < day)) age--;
+  return age;
+}
 
 const formatBirthday = (dob: string | null | undefined): string => {
   if (!dob) return '';
@@ -134,7 +149,12 @@ export function EditProfileModal({
   const [pickerMode, setPickerMode] = useState<'DAY' | 'MONTH' | 'YEAR'>('DAY');
   const [pickerDay, setPickerDay] = useState(15);
   const [pickerMonthIndex, setPickerMonthIndex] = useState(5);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [pickerYear, setPickerYear] = useState(1998);
+  // A new pick clears the last "too young / too old" message.
+  useEffect(() => {
+    setDateError(null);
+  }, [pickerDay, pickerMonthIndex, pickerYear]);
 
   // Protein toast animation
   const [proteinToastVisible, setProteinToastVisible] = useState(false);
@@ -229,19 +249,30 @@ export function EditProfileModal({
         }
         if (!isNaN(d) && d >= 1 && d <= 31) setPickerDay(d);
         if (!isNaN(m) && m >= 1 && m <= 12) setPickerMonthIndex(m - 1);
-        if (!isNaN(y) && y >= 1950 && y <= 2030) setPickerYear(y);
+        if (!isNaN(y) && y >= YEARS_LIST[0] && y <= YEARS_LIST[YEARS_LIST.length - 1]) setPickerYear(y);
       }
     } else if (user?.age) {
       const calculatedYear = new Date().getFullYear() - user.age;
-      setPickerYear(calculatedYear);
+      setPickerYear(Math.min(YEARS_LIST[YEARS_LIST.length - 1], Math.max(YEARS_LIST[0], calculatedYear)));
       setPickerMonthIndex(0);
       setPickerDay(1);
     }
+    setDateError(null);
     setPickerMode('DAY');
     setIsDatePickerVisible(true);
   };
 
   const handleConfirmDate = () => {
+    const age = ageOn(pickerDay, pickerMonthIndex, pickerYear);
+    if (age === null) {
+      setDateError('That date doesn’t exist. Pick a valid day.');
+      return;
+    }
+    if (age < MIN_AGE || age > MAX_AGE) {
+      setDateError(`You must be between ${MIN_AGE} and ${MAX_AGE} years old.`);
+      return;
+    }
+    setDateError(null);
     const formattedDay = pickerDay < 10 ? `0${pickerDay}` : `${pickerDay}`;
     const monthNum = pickerMonthIndex + 1;
     const formattedMonth = monthNum < 10 ? `0${monthNum}` : `${monthNum}`;
@@ -866,6 +897,8 @@ export function EditProfileModal({
                 </ScrollView>
               )}
 
+              {!!dateError && <Text style={styles.calDateError}>{dateError}</Text>}
+
               <View style={styles.calendarActionRow}>
                 <TouchableOpacity
                   style={[styles.calBtn, styles.calCancelBtn]}
@@ -1447,6 +1480,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  calDateError: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12.5,
+    color: '#F87171',
+    textAlign: 'center',
+    marginTop: 8,
   },
   calCancelBtn: {
     backgroundColor: '#27272A',

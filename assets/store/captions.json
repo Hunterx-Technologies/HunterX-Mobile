@@ -1,0 +1,10 @@
+{
+  "01-home.png": { "title": "Turn every workout into XP", "highlight": "XP" },
+  "02-day-complete.png": { "title": "Finish your quests. Keep the streak.", "highlight": "streak" },
+  "03-leaderboard.png": { "title": "Climb the leaderboard", "highlight": "Climb" },
+  "04-metrics.png": { "title": "Your health data, synced", "highlight": "synced" },
+  "05-rewards.png": { "title": "Earn real rewards", "highlight": "rewards" },
+  "06-profile.png": { "title": "Rise from Dormant to Apex Core", "highlight": "Apex Core" },
+  "07-onboarding.png": { "title": "Take the hunter's oath", "highlight": "oath" },
+  "08-notifications.png": { "title": "Never break the chain", "highlight": "chain" }
+}

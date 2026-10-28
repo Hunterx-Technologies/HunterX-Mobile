@@ -36,6 +36,8 @@ import { buildOnboardingAnswers, useOnboardingStore } from '@/store/useOnboardin
 import { showGlobalToast } from '@/store/useToastStore';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
+import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter';
+import { API_ERROR, PENDING_RESTORE_MESSAGE, getApiErrorCode } from '@/services/api/errors';
 
 export default function SignupScreen() {
   const { signup, loginWithGoogle, loginWithApple, isAuthenticating } = useAuth();
@@ -143,6 +145,15 @@ export default function SignupScreen() {
     ],
   });
 
+  // Signing up with the email / Google / Apple of an account waiting to be
+  // deleted: send them to log in, which lets them keep the account.
+  const redirectIfPendingDeletion = (err: unknown) => {
+    if (getApiErrorCode(err) !== API_ERROR.ACCOUNT_PENDING_DELETION_LOGIN_TO_RESTORE) return false;
+    showGlobalToast(PENDING_RESTORE_MESSAGE, 'warning', 4500);
+    router.replace('/(auth)/login');
+    return true;
+  };
+
   const handleSendEmailOtp = async () => {
     const cleanEmail = email.trim();
     if (!isValidEmail(cleanEmail)) {
@@ -164,6 +175,7 @@ export default function SignupScreen() {
         otpInputRef.current?.focus();
       }, 300);
     } catch (err) {
+      if (redirectIfPendingDeletion(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to send verification code');
     } finally {
       setSendingOtp(false);
@@ -256,6 +268,7 @@ export default function SignupScreen() {
       await signup(registerPayload);
       router.replace('/(onboarding)/ascension');
     } catch (err: any) {
+      if (redirectIfPendingDeletion(err)) return;
       const errMsg = err instanceof Error ? err.message : 'Signup failed';
       if (errMsg.toLowerCase().includes('already exist') || errMsg.toLowerCase().includes('already registered')) {
         showGlobalToast('User Account is already exist', 'info');
@@ -281,6 +294,7 @@ export default function SignupScreen() {
         }, 350);
       }
     } catch (err) {
+      if (redirectIfPendingDeletion(err)) return;
       if (!isGoogleSignInCancelled(err)) {
         const errMsg = err instanceof Error ? err.message : 'Google sign-in failed';
         if (errMsg.toLowerCase().includes('already exist') || errMsg.toLowerCase().includes('already registered')) {
@@ -315,6 +329,7 @@ export default function SignupScreen() {
         }, 350);
       }
     } catch (err) {
+      if (redirectIfPendingDeletion(err)) return;
       if (!isAppleSignInCancelled(err)) {
         setError(err instanceof Error ? err.message : 'Apple sign-in failed');
       }
@@ -415,6 +430,13 @@ export default function SignupScreen() {
             />
           </Pressable>
         </View>
+
+        {/* Sign-up only requires 8 characters, so no rule checklist here. */}
+        {password.length > 0 && (
+          <View style={styles.strengthMeter}>
+            <PasswordStrengthMeter password={password} showRules={false} />
+          </View>
+        )}
 
         <View
           style={[
@@ -631,6 +653,11 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
+  strengthMeter: {
+    marginTop: -4,
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
   container: {
     justifyContent: 'center',
     paddingHorizontal: 24,

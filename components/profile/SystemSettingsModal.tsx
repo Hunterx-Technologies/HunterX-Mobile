@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { GoogleIcon } from '@/components/common/GoogleIcon';
 import { Screen } from '@/components/common/Screen';
 import { fontFamilies } from '@/theme/typography';
-import { getCurrentUser, updateUserEmail } from '@/services/api/auth.service';
+import { changePassword, forgotPassword, getCurrentUser, updateUserEmail } from '@/services/api/auth.service';
 import { exportUserData } from '@/services/api/user.service';
 import {
   getUserSettings,
@@ -26,6 +26,7 @@ import {
 } from '@/services/api/settings.service';
 import { useSettingsContext } from '@/context/SettingsContext';
 import { HunterSwitch } from './HunterSwitch';
+import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter';
 import { HunterToast, type HunterToastType } from '@/components/common/HunterToast';
 import { showGlobalToast } from '@/store/useToastStore';
 import {
@@ -107,6 +108,14 @@ export function SystemSettingsModal({
   const [currentPasswordInput, setCurrentPasswordInput] = useState('');
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [visiblePasswordFields, setVisiblePasswordFields] = useState({
+    current: false,
+    new: false,
+    confirm: false,
+  });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
   const [newEmailInput, setNewEmailInput] = useState('');
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [isExportingData, setIsExportingData] = useState(false);
@@ -206,25 +215,90 @@ export function SystemSettingsModal({
     }
   };
 
-  const handleChangePassword = () => {
-    if (!currentPasswordInput || !newPasswordInput || !confirmPasswordInput) {
-      Alert.alert('Error', 'Please fill in all password fields.');
-      return;
+  // Passwords start hidden every time the modal opens.
+  useEffect(() => {
+    if (isChangePasswordModalVisible) {
+      setVisiblePasswordFields({ current: false, new: false, confirm: false });
     }
-    if (newPasswordInput.length < 6) {
-      Alert.alert('Error', 'New password must be at least 6 characters.');
-      return;
-    }
-    if (newPasswordInput !== confirmPasswordInput) {
-      Alert.alert('Error', 'Passwords do not match.');
-      return;
-    }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
-    Alert.alert('Success', 'Your password has been updated.');
+  }, [isChangePasswordModalVisible]);
+
+  const togglePasswordVisibility = (field: keyof typeof visiblePasswordFields) => {
+    setVisiblePasswordFields((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  const closeChangePassword = () => {
+    if (isChangingPassword) return;
     setIsChangePasswordModalVisible(false);
     setCurrentPasswordInput('');
     setNewPasswordInput('');
     setConfirmPasswordInput('');
+    setPasswordError(null);
+  };
+
+  // Same rules the backend enforces (sign-up, reset and change).
+  const passwordRuleError = (pw: string): string | null => {
+    const missing = [
+      pw.length < 8 && 'at least 8 characters',
+      !/[A-Z]/.test(pw) && 'an uppercase letter',
+      !/[0-9]/.test(pw) && 'a number',
+      !/[^A-Za-z0-9]/.test(pw) && 'a special character',
+    ].filter(Boolean);
+    return missing.length ? `New password needs ${missing.join(', ')}.` : null;
+  };
+
+  const handleChangePassword = async () => {
+    if (isChangingPassword) return;
+    if (!currentPasswordInput || !newPasswordInput || !confirmPasswordInput) {
+      setPasswordError('Please fill in all password fields.');
+      return;
+    }
+    const ruleError = passwordRuleError(newPasswordInput);
+    if (ruleError) {
+      setPasswordError(ruleError);
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+    if (newPasswordInput === currentPasswordInput) {
+      setPasswordError('New password must be different from the current one.');
+      return;
+    }
+
+    setPasswordError(null);
+    setIsChangingPassword(true);
+    try {
+      await changePassword(currentPasswordInput, newPasswordInput, confirmPasswordInput);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
+      setIsChangingPassword(false);
+      closeChangePassword();
+      showToast('Password updated. Other devices have been signed out.', 'success');
+    } catch (err: any) {
+      setIsChangingPassword(false);
+      setPasswordError(err?.message || 'Could not change your password. Please try again.');
+    }
+  };
+
+  // "Forgot password?" from inside the change dialog: email a reset link to
+  // the account's own address (same flow as the login screen's).
+  const handleForgotPassword = async () => {
+    const email = user?.email;
+    if (!email || isSendingReset) return;
+    setIsSendingReset(true);
+    try {
+      await forgotPassword(email);
+      setIsChangePasswordModalVisible(false);
+      setCurrentPasswordInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+      setPasswordError(null);
+      showToast(`Reset link sent to ${email}. It expires in 10 minutes.`, 'success');
+    } catch (err: any) {
+      setPasswordError(err?.message || 'Could not send the reset link. Please try again.');
+    } finally {
+      setIsSendingReset(false);
+    }
   };
 
   const rawProvider =
@@ -471,7 +545,7 @@ export function SystemSettingsModal({
           {/* SECTION 3: PREFERENCES (ACCOUNT-LEVEL BACKEND SYNC) */}
           <Text style={styles.sectionHeader}>PREFERENCES</Text>
           <View style={styles.settingsGroupCard}>
-            <View style={styles.settingRow}>
+            <View style={styles.settingRowStacked}>
               <View style={styles.settingLeftGroup}>
                 <View style={styles.settingIconBox}>
                   <Ionicons name="options-outline" size={18} color="#FE5B01" />
@@ -936,48 +1010,131 @@ export function SystemSettingsModal({
           visible={isChangePasswordModalVisible}
           transparent
           animationType="fade"
-          onRequestClose={() => setIsChangePasswordModalVisible(false)}
+          onRequestClose={closeChangePassword}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Change Password</Text>
-              <Text style={styles.modalSubtitleText}>Enter your new password below.</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Current Password"
-                placeholderTextColor="#71717A"
-                secureTextEntry
-                value={currentPasswordInput}
-                onChangeText={setCurrentPasswordInput}
-              />
-              <TextInput
-                style={styles.modalInput}
-                placeholder="New Password (min. 6 chars)"
-                placeholderTextColor="#71717A"
-                secureTextEntry
-                value={newPasswordInput}
-                onChangeText={setNewPasswordInput}
-              />
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Confirm New Password"
-                placeholderTextColor="#71717A"
-                secureTextEntry
-                value={confirmPasswordInput}
-                onChangeText={setConfirmPasswordInput}
-              />
+              <Text style={styles.modalSubtitleText}>Enter your current password, then choose a new one.</Text>
+              <View style={styles.passwordInputWrap}>
+                <TextInput
+                  style={[styles.modalInput, styles.passwordInput]}
+                  placeholder="Current Password"
+                  placeholderTextColor="#71717A"
+                  secureTextEntry={!visiblePasswordFields.current}
+                  autoCapitalize="none"
+                  textContentType="password"
+                  autoComplete="current-password"
+                  editable={!isChangingPassword}
+                  value={currentPasswordInput}
+                  onChangeText={(t) => {
+                    setCurrentPasswordInput(t);
+                    setPasswordError(null);
+                  }}
+                />
+                <TouchableOpacity
+                  style={styles.passwordEyeBtn}
+                  onPress={() => togglePasswordVisibility('current')}
+                  hitSlop={8}
+                  accessibilityLabel={visiblePasswordFields.current ? 'Hide password' : 'Show password'}
+                >
+                  <Ionicons
+                    name={visiblePasswordFields.current ? 'eye-off-outline' : 'eye-outline'}
+                    size={18}
+                    color="#71717A"
+                  />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.passwordInputWrap}>
+                <TextInput
+                  style={[styles.modalInput, styles.passwordInput]}
+                  placeholder="New Password"
+                  placeholderTextColor="#71717A"
+                  secureTextEntry={!visiblePasswordFields.new}
+                  autoCapitalize="none"
+                  textContentType="newPassword"
+                  autoComplete="new-password"
+                  editable={!isChangingPassword}
+                  value={newPasswordInput}
+                  onChangeText={(t) => {
+                    setNewPasswordInput(t);
+                    setPasswordError(null);
+                  }}
+                />
+                <TouchableOpacity
+                  style={styles.passwordEyeBtn}
+                  onPress={() => togglePasswordVisibility('new')}
+                  hitSlop={8}
+                  accessibilityLabel={visiblePasswordFields.new ? 'Hide password' : 'Show password'}
+                >
+                  <Ionicons
+                    name={visiblePasswordFields.new ? 'eye-off-outline' : 'eye-outline'}
+                    size={18}
+                    color="#71717A"
+                  />
+                </TouchableOpacity>
+              </View>
+              <PasswordStrengthMeter password={newPasswordInput} />
+              <View style={styles.passwordInputWrap}>
+                <TextInput
+                  style={[styles.modalInput, styles.passwordInput]}
+                  placeholder="Confirm New Password"
+                  placeholderTextColor="#71717A"
+                  secureTextEntry={!visiblePasswordFields.confirm}
+                  autoCapitalize="none"
+                  textContentType="newPassword"
+                  autoComplete="new-password"
+                  editable={!isChangingPassword}
+                  value={confirmPasswordInput}
+                  onChangeText={(t) => {
+                    setConfirmPasswordInput(t);
+                    setPasswordError(null);
+                  }}
+                />
+                <TouchableOpacity
+                  style={styles.passwordEyeBtn}
+                  onPress={() => togglePasswordVisibility('confirm')}
+                  hitSlop={8}
+                  accessibilityLabel={visiblePasswordFields.confirm ? 'Hide password' : 'Show password'}
+                >
+                  <Ionicons
+                    name={visiblePasswordFields.confirm ? 'eye-off-outline' : 'eye-outline'}
+                    size={18}
+                    color="#71717A"
+                  />
+                </TouchableOpacity>
+              </View>
+              {!!passwordError && <Text style={styles.passwordErrorText}>{passwordError}</Text>}
+              {!!user?.email && (
+                <TouchableOpacity
+                  onPress={handleForgotPassword}
+                  disabled={isSendingReset || isChangingPassword}
+                  style={styles.forgotPasswordLink}
+                  hitSlop={8}
+                >
+                  <Text style={styles.forgotPasswordText}>
+                    {isSendingReset ? 'Sending reset link...' : 'Forgot password?'}
+                  </Text>
+                </TouchableOpacity>
+              )}
               <View style={styles.modalActionRow}>
                 <TouchableOpacity
                   style={[styles.modalBtn, styles.cancelBtn]}
-                  onPress={() => setIsChangePasswordModalVisible(false)}
+                  onPress={closeChangePassword}
+                  disabled={isChangingPassword}
                 >
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalBtn, styles.saveBtn]}
+                  style={[styles.modalBtn, styles.saveBtn, isChangingPassword && { opacity: 0.7 }]}
                   onPress={handleChangePassword}
+                  disabled={isChangingPassword}
                 >
-                  <Text style={styles.saveBtnText}>Update</Text>
+                  {isChangingPassword ? (
+                    <ActivityIndicator size="small" color="#0D0F12" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>Update</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -1148,6 +1305,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
   },
+  settingRowStacked: {
+    gap: 12,
+    paddingVertical: 6,
+  },
   settingLeftGroup: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1292,8 +1453,10 @@ const styles = StyleSheet.create({
     padding: 3,
   },
   unitSegmentBtn: {
+    flex: 1,
+    alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 8,
   },
   unitSegmentBtnActive: {
@@ -1333,6 +1496,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#A1A1AA',
   },
+  passwordInputWrap: {
+    justifyContent: 'center',
+  },
+  passwordInput: {
+    paddingRight: 44,
+  },
+  passwordEyeBtn: {
+    position: 'absolute',
+    right: 12,
+    padding: 2,
+  },
   modalInput: {
     backgroundColor: '#1E1E24',
     borderWidth: 1,
@@ -1357,6 +1531,22 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  passwordErrorText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12.5,
+    color: '#F87171',
+    marginTop: -2,
+    marginBottom: 8,
+  },
+  forgotPasswordLink: {
+    alignSelf: 'flex-end',
+    marginBottom: 12,
+  },
+  forgotPasswordText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13,
+    color: '#FE5B01',
   },
   cancelBtn: {
     backgroundColor: '#27272A',

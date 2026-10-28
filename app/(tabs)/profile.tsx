@@ -39,7 +39,17 @@ import { AvatarSelectionModal, getAvatarSource } from '@/components/profile/Avat
 export { getAvatarSource } from '@/components/profile/AvatarSelectionModal';
 import { EditNameModal } from '@/components/profile/EditNameModal';
 import { EditProfileFormData, EditProfileModal } from '@/components/profile/EditProfileModal';
-import { GenericInfoModal } from '@/components/profile/GenericInfoModal';
+import { LegalDocumentModal } from '@/components/profile/LegalDocumentModal';
+import { AcknowledgementsModal } from '@/components/profile/AcknowledgementsModal';
+import { DISCLAIMER } from '@/constants/legal/disclaimer';
+import * as WebBrowser from 'expo-web-browser';
+
+// Terms and Privacy live on the website; opened in the in-app browser.
+const TERMS_URL = 'https://hunterx.co.in/terms';
+const PRIVACY_URL = 'https://hunterx.co.in/privacy';
+const openLegalPage = (url: string) => {
+  WebBrowser.openBrowserAsync(url).catch(() => Linking.openURL(url).catch(() => {}));
+};
 import { InviteFriendsModal } from '@/components/profile/InviteFriendsModal';
 import { RateHunterModal } from '@/components/profile/RateHunterModal';
 import { RecentActivityModal } from '@/components/profile/RecentActivityModal';
@@ -60,7 +70,9 @@ import type { UserReward } from '@/types/reward';
 import { showStreakBreak } from '@/store/useStreakBreakStore';
 
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { getCurrentUser, refreshAccessToken, updateProfile, updateUserAvatar, type UpdateProfilePayload } from '@/services/api/auth.service';
+import { createAccountDeletionLink, getCurrentUser, refreshAccessToken, updateProfile, updateUserAvatar, type UpdateProfilePayload } from '@/services/api/auth.service';
+import { DeletionPendingBanner } from '@/components/common/DeletionPendingBanner';
+import { showGlobalToast } from '@/store/useToastStore';
 import { getUserSettings } from '@/services/api/settings.service';
 import { useAvatarsReady } from '@/services/api/avatar.service';
 
@@ -114,11 +126,12 @@ export default function ProfileScreen() {
   const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
   const [isRateModalVisible, setIsRateModalVisible] = useState(false);
   const [isEditNameModalVisible, setIsEditNameModalVisible] = useState(false);
-  const [activeModal, setActiveModal] = useState<string | null>(null);
+  const [activeModal, setActiveModal] = useState<'Disclaimer' | 'Acknowledgements' | null>(null);
 
   // Confirm Dialogs
   const [isLogoutConfirmVisible, setIsLogoutConfirmVisible] = useState(false);
   const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+  const [isStartingDeletion, setIsStartingDeletion] = useState(false);
   // Developer section: which rewards mock mode is on ('off' = real API).
   const [rewardsMock, setRewardsMock] = useState<RewardsMockMode | 'off'>(() =>
     isRewardsMockEnabled() ? getRewardsMockMode() : 'off'
@@ -296,25 +309,34 @@ export default function ProfileScreen() {
     setIsDeleteConfirmVisible(true);
   };
 
+  // Delete Account → confirm → a one-time link to the website, which
+  // schedules the deletion (30-day grace). When the in-app browser closes,
+  // /me is reloaded so the banner shows straight away if it was confirmed.
   const confirmDeleteAccount = async () => {
-    setIsDeleteConfirmVisible(false);
-    setIsEditProfileModalVisible(false);
-    if (user) {
-      const deleteTime = Date.now() + 7 * 24 * 60 * 60 * 1000;
-      setUser({ ...user, delete_at: deleteTime } as any);
-      Alert.alert(
-        'Account Scheduled for Deletion',
-        'You have 7 days to retrieve your account. After 7 days, your account will be fully deleted.'
-      );
-    }
-  };
-
-  const handleCancelDeletion = () => {
-    if (user) {
-      const updatedUser = { ...user };
-      delete (updatedUser as any).delete_at;
-      setUser(updatedUser);
-      Alert.alert('Account Restored', 'Your account deletion request has been cancelled.');
+    if (isStartingDeletion) return;
+    setIsStartingDeletion(true);
+    try {
+      const url = await createAccountDeletionLink();
+      setIsDeleteConfirmVisible(false);
+      setIsEditProfileModalVisible(false);
+      await WebBrowser.openBrowserAsync(url, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+        controlsColor: '#FE5B01',
+        toolbarColor: '#000000',
+      });
+      try {
+        const freshUser = await getCurrentUser();
+        setUser(freshUser);
+        if (freshUser?.deleteAt) {
+          showGlobalToast('Your account is scheduled for deletion. You can keep it any time before then.', 'warning', 4000);
+        }
+      } catch {
+        // The banner appears on the next refresh of /me.
+      }
+    } catch (err: any) {
+      Alert.alert('Could Not Start Deletion', err?.message || 'Please check your connection and try again.');
+    } finally {
+      setIsStartingDeletion(false);
     }
   };
 
@@ -481,34 +503,8 @@ export default function ProfileScreen() {
           <Text style={styles.headerTitle}>Hunter Profile</Text>
         </View>
 
-        {/* Deletion Warning Banner */}
-        {userAny?.delete_at && (
-          <View style={styles.deletionPendingBanner}>
-            <View style={styles.deletionPendingLeft}>
-              <Ionicons
-                name="warning-outline"
-                size={16}
-                color="#EF4444"
-                style={{ marginRight: 6 }}
-              />
-              <Text style={styles.deletionPendingText}>
-                Account deletes in{' '}
-                {Math.max(
-                  1,
-                  Math.ceil((userAny.delete_at - Date.now()) / (1000 * 60 * 60 * 24))
-                )}{' '}
-                days
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={handleCancelDeletion}
-              style={styles.undoDeletionBtn}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.undoDeletionText}>Undo</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Account deletion pending */}
+        <DeletionPendingBanner />
 
         {/* TOP PROFILE SECTION */}
         <View style={styles.profileCard}>
@@ -766,11 +762,11 @@ export default function ProfileScreen() {
           <Text style={styles.footerSubheading}>To make the world a healthier place.</Text>
 
           <View style={styles.footerLinksRow}>
-            <TouchableOpacity onPress={() => setActiveModal('Terms of Service')}>
+            <TouchableOpacity onPress={() => openLegalPage(TERMS_URL)} accessibilityRole="link">
               <Text style={styles.footerLinkText}>Terms of Service</Text>
             </TouchableOpacity>
             <Text style={styles.footerDotText}>•</Text>
-            <TouchableOpacity onPress={() => setActiveModal('Privacy Policy')}>
+            <TouchableOpacity onPress={() => openLegalPage(PRIVACY_URL)} accessibilityRole="link">
               <Text style={styles.footerLinkText}>Privacy Policy</Text>
             </TouchableOpacity>
             <Text style={styles.footerDotText}>•</Text>
@@ -854,11 +850,13 @@ export default function ProfileScreen() {
         onClose={() => setIsEditNameModalVisible(false)}
       />
 
-      <GenericInfoModal
-        visible={!!activeModal}
-        title={activeModal}
+      <LegalDocumentModal
+        visible={activeModal === 'Disclaimer'}
+        document={DISCLAIMER}
         onClose={() => setActiveModal(null)}
       />
+
+      <AcknowledgementsModal visible={activeModal === 'Acknowledgements'} onClose={() => setActiveModal(null)} />
 
       <ConfirmDialog
         visible={isLogoutConfirmVisible}
@@ -873,9 +871,10 @@ export default function ProfileScreen() {
       <ConfirmDialog
         visible={isDeleteConfirmVisible}
         title="Delete Account"
-        message="You have 7 days to retrieve your account. After 7 days, your account will be fully deleted."
-        confirmLabel="Delete"
+        message="Your account will be deactivated now and permanently deleted after 30 days. Log in before then to cancel. XP, streaks and unused rewards will be lost."
+        confirmLabel="Continue"
         destructive
+        loading={isStartingDeletion}
         onConfirm={confirmDeleteAccount}
         onCancel={() => setIsDeleteConfirmVisible(false)}
       />
@@ -952,40 +951,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.5,
-  },
-  deletionPendingBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderWidth: 1,
-    borderColor: '#EF4444',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginVertical: 4,
-  },
-  deletionPendingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  deletionPendingText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 13,
-    color: '#EF4444',
-    flex: 1,
-  },
-  undoDeletionBtn: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  undoDeletionText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 12,
-    color: '#FFFFFF',
   },
   profileCard: {
     paddingVertical: 4,

@@ -6,6 +6,7 @@ import { clearPendingReferral, getPendingReferral } from '@/services/referral/pe
 import { unregisterDevice } from '@/services/notifications/push';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import type { User } from '@/types/user';
+import { API_ERROR, getApiErrorCode } from '@/services/api/errors';
 
 type AuthState = {
   user: User | null;
@@ -16,6 +17,9 @@ type AuthState = {
   // the initial user:null before the stored session has a chance to load
   // and bounces straight to login even though the tokens are still valid.
   isBootstrapping: boolean;
+  /** The stored session's account no longer exists (deleted); the login screen says so once. */
+  accountNotFound: boolean;
+  clearAccountNotFound: () => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (payload: authService.RegisterPayload) => Promise<void>;
   loginWithGoogle: (
@@ -39,6 +43,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticating: false,
   isOnboarded: true,
   isBootstrapping: true,
+  accountNotFound: false,
+  clearAccountNotFound: () => set({ accountNotFound: false }),
 
   login: async (email, password) => {
     set({ isAuthenticating: true });
@@ -120,10 +126,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
       const user = await authService.getCurrentUser();
       set({ user, isOnboarded: !!user.onboarding_done, isBootstrapping: false });
-    } catch {
-      // Token missing/expired and refresh (handled inside apiClient) failed too.
+    } catch (err) {
+      // Token missing/expired and refresh (handled inside apiClient) failed
+      // too — or the account was deleted after its 30-day grace period.
       await tokenStorage.clearTokens();
-      set({ user: null, isBootstrapping: false });
+      set({
+        user: null,
+        isBootstrapping: false,
+        accountNotFound: getApiErrorCode(err) === API_ERROR.ACCOUNT_NOT_FOUND,
+      });
     }
   },
 }));

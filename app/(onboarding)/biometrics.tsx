@@ -28,12 +28,12 @@ import { useOnboardingStore } from '@/store/useOnboardingStore';
 const TOTAL_STEPS = 8;
 const CURRENT_STEP = 1; // second step (0-indexed)
 
-const MIN_AGE = 8;
+// HunterX is for adults only — the ruler starts at 18.
+const MIN_AGE = 18;
 const MAX_AGE = 80;
 const TICK_SPACING = 16;
 
 const getMetabolicClassification = (currentAge: number) => {
-  if (currentAge < 18) return { label: 'NEURAL GROWTH BASELINE', code: 'VEC-01' };
   if (currentAge < 30) return { label: 'PRIME VECTOR (OPTIMAL RECOVERY)', code: 'VEC-02' };
   if (currentAge < 46) return { label: 'VETERAN ADAPTATION', code: 'VEC-03' };
   return { label: 'APEX MASTERY PARAMETERS', code: 'VEC-04' };
@@ -41,7 +41,8 @@ const getMetabolicClassification = (currentAge: number) => {
 
 export default function BiometricsScreen() {
   const storeGender = useOnboardingStore((s) => s.gender);
-  const storeAge = useOnboardingStore((s) => s.age);
+  // A previously saved age may predate the 18+ rule — clamp it into range.
+  const storeAge = Math.max(MIN_AGE, Math.min(MAX_AGE, useOnboardingStore((s) => s.age)));
   const setGenderStore = useOnboardingStore((s) => s.setGender);
   const setAgeStore = useOnboardingStore((s) => s.setAge);
 

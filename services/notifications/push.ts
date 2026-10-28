@@ -77,7 +77,18 @@ function toPushPermission(status: Notifications.NotificationPermissionsStatus): 
 
 export async function getPushPermission(): Promise<PushPermission> {
   if (!isPushSupported || !Device.isDevice) return 'unsupported';
-  return toPushPermission(await Notifications.getPermissionsAsync());
+  const permission = toPushPermission(await Notifications.getPermissionsAsync());
+  // Android: Expo decides "asked before, can't ask again" from a record kept
+  // in SharedPreferences, which Android Auto Backup restores after a
+  // reinstall while the permission itself starts fresh. That reads as
+  // blocked and hid our prompt forever. Our own "prompted" flag lives in
+  // AsyncStorage (not backed up), so trust it: never prompted on this
+  // install → still ours to ask. If Android really is blocking the dialog,
+  // the request returns 'denied' and the caller sends the user to Settings.
+  if (permission === 'denied' && Platform.OS === 'android' && !(await hasPromptedForPush())) {
+    return 'undetermined';
+  }
+  return permission;
 }
 
 /** Shows the OS prompt. Android 13+ needs a channel to exist first. */

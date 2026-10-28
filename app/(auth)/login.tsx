@@ -32,6 +32,8 @@ import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
 import { optimizeCloudinaryUrl, DEFAULT_BLURHASH } from '@/services/media/cloudinary';
+import { API_ERROR, getApiErrorCode } from '@/services/api/errors';
+import { showGlobalToast } from '@/store/useToastStore';
 
 // This hero image is the very first thing a logged-out user ever sees, often
 // before app-wide prefetching (see preloadAppAssets) has had a chance to
@@ -102,6 +104,18 @@ export default function LoginScreen() {
     ],
   });
 
+  // A deleted account (stored session or login): say so and go to sign-up.
+  const goToRegisterNoAccount = () => {
+    showGlobalToast('No account found', 'error');
+    router.replace('/(onboarding)/name');
+  };
+  const accountNotFound = useAuthStore((s) => s.accountNotFound);
+  useEffect(() => {
+    if (!accountNotFound) return;
+    useAuthStore.getState().clearAccountNotFound();
+    goToRegisterNoAccount();
+  }, [accountNotFound]);
+
   const handleLogin = async () => {
     setError(null);
     try {
@@ -113,6 +127,10 @@ export default function LoginScreen() {
         router.replace('/(onboarding)/name');
       }
     } catch (err) {
+      if (getApiErrorCode(err) === API_ERROR.ACCOUNT_NOT_FOUND) {
+        goToRegisterNoAccount();
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Login failed');
     }
   };
