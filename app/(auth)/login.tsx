@@ -144,8 +144,9 @@ export default function LoginScreen() {
       // gets created with placeholders, then a brand new user is sent
       // through the full wizard, which attaches their real answers to this
       // same account at the end (see oath.tsx's isAuthenticated branch).
-      const { isNew } = await loginWithGoogle(idToken);
-      router.replace(isNew ? '/(onboarding)/name' : '/(tabs)');
+      // An existing account that never finished the wizard goes there too.
+      const { isOnboarded } = await loginWithGoogle(idToken);
+      router.replace(isOnboarded ? '/(tabs)' : '/(onboarding)/name');
     } catch (err) {
       if (!isGoogleSignInCancelled(err)) {
         setError(err instanceof Error ? err.message : 'Google sign-in failed');
@@ -162,8 +163,8 @@ export default function LoginScreen() {
       const { idToken, nonce } = await signInWithApple();
       // Same as Google — a brand new account gets the onboarding wizard,
       // which attaches its answers to this account at the end.
-      const { isNew } = await loginWithApple(idToken, nonce);
-      router.replace(isNew ? '/(onboarding)/name' : '/(tabs)');
+      const { isOnboarded } = await loginWithApple(idToken, nonce);
+      router.replace(isOnboarded ? '/(tabs)' : '/(onboarding)/name');
     } catch (err) {
       if (!isAppleSignInCancelled(err)) {
         setError(err instanceof Error ? err.message : 'Apple sign-in failed');

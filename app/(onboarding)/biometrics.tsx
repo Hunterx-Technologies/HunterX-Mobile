@@ -25,7 +25,7 @@ import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 const CURRENT_STEP = 1; // second step (0-indexed)
 
 // HunterX is for adults only — the ruler starts at 18.

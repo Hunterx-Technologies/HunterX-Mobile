@@ -4,9 +4,40 @@ import * as authService from '@/services/api/auth.service';
 import { tokenStorage } from '@/services/api/tokenStorage';
 import { clearPendingReferral, getPendingReferral } from '@/services/referral/pendingReferral';
 import { unregisterDevice } from '@/services/notifications/push';
-import { useNotificationStore } from '@/store/useNotificationStore';
+import { signOutGoogle } from '@/services/auth/googleAuth';
+import { setSessionExpiredHandler } from '@/services/api/client';
+import { resetUserState } from '@/store/resetUserState';
+import { pickedRoutineTaskIds } from '@/store/useOnboardingStore';
 import type { User } from '@/types/user';
 import { API_ERROR, getApiErrorCode } from '@/services/api/errors';
+
+/**
+ * isOnboarded: the account has finished onboarding — the routes decide
+ * between Home and the wizard from this.
+ * justOnboarded: this call finished it — show Ascension first.
+ */
+type SocialLoginOutcome = { isOnboarded: boolean; justOnboarded: boolean };
+
+// Onboarding state comes from the account itself, never from isNew — an
+// account that exists but never finished the wizard (closed the app
+// mid-way) comes back isNew:false. Wizard answers sent from the Signup
+// screen for such an account are attached here when the backend didn't.
+async function resolveSocialLogin(
+  { user, isNew }: authService.SocialLoginResult,
+  onboarding: authService.OnboardingAnswerPayload[],
+  routineTaskIds: string[]
+): Promise<{ user: User; justOnboarded: boolean }> {
+  if (user.onboarding_done || onboarding.length === 0) {
+    return { user, justOnboarded: isNew && !!user.onboarding_done };
+  }
+  // When linking by email the backend does save the answers but returns
+  // the user from before — refetch before attaching them again.
+  let fresh = await authService.getCurrentUser();
+  if (!fresh.onboarding_done) {
+    fresh = await authService.completeOnboarding(onboarding, routineTaskIds);
+  }
+  return { user: fresh, justOnboarded: true };
+}
 
 type AuthState = {
   user: User | null;
@@ -25,12 +56,12 @@ type AuthState = {
   loginWithGoogle: (
     idToken: string,
     onboarding?: authService.OnboardingAnswerPayload[]
-  ) => Promise<{ isNew: boolean }>;
+  ) => Promise<SocialLoginOutcome>;
   loginWithApple: (
     idToken: string,
     nonce: string,
     onboarding?: authService.OnboardingAnswerPayload[]
-  ) => Promise<{ isNew: boolean }>;
+  ) => Promise<SocialLoginOutcome>;
   logout: () => Promise<void>;
   setUser: (user: User | null) => void;
   completeOnboarding: () => void;
@@ -61,7 +92,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       // Saved from a Guest Pass link, or typed on the signup screen.
       const referral_code = payload.referral_code || (await getPendingReferral()) || undefined;
-      const user = await authService.signup({ ...payload, referral_code });
+      const routine_task_ids = payload.routine_task_ids ?? pickedRoutineTaskIds();
+      const user = await authService.signup({ ...payload, referral_code, routine_task_ids });
       await clearPendingReferral();
       set({ user, isOnboarded: false });
     } finally {
@@ -73,10 +105,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isAuthenticating: true });
     try {
       const referralCode = (await getPendingReferral()) || undefined;
-      const { user, isNew } = await authService.loginWithGoogle(idToken, onboarding, referralCode);
+      // Routine picks only ride along with wizard answers (Signup screen);
+      // the Login screen sends none and the wizard runs afterwards.
+      const routineTaskIds = onboarding.length > 0 ? pickedRoutineTaskIds() : [];
+      const result = await authService.loginWithGoogle(idToken, onboarding, referralCode, routineTaskIds);
       await clearPendingReferral();
-      set({ user, isOnboarded: !isNew });
-      return { isNew };
+      const { user, justOnboarded } = await resolveSocialLogin(result, onboarding, routineTaskIds);
+      // Held false through Ascension (which flips it) so the route guards
+      // don't skip that screen.
+      set({ user, isOnboarded: !!user.onboarding_done && !justOnboarded });
+      return { isOnboarded: !!user.onboarding_done, justOnboarded };
     } finally {
       set({ isAuthenticating: false });
     }
@@ -86,10 +124,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isAuthenticating: true });
     try {
       const referralCode = (await getPendingReferral()) || undefined;
-      const { user, isNew } = await authService.loginWithApple(idToken, nonce, onboarding, referralCode);
+      const routineTaskIds = onboarding.length > 0 ? pickedRoutineTaskIds() : [];
+      const result = await authService.loginWithApple(idToken, nonce, onboarding, referralCode, routineTaskIds);
       await clearPendingReferral();
-      set({ user, isOnboarded: !isNew });
-      return { isNew };
+      const { user, justOnboarded } = await resolveSocialLogin(result, onboarding, routineTaskIds);
+      set({ user, isOnboarded: !!user.onboarding_done && !justOnboarded });
+      return { isOnboarded: !!user.onboarding_done, justOnboarded };
     } finally {
       set({ isAuthenticating: false });
     }
@@ -100,7 +140,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     // this device receiving the signed-out user's pushes.
     await unregisterDevice();
     await authService.logout();
-    useNotificationStore.getState().setUnreadCount(0);
+    await signOutGoogle();
+    resetUserState();
     set({ user: null });
   },
 
@@ -110,8 +151,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   submitOnboarding: async (onboarding) => {
     set({ isAuthenticating: true });
     try {
-      const user = await authService.completeOnboarding(onboarding);
-      set({ user, isOnboarded: true });
+      const referralCode = (await getPendingReferral()) || undefined;
+      const user = await authService.completeOnboarding(onboarding, pickedRoutineTaskIds(), referralCode);
+      await clearPendingReferral();
+      // isOnboarded stays false until Ascension flips it — set here, the
+      // onboarding layout would redirect to Home and skip that screen.
+      set({ user });
     } finally {
       set({ isAuthenticating: false });
     }
@@ -138,3 +183,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 }));
+
+// The refresh token was refused (expired, revoked, account deleted or
+// suspended): sign out, so the route guards send the hunter to Login
+// instead of leaving every request failing.
+setSessionExpiredHandler((code) => {
+  if (!useAuthStore.getState().user) return;
+  resetUserState();
+  useAuthStore.setState({ user: null, accountNotFound: code === API_ERROR.ACCOUNT_NOT_FOUND });
+});

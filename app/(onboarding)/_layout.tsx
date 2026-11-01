@@ -24,6 +24,7 @@ export default function OnboardingLayout() {
       <Stack.Screen name="weakness" />
       <Stack.Screen name="assessment" />
       <Stack.Screen name="time" />
+      <Stack.Screen name="routine" />
       <Stack.Screen name="oath" />
       <Stack.Screen name="ascension" />
       <Stack.Screen name="index" />

@@ -65,28 +65,6 @@ export async function submitRating(payload: RatingPayload): Promise<RatingRespon
       promptStoreReview,
     };
   } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.post<ApiResponse<RatingResponseData>>('/api/ratings', body);
-        if (data && typeof data === 'object' && 'success' in data && (data as any).success === false) {
-          throw new Error((data as any).error?.message || (data as any).message || 'Failed to submit rating');
-        }
-        const promptStoreReview = typeof (data as any)?.promptStoreReview === 'boolean'
-          ? (data as any).promptStoreReview
-          : typeof (data as any)?.data?.promptStoreReview === 'boolean'
-          ? (data as any).data.promptStoreReview
-          : false;
-
-        const result = (data as any)?.data || data;
-        return {
-          ...result,
-          promptStoreReview,
-        };
-      } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
-      }
-    }
     throw new Error(extractErrorMessage(err));
   }
 }

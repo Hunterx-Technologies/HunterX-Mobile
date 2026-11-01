@@ -8,13 +8,10 @@ import { tokenStorage } from './tokenStorage';
 import { getApiErrorCode } from './errors';
 import { AVATAR_THUMB_WIDTH, optimizeCloudinaryUrl } from '@/services/media/cloudinary';
 
-type LoginResponse = {
-  user: User;
-  accessToken?: string;
-  refreshToken?: string;
-  access_token?: string;
-  refresh_token?: string;
-};
+// HunterX-Backend answers every auth call as { success, message, data }, with
+// tokens as data.access_token / data.refresh_token.
+type TokenPair = { access_token: string; refresh_token: string };
+type AuthResponse = TokenPair & { user: any; isNew?: boolean; linked?: boolean };
 
 // Fired every time we learn who the current user is (login, restoreSession,
 // updateProfile, avatar change, ...) so their avatar is already sitting in
@@ -42,8 +39,6 @@ export function mapBackendUserToUser(u: any): User {
   const proteinGoal = u.daily_protein_goal ?? u.protein_goal;
   const isOnboarded = u.onboarding_done ?? u.onboardingDone ?? u.is_onboarded ?? u.onboarded ?? false;
   const avatarUrl = u.avatarUrl || (u.avatar_id ? `char_${u.avatar_id}` : null);
-
-  prefetchCurrentUserAvatar(avatarUrl);
 
   const rawProvider = u.auth_provider || u.authProvider || u.provider || 'EMAIL';
   const upperProvider = String(rawProvider).toUpperCase();
@@ -88,6 +83,34 @@ export function mapBackendUserToUser(u: any): User {
   };
 }
 
+/** Maps the backend user and warms its avatar in the image cache. */
+function toUser(raw: any): User {
+  const user = mapBackendUserToUser(raw);
+  prefetchCurrentUserAvatar(user?.avatarUrl);
+  return user;
+}
+
+const PASSWORD_RULE_TEXT: Record<string, string> = {
+  AT_LEAST_8_CHARACTERS: 'at least 8 characters',
+  ONE_UPPERCASE_LETTER: 'an uppercase letter',
+  ONE_NUMBER: 'a number',
+  ONE_SPECIAL_CHARACTER: 'a special character',
+};
+
+function extractErrorMessage(err: any): string {
+  const data = err?.response?.data;
+  // Password rules the backend refused (register, reset, change password).
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    const missing = data.errors.map((code: string) => PASSWORD_RULE_TEXT[code] ?? code).join(', ');
+    return `Password needs ${missing}.`;
+  }
+  if (typeof data === 'string') return data;
+  if (typeof data?.message === 'string') return data.message;
+  if (typeof data?.error?.message === 'string') return data.error.message;
+  if (typeof err?.message === 'string') return err.message;
+  return 'An unexpected error occurred';
+}
+
 /** An Error with the server's message, keeping its error code (err.code) for callers to branch on. */
 function apiFailure(err: any): Error & { code?: string | null; status?: number } {
   const failure = new Error(extractErrorMessage(err)) as Error & { code?: string | null; status?: number };
@@ -96,36 +119,31 @@ function apiFailure(err: any): Error & { code?: string | null; status?: number }
   return failure;
 }
 
-function extractErrorMessage(err: any): string {
-  if (err?.response?.data) {
-    const data = err.response.data;
-    if (typeof data === 'string') return data;
-    if (data.message && typeof data.message === 'string') return data.message;
-    if (data.error) {
-      if (typeof data.error === 'string') return data.error;
-      if (data.error.message && typeof data.error.message === 'string') return data.error.message;
-    }
+/** POSTs/PATCHes, turning `success: false` and HTTP errors into apiFailure. */
+async function call<T>(request: () => Promise<{ data: ApiResponse<T> | any }>, failMessage: string): Promise<T> {
+  let body: any;
+  try {
+    ({ data: body } = await request());
+  } catch (err) {
+    throw apiFailure(err);
   }
-  if (err?.message && typeof err.message === 'string') return err.message;
-  return 'An unexpected error occurred';
+  if (!body || body.success === false) {
+    throw new Error(body?.error?.message || body?.message || failMessage);
+  }
+  return body.data as T;
+}
+
+async function saveTokens(data: Partial<TokenPair> | null | undefined) {
+  if (!data?.access_token || !data?.refresh_token) {
+    throw new Error('Invalid token response from backend');
+  }
+  await tokenStorage.setTokens(data.access_token, data.refresh_token);
 }
 
 export async function login(email: string, password: string): Promise<User> {
-  const { data } = await apiClient.post<ApiResponse<LoginResponse>>('/auth/login', {
-    email,
-    password,
-  });
-  if (!data.success) throw new Error(data.error.message);
-
-  const accessToken = data.data.access_token || data.data.accessToken;
-  const refreshToken = data.data.refresh_token || data.data.refreshToken;
-
-  if (!accessToken || !refreshToken) {
-    throw new Error('Invalid token response from backend');
-  }
-
-  await tokenStorage.setTokens(accessToken, refreshToken);
-  return mapBackendUserToUser(data.data.user);
+  const data = await call<AuthResponse>(() => apiClient.post('/auth/login', { email, password }), 'Login failed');
+  await saveTokens(data);
+  return toUser(data.user);
 }
 
 export type OnboardingAnswerPayload = {
@@ -140,43 +158,14 @@ export type RegisterPayload = {
   onboarding: OnboardingAnswerPayload[];
   // Inviter's code from a Guest Pass link — unknown codes are ignored server-side.
   referral_code?: string;
+  // Routine tasks picked in onboarding; none = every routine task.
+  routine_task_ids?: string[];
 };
 
 export async function signup(payload: RegisterPayload): Promise<User> {
-  try {
-    const { data } = await apiClient.post<ApiResponse<LoginResponse>>('/auth/register', payload);
-    if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-      throw new Error(data.error?.message || 'Registration failed');
-    }
-    const accessToken = data?.data?.access_token || data?.data?.accessToken;
-    const refreshToken = data?.data?.refresh_token || data?.data?.refreshToken;
-    if (accessToken && refreshToken) {
-      await tokenStorage.setTokens(accessToken, refreshToken);
-    }
-    return mapBackendUserToUser(data?.data?.user || (data as any)?.user || { id: 'user_1', email: payload.email, name: payload.name });
-  } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.post<ApiResponse<LoginResponse>>('/api/auth/register', payload);
-        if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-          throw new Error(data.error?.message || 'Registration failed');
-        }
-        const accessToken = data?.data?.access_token || data?.data?.accessToken;
-        const refreshToken = data?.data?.refresh_token || data?.data?.refreshToken;
-        if (accessToken && refreshToken) {
-          await tokenStorage.setTokens(accessToken, refreshToken);
-        }
-        return mapBackendUserToUser(data?.data?.user || (data as any)?.user || { id: 'user_1', email: payload.email, name: payload.name });
-      } catch (innerErr: any) {
-        if (innerErr?.response?.status === 404) {
-          return mapBackendUserToUser({ id: 'user_1', email: payload.email, name: payload.name });
-        }
-        throw apiFailure(innerErr);
-      }
-    }
-    throw apiFailure(err);
-  }
+  const data = await call<AuthResponse>(() => apiClient.post('/auth/register', payload), 'Registration failed');
+  await saveTokens(data);
+  return toUser(data.user);
 }
 
 export type SocialLoginResult = {
@@ -186,8 +175,6 @@ export type SocialLoginResult = {
 
 export type GoogleLoginResult = SocialLoginResult;
 export type AppleLoginResult = SocialLoginResult;
-
-type SocialLoginResponse = LoginResponse & { isNew?: boolean };
 
 // Backend handles register-or-login in a single call for each provider
 // (HunterX-Backend POST /api/auth/google and /api/auth/apple) — the same
@@ -200,41 +187,31 @@ async function socialLogin(
   body: Record<string, unknown>,
   failMessage: string
 ): Promise<SocialLoginResult> {
-  const post = async (url: string) => {
-    const { data } = await apiClient.post<ApiResponse<SocialLoginResponse>>(url, body);
-    if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-      throw new Error(data.error?.message || failMessage);
-    }
-    const accessToken = data?.data?.access_token || data?.data?.accessToken;
-    const refreshToken = data?.data?.refresh_token || data?.data?.refreshToken;
-    if (!accessToken || !refreshToken) {
-      throw new Error('Invalid token response from backend');
-    }
-    await tokenStorage.setTokens(accessToken, refreshToken);
-    const rawUser = data.data.user || {};
-    if (!rawUser.auth_provider && !rawUser.authProvider && !rawUser.provider) {
-      rawUser.auth_provider = provider;
-    }
-    return { user: mapBackendUserToUser(rawUser), isNew: !!data.data.isNew };
-  };
-
-  try {
-    return await post(path);
-  } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      return post(`/api${path}`);
-    }
-    throw apiFailure(err);
+  const data = await call<AuthResponse>(() => apiClient.post(path, body), failMessage);
+  await saveTokens(data);
+  const rawUser = data.user || {};
+  if (!rawUser.auth_provider && !rawUser.authProvider && !rawUser.provider) {
+    rawUser.auth_provider = provider;
   }
+  return { user: toUser(rawUser), isNew: !!data.isNew };
+}
+
+// Optional sign-up extras: an invite code and the routine tasks picked in
+// onboarding. Left out of the body when empty.
+function signupExtras(referralCode?: string, routineTaskIds: string[] = []) {
+  return {
+    ...(referralCode ? { referral_code: referralCode } : {}),
+    ...(routineTaskIds.length > 0 ? { routine_task_ids: routineTaskIds } : {}),
+  };
 }
 
 export async function loginWithGoogle(
   idToken: string,
   onboarding: OnboardingAnswerPayload[] = [],
-  referralCode?: string
+  referralCode?: string,
+  routineTaskIds: string[] = []
 ): Promise<GoogleLoginResult> {
-  const body = referralCode ? { idToken, onboarding, referral_code: referralCode } : { idToken, onboarding };
+  const body = { idToken, onboarding, ...signupExtras(referralCode, routineTaskIds) };
   return socialLogin('GOOGLE', '/auth/google', body, 'Google sign-in failed');
 }
 
@@ -242,15 +219,21 @@ export async function loginWithApple(
   idToken: string,
   nonce: string,
   onboarding: OnboardingAnswerPayload[] = [],
-  referralCode?: string
+  referralCode?: string,
+  routineTaskIds: string[] = []
 ): Promise<AppleLoginResult> {
-  const body = referralCode
-    ? { idToken, nonce, onboarding, referral_code: referralCode }
-    : { idToken, nonce, onboarding };
+  const body = { idToken, nonce, onboarding, ...signupExtras(referralCode, routineTaskIds) };
   return socialLogin('APPLE', '/auth/apple', body, 'Apple sign-in failed');
 }
 
+// Ends this device's session on the server (revokes its refresh token, and
+// any copy of it), then forgets the tokens. The server call is best-effort:
+// signing out offline still clears the device.
 export async function logout(): Promise<void> {
+  const refreshToken = await tokenStorage.getRefreshToken();
+  if (refreshToken) {
+    await apiClient.post('/auth/logout', { refreshToken }, { timeout: 5000 }).catch(() => { });
+  }
   await tokenStorage.clearTokens();
 }
 
@@ -266,27 +249,8 @@ export async function getCurrentUser(): Promise<User> {
 
   inFlightCurrentUser = (async () => {
     try {
-      const { data } = await apiClient.get<ApiResponse<{ user: User } | User>>('/auth/me');
-      if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-        throw new Error((data as any).error?.message || 'Failed to fetch profile');
-      }
-      const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
-      return mapBackendUserToUser(rawUser);
-    } catch (err: any) {
-      const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-      if (isNotFound) {
-        try {
-          const { data } = await apiClient.get<ApiResponse<{ user: User } | User>>('/api/auth/me');
-          if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-            throw new Error((data as any).error?.message || 'Failed to fetch profile');
-          }
-          const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
-          return mapBackendUserToUser(rawUser);
-        } catch (innerErr: any) {
-          throw apiFailure(innerErr);
-        }
-      }
-      throw apiFailure(err);
+      const data = await call<{ user: any }>(() => apiClient.get('/auth/me'), 'Failed to fetch profile');
+      return toUser(data.user);
     } finally {
       inFlightCurrentUser = null;
     }
@@ -299,45 +263,28 @@ export async function getCurrentUser(): Promise<User> {
 // a Google account created straight from the Login screen, before the
 // onboarding wizard ran. Attaches the wizard's answers to that account
 // (POST /api/auth/complete-onboarding) instead of creating a new one.
+// referralCode: typed in the wizard after a Login-screen Google/Apple
+// account was created; attributes the account to that inviter if nobody
+// has yet.
 export async function completeOnboarding(
-  onboarding: OnboardingAnswerPayload[]
+  onboarding: OnboardingAnswerPayload[],
+  routineTaskIds: string[] = [],
+  referralCode?: string
 ): Promise<User> {
-  const { data } = await apiClient.post<ApiResponse<{ user: User }>>(
-    '/auth/complete-onboarding',
-    { onboarding }
+  const data = await call<{ user: any }>(
+    () => apiClient.post('/auth/complete-onboarding', { onboarding, ...signupExtras(referralCode, routineTaskIds) }),
+    'Could not save your answers'
   );
-  if (!data.success) throw new Error(data.error.message);
-  return mapBackendUserToUser(data.data.user);
+  return toUser(data.user);
 }
+
+const OTP_SENT_MESSAGE = 'Verification code sent to your email. It expires in 10 minutes.';
 
 export async function sendOtp(email: string): Promise<string> {
   try {
     const { data } = await apiClient.post('/auth/send-otp', { email });
-    if (typeof data === 'string') return data;
-    if (data?.message) return data.message;
-    return 'Verification code sent to your email. It expires in 10 minutes.';
-  } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    const isNetworkError = err?.message && err.message.includes('Network Error');
-
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.post('/api/auth/send-otp', { email });
-        if (typeof data === 'string') return data;
-        if (data?.message) return data.message;
-        return 'Verification code sent to your email. It expires in 10 minutes.';
-      } catch (innerErr: any) {
-        if (innerErr?.response?.status === 404) {
-          return 'Verification code sent to your email. It expires in 10 minutes.';
-        }
-        throw apiFailure(innerErr);
-      }
-    }
-
-    if (isNetworkError) {
-      return 'Verification code sent to your email. It expires in 10 minutes.';
-    }
-
+    return data?.message || OTP_SENT_MESSAGE;
+  } catch (err) {
     throw apiFailure(err);
   }
 }
@@ -347,87 +294,19 @@ export async function resendOtp(email: string): Promise<string> {
 }
 
 export async function verifyOtp(email: string, otp: string): Promise<void> {
-  try {
-    const { data } = await apiClient.post('/auth/verify-otp', { email, otp });
-    if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-      throw new Error(data.error?.message || 'Invalid or expired verification code. Please request a new one.');
-    }
-  } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    const isNetworkError = err?.message && err.message.includes('Network Error');
-
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.post('/api/auth/verify-otp', { email, otp });
-        if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-          throw new Error(data.error?.message || 'Invalid or expired verification code. Please request a new one.');
-        }
-        return;
-      } catch (innerErr: any) {
-        if (innerErr?.response?.status === 404) {
-          if (otp === '123456') return;
-          throw new Error('Invalid or expired verification code. Please request a new one.');
-        }
-        throw apiFailure(innerErr);
-      }
-    }
-
-    if (isNetworkError) {
-      if (otp === '123456') return;
-      throw new Error('Invalid or expired verification code. Please request a new one.');
-    }
-
-    throw apiFailure(err);
-  }
+  await call(() => apiClient.post('/auth/verify-otp', { email, otp }),
+    'Invalid or expired verification code. Please request a new one.');
 }
 
 export async function forgotPassword(email: string): Promise<string> {
-  const DEFAULT_SUCCESS_MSG =
-    "If an account exists for this email, we have sent instructions to reset your Secret Key. Check your spam folder if it does not arrive within 2 minutes.";
-
-  const getErrorMessage = (err: any): string => {
-    if (err?.response?.data?.message && typeof err.response.data.message === 'string') {
-      return err.response.data.message;
-    }
-    if (err?.response?.data?.error) {
-      if (typeof err.response.data.error === 'string') return err.response.data.error;
-      if (typeof err.response.data.error.message === 'string') return err.response.data.error.message;
-    }
-    return 'Something went wrong. Please try again.';
-  };
-
   try {
     const { data } = await apiClient.post('/auth/forgot-password', { email });
-    if (typeof data === 'string') return data;
-    if (data?.success === false) {
-      throw new Error(data?.message || 'Something went wrong. Please try again.');
-    }
-    return data?.message || DEFAULT_SUCCESS_MSG;
-  } catch (err: any) {
-    const responseStatus = err?.response?.status || err?.status;
-    if (responseStatus === 404) {
-      try {
-        const { data } = await apiClient.post('/api/auth/forgot-password', { email });
-        if (typeof data === 'string') return data;
-        if (data?.success === false) {
-          throw new Error(data?.message || 'Something went wrong. Please try again.');
-        }
-        return data?.message || DEFAULT_SUCCESS_MSG;
-      } catch (innerErr: any) {
-        throw new Error(getErrorMessage(innerErr));
-      }
-    }
-
-    throw new Error(getErrorMessage(err));
+    return data?.message ||
+      'If an account exists for this email, we have sent instructions to reset your Secret Key. Check your spam folder if it does not arrive within 2 minutes.';
+  } catch (err) {
+    throw apiFailure(err);
   }
 }
-
-const PASSWORD_RULE_TEXT: Record<string, string> = {
-  AT_LEAST_8_CHARACTERS: 'at least 8 characters',
-  ONE_UPPERCASE_LETTER: 'an uppercase letter',
-  ONE_NUMBER: 'a number',
-  ONE_SPECIAL_CHARACTER: 'a special character',
-};
 
 /**
  * Signed-in password change. The backend signs out every other device and
@@ -435,57 +314,18 @@ const PASSWORD_RULE_TEXT: Record<string, string> = {
  * Throws an Error with a message ready to show the user.
  */
 export async function changePassword(currentPassword: string, newPassword: string, confirmPassword: string): Promise<void> {
-  try {
-    const { data } = await apiClient.post('/auth/change-password', { currentPassword, newPassword, confirmPassword });
-    const accessToken = data?.data?.access_token;
-    const refreshToken = data?.data?.refresh_token;
-    if (!data?.success || !accessToken || !refreshToken) {
-      throw new Error(data?.message || 'Could not change your password. Please try again.');
-    }
-    await tokenStorage.setTokens(accessToken, refreshToken);
-  } catch (err: any) {
-    const body = err?.response?.data;
-    if (Array.isArray(body?.errors) && body.errors.length > 0) {
-      const missing = body.errors.map((code: string) => PASSWORD_RULE_TEXT[code] ?? code).join(', ');
-      throw new Error(`New password needs ${missing}.`);
-    }
-    throw new Error(body?.message || body?.error?.message || err?.message || 'Could not change your password. Please try again.');
-  }
+  const data = await call<TokenPair>(
+    () => apiClient.post('/auth/change-password', { currentPassword, newPassword, confirmPassword }),
+    'Could not change your password. Please try again.'
+  );
+  await saveTokens(data);
 }
 
 export async function resetPassword(token: string, newPassword: string, confirmPassword: string): Promise<string> {
   try {
     const { data } = await apiClient.post('/auth/reset-password', { token, newPassword, confirmPassword });
-    if (typeof data === 'string') return data;
-    if (data?.success === false) {
-      throw new Error(data?.message || 'Failed to reset password.');
-    }
-    if (data?.message) return data.message;
-    return 'Password reset successfully.';
-  } catch (err: any) {
-    const msg = err?.message;
-    const isGeneric404 = msg === 'Request failed with status code 404' || (msg && msg.includes('404'));
-    const isNetworkError = msg && (msg.includes('Network Error') || msg.includes('network_error'));
-
-    if (msg && !isGeneric404 && !isNetworkError) {
-      throw err;
-    }
-
-    const responseStatus = err?.response?.status || err?.status;
-    if (responseStatus === 404) {
-      try {
-        const { data } = await apiClient.post('/api/auth/reset-password', { token, newPassword, confirmPassword });
-        if (typeof data === 'string') return data;
-        if (data?.success === false) {
-          throw new Error(data?.message || 'Failed to reset password.');
-        }
-        if (data?.message) return data.message;
-        return 'Password reset successfully.';
-      } catch (innerErr: any) {
-        throw apiFailure(innerErr);
-      }
-    }
-
+    return data?.message || 'Password reset successfully.';
+  } catch (err) {
     throw apiFailure(err);
   }
 }
@@ -502,96 +342,41 @@ export type UpdateProfilePayload = {
 export { refreshAccessToken } from './client';
 
 export async function updateProfile(payload: UpdateProfilePayload): Promise<User> {
-  try {
-    const { data } = await apiClient.patch<ApiResponse<{ user: User } | User>>('/auth/profile', payload);
-    if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-      throw new Error((data as any).error?.message || 'Failed to update profile');
-    }
-    const accessToken = (data as any)?.data?.access_token || (data as any)?.data?.accessToken || (data as any)?.access_token || (data as any)?.accessToken;
-    const refreshToken = (data as any)?.data?.refresh_token || (data as any)?.data?.refreshToken || (data as any)?.refresh_token || (data as any)?.refreshToken;
-    if (accessToken && refreshToken) {
-      await tokenStorage.setTokens(accessToken, refreshToken);
-    }
-    const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
-    return mapBackendUserToUser(rawUser);
-  } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.patch<ApiResponse<{ user: User } | User>>('/api/auth/profile', payload);
-        if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-          throw new Error((data as any).error?.message || 'Failed to update profile');
-        }
-        const accessToken = (data as any)?.data?.access_token || (data as any)?.data?.accessToken || (data as any)?.access_token || (data as any)?.accessToken;
-        const refreshToken = (data as any)?.data?.refresh_token || (data as any)?.data?.refreshToken || (data as any)?.refresh_token || (data as any)?.refreshToken;
-        if (accessToken && refreshToken) {
-          await tokenStorage.setTokens(accessToken, refreshToken);
-        }
-        const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
-        return mapBackendUserToUser(rawUser);
-      } catch (innerErr: any) {
-        throw apiFailure(innerErr);
-      }
-    }
-    throw apiFailure(err);
-  }
+  const data = await call<{ user: any }>(() => apiClient.patch('/auth/profile', payload), 'Failed to update profile');
+  return toUser(data.user);
 }
 
 export async function updateUserAvatar(avatarId: number | string): Promise<User> {
   const numId = typeof avatarId === 'string' ? parseInt(avatarId, 10) : avatarId;
   const payload = { avatarId: isNaN(numId) ? avatarId : numId };
+  const data = await call<{ user: any }>(() => apiClient.patch('/users/me/avatar', payload), 'Failed to update avatar');
+  return toUser(data.user);
+}
 
+/**
+ * Email change, step 1: the backend emails a 6-digit code to the new
+ * address. Password accounts must confirm their current password.
+ * Returns the server's message to show ("We sent a 6-digit code to …").
+ */
+export async function requestEmailChange(email: string, currentPassword?: string): Promise<string> {
   try {
-    const { data } = await apiClient.patch<ApiResponse<{ user: User } | User>>('/users/me/avatar', payload);
-    if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-      throw new Error((data as any).error?.message || 'Failed to update avatar');
-    }
-    const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
-    return mapBackendUserToUser(rawUser);
-  } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.patch<ApiResponse<{ user: User } | User>>('/api/users/me/avatar', payload);
-        if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-          throw new Error((data as any).error?.message || 'Failed to update avatar');
-        }
-        const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
-        return mapBackendUserToUser(rawUser);
-      } catch (innerErr: any) {
-        throw apiFailure(innerErr);
-      }
-    }
+    const { data } = await apiClient.patch('/users/me/email', {
+      email: email.trim(),
+      ...(currentPassword ? { currentPassword } : {}),
+    });
+    return data?.message || `We sent a 6-digit code to ${email.trim()}.`;
+  } catch (err) {
     throw apiFailure(err);
   }
 }
 
-export async function updateUserEmail(email: string): Promise<User> {
-  const payload = { email: email.trim() };
-
-  try {
-    const { data } = await apiClient.patch<ApiResponse<{ user: User } | User>>('/users/me/email', payload);
-    if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-      throw new Error((data as any).error?.message || 'Failed to update email');
-    }
-    const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
-    return mapBackendUserToUser(rawUser);
-  } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.patch<ApiResponse<{ user: User } | User>>('/api/users/me/email', payload);
-        if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-          throw new Error((data as any).error?.message || 'Failed to update email');
-        }
-        const rawUser = (data as any)?.data?.user || (data as any)?.data || (data as any)?.user || data;
-        return mapBackendUserToUser(rawUser);
-      } catch (innerErr: any) {
-        throw apiFailure(innerErr);
-      }
-    }
-    throw apiFailure(err);
-  }
+/** Email change, step 2: the code from the email switches the address. */
+export async function confirmEmailChange(email: string, otp: string): Promise<User> {
+  const data = await call<{ user: any }>(
+    () => apiClient.patch('/users/me/email', { email: email.trim(), otp: otp.trim() }),
+    'Failed to update email'
+  );
+  return toUser(data.user);
 }
 
 /**
@@ -599,21 +384,12 @@ export async function updateUserEmail(email: string): Promise<User> {
  * (POST /account/delete/link). The website schedules the deletion.
  */
 export async function createAccountDeletionLink(): Promise<string> {
-  try {
-    const { data } = await apiClient.post('/account/delete/link');
-    if (!data?.success || !data?.data?.url) throw new Error(data?.message || 'Could not start account deletion.');
-    return data.data.url;
-  } catch (err) {
-    throw apiFailure(err);
-  }
+  const data = await call<{ url: string }>(() => apiClient.post('/account/delete/link'), 'Could not start account deletion.');
+  if (!data?.url) throw new Error('Could not start account deletion.');
+  return data.url;
 }
 
 /** Cancels a pending account deletion (POST /account/delete/cancel). */
 export async function cancelAccountDeletion(): Promise<void> {
-  try {
-    const { data } = await apiClient.post('/account/delete/cancel');
-    if (!data?.success) throw new Error(data?.message || 'Could not cancel account deletion.');
-  } catch (err) {
-    throw apiFailure(err);
-  }
+  await call(() => apiClient.post('/account/delete/cancel'), 'Could not cancel account deletion.');
 }

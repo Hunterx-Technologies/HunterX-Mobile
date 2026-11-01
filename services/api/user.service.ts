@@ -59,20 +59,6 @@ export async function fetchUserActivity(page = 1, limit = 10): Promise<UserActiv
     const result = (data as any)?.data || data;
     return result;
   } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.get<ApiResponse<UserActivityData>>('/api/users/activity', {
-          params: { page, limit },
-        });
-        if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-          throw new Error((data as any).error?.message || 'Failed to fetch activity');
-        }
-        return (data as any)?.data || data;
-      } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
-      }
-    }
     throw new Error(extractErrorMessage(err));
   }
 }
@@ -94,26 +80,11 @@ export async function exportUserData(): Promise<{ message: string; downloadUrl?:
     const downloadUrl = result?.downloadUrl || result?.download_url;
     return { message, downloadUrl };
   } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.post<ApiResponse<DataExportResponse>>('/api/users/me/data-export');
-        if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-          throw new Error((data as any).error?.message || (data as any).message || 'Failed to request data export');
-        }
-        const result = (data as any)?.data || data;
-        const message = result?.message || 'Data export requested successfully.';
-        const downloadUrl = result?.downloadUrl || result?.download_url;
-        return { message, downloadUrl };
-      } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
-      }
-    }
     throw new Error(extractErrorMessage(err));
   }
 }
 
-/** Level-ups not shown yet (an approved proof, a referral bonus, a screen cut short), as one screen. */
+/** Level-ups not shown yet (an approved proof, a screen cut short), as one screen. */
 export async function fetchPendingLevelUp(): Promise<LevelUpInfo | null> {
   const { data } = await apiClient.get<ApiResponse<{ level_up: LevelUpInfo | null }>>('/users/me/level-up');
   if (!data.success) {

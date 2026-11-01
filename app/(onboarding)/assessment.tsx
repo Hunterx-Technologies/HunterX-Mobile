@@ -20,7 +20,7 @@ import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 const CURRENT_STEP = 5; // sixth step (0-indexed)
 
 type RankOption = {

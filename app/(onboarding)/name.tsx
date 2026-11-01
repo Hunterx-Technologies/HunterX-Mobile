@@ -17,12 +17,13 @@ import Feather from '@expo/vector-icons/Feather';
 import { Button } from '@/components/common/Button';
 import { Screen } from '@/components/common/Screen';
 import { StepIndicator } from '@/components/common/StepIndicator';
+import { InviteCodeInput } from '@/components/features/invite/InviteCodeInput';
 import { useAuth } from '@/hooks/useAuth';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 const CURRENT_STEP = 0; // first step (0-indexed)
 
 export default function OnboardingNameScreen() {
@@ -31,6 +32,8 @@ export default function OnboardingNameScreen() {
     const setHunterNameStore = useOnboardingStore((s) => s.setHunterName);
     const [hunterName, setHunterName] = useState(storeHunterName);
     const [isFocused, setIsFocused] = useState(false);
+    // Kept as the pending code by InviteCodeInput and sent with sign-up.
+    const [inviteCode, setInviteCode] = useState('');
 
     const handleBack = async () => {
         await logout();
@@ -157,7 +160,9 @@ export default function OnboardingNameScreen() {
                             )}
                         </View>
 
-
+                        <View style={styles.inviteCode}>
+                            <InviteCodeInput value={inviteCode} onChangeValue={setInviteCode} />
+                        </View>
                     </Animated.View>
                 </ScrollView>
 
@@ -183,6 +188,10 @@ const styles = StyleSheet.create({
     },
     flex: {
         flex: 1,
+    },
+
+    inviteCode: {
+        marginTop: 20,
     },
 
     /* ─── Top Bar ─── */

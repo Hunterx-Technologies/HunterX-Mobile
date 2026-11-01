@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { fetchTasksToday, completeTask, reopenTask } from '@/services/api/tasks.service';
 import type { TaskItem } from '@/types/task';
+import { mapTaskToQuest, type QuestItem } from '@/utils/quests';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { usePushPermissionPrompt } from '@/hooks/usePushPermissionPrompt';
@@ -29,12 +30,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Screen } from '@/components/common/Screen';
 import { ExactMedalIcon } from '@/components/common/ExactMedalIcon';
-import { DayCompleteScreen } from '@/components/features/missions/DayCompleteScreen';
+import { MissionResultsScreen } from '@/components/features/missions/MissionResultsScreen';
 import { QuestListCard } from '@/components/features/missions/QuestListCard';
 import { PaidTaskPurchaseModal } from '@/components/features/missions/PaidTaskPurchaseModal';
 import { LootDropModal } from '@/components/features/loot/LootDropModal';
 import { QuestActionModal } from '@/components/features/missions/QuestActionModal';
 import { ProofSubmitModal } from '@/components/features/missions/ProofSubmitModal';
+import { RoutineTasksModal } from '@/components/features/routine/RoutineTasksModal';
 import { showGlobalToast } from '@/store/useToastStore';
 import { TaskCompletedToast } from '@/components/features/missions/TaskCompletedToast';
 import { TaskCompletionBottomSheet } from '@/components/features/missions/TaskCompletionBottomSheet';
@@ -44,7 +46,7 @@ import { playTaskDoneSound } from '@/services/audio/taskDoneSound';
 import { useAuth } from '@/hooks/useAuth';
 import { useLootDrop } from '@/hooks/useLootDrop';
 import { fontFamilies } from '@/theme/typography';
-import { getAvatarSource } from './profile';
+import { getAvatarSource } from '@/components/profile/AvatarSelectionModal';
 import { useAvatarsReady } from '@/services/api/avatar.service';
 import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
 import { setCelebrationHold, showReward, useCelebrationStore } from '@/store/useCelebrationStore';
@@ -54,48 +56,6 @@ import { API_ERROR, PENDING_DELETION_MESSAGE, getApiErrorCode } from '@/services
 import { showLevelUpFromApi } from '@/store/useLevelUpStore';
 import { useStreakBreakStore } from '@/store/useStreakBreakStore';
 import { StreakPillLanding } from '@/components/features/streaks/StreakPillLanding';
-
-export interface QuestItem {
-  id: string;
-  title: string;
-  description?: string;
-  category: string;
-  xpReward: number;
-  xpPartial?: number;
-  type: 'daily' | 'weekly' | 'monthly' | 'locked';
-  image: any;
-  status: 'todo' | 'done' | 'partial' | 'skipped' | 'locked';
-  earnedXp?: number;
-  showTickButton?: boolean;
-  showWrongButton?: boolean;
-  hasStatusPopup?: boolean;
-  imageHeight?: number;
-  imageStyle?: any;
-  targetValue?: string;
-  allows_partial?: boolean;
-  period_start?: string;
-  period_end?: string;
-  end_date?: string;
-  price?: number;
-  currency?: string;
-  is_paid?: boolean;
-  /** Photos needed to complete it (0 or missing = a normal quest). */
-  proofCount?: number;
-  /** Proof quests: waiting on the admin, sent back for new photos, or rejected. */
-  reviewStatus?: 'in_review' | 'resubmit' | 'rejected';
-  /** The admin's reason, on resubmit / rejected. */
-  reviewNote?: string | null;
-}
-
-function addDaysToIso(dateStr: string, days: number): string {
-  try {
-    const d = new Date(dateStr + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() + days);
-    return d.toISOString().split('T')[0];
-  } catch {
-    return dateStr;
-  }
-}
 
 const LAST_TASK_SHEET_DATE_KEY = '@hunterx_task_sheet_last_shown_date';
 
@@ -165,88 +125,6 @@ const ANIME_AVATARS = [
   'https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=400&auto=format&fit=crop',
   'https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=400&auto=format&fit=crop',
 ];
-
-function mapTaskToQuest(
-  item: TaskItem,
-  type: 'daily' | 'weekly' | 'monthly' | 'locked'
-): QuestItem {
-  const tagUpper = item.tag?.toUpperCase() || '';
-
-  // Dynamically bind image from the API response, requesting a
-  // format/quality/size-optimized Cloudinary variant instead of the
-  // full-resolution original (see services/media/cloudinary.ts).
-  const image = item.image_url ? { uri: optimizeCloudinaryUrl(item.image_url) } : null;
-
-  let status: 'todo' | 'done' | 'partial' | 'skipped' | 'locked' = 'todo';
-  let reviewStatus: QuestItem['reviewStatus'];
-  // Proof quests: submitted proof sits with the done ones (it counts for
-  // today's streak) until the admin decides; a resubmit request reopens it.
-  if (item.status === 'IN_REVIEW') {
-    status = 'done';
-    reviewStatus = 'in_review';
-  } else if (item.status === 'REJECTED') {
-    status = 'done';
-    reviewStatus = 'rejected';
-  } else if (item.status === 'RESUBMIT') {
-    reviewStatus = 'resubmit';
-  } else if (item.status === 'COMPLETED') {
-    status = 'done';
-  } else if (item.status === 'PARTIAL') {
-    status = 'partial';
-  } else if (item.status === 'SKIPPED') {
-    status = 'skipped';
-  } else if (item.status === 'LOCKED' || type === 'locked') {
-    status = 'locked';
-  }
-
-  let targetValue: string | undefined = undefined;
-  if (item.target_value !== null && item.target_value !== undefined) {
-    let unit = item.target_unit || '';
-    if (unit === 'grams') {
-      unit = 'g';
-    } else if (unit === 'liters') {
-      unit = 'L';
-    } else if (unit === 'hours' || unit === 'hour') {
-      unit = 'hrs';
-    }
-
-    if (unit === 'hrs' || unit === 'g' || unit === 'L') {
-      targetValue = `${item.target_value}${unit}`;
-    } else {
-      targetValue = `${item.target_value} ${unit}`.trim();
-    }
-  }
-
-  const period_end = item.period_start ? addDaysToIso(item.period_start, 29) : undefined;
-
-  return {
-    id: item.id,
-    title: item.title,
-    description: item.description,
-    category: item.tag || (type === 'locked' ? 'PREMIUM' : 'QUEST'),
-    xpReward: item.xp_reward,
-    xpPartial: item.xp_partial,
-    type,
-    image,
-    status,
-    earnedXp: item.xp_earned,
-    showTickButton: status !== 'done' && status !== 'skipped' && status !== 'locked',
-    showWrongButton: status !== 'done' && status !== 'skipped' && status !== 'locked',
-    targetValue,
-    allows_partial: item.allows_partial,
-    period_start: item.period_start,
-    period_end,
-    end_date: item.end_date ? item.end_date.slice(0, 10) : undefined,
-    price: item.price,
-    currency: item.currency || 'INR',
-    is_paid: item.is_paid,
-    proofCount: item.proof_count ?? 0,
-    reviewStatus,
-    reviewNote: item.review_note ?? null,
-    imageHeight: tagUpper === 'REST' ? 120 : undefined,
-    imageStyle: tagUpper === 'NUTRITION' ? { height: 170, top: -25 } : undefined,
-  };
-}
 
 export default function MissionsHomeScreen() {
   const { user } = useAuth();
@@ -332,6 +210,7 @@ export default function MissionsHomeScreen() {
   const [completedToastTitle, setCompletedToastTitle] = useState('Task Completed!');
   const [completedToastSubtitle, setCompletedToastSubtitle] = useState('Great job, hunter!');
   const [dayCompleteModalVisible, setDayCompleteModalVisible] = useState(false);
+  const [routineModalVisible, setRoutineModalVisible] = useState(false);
   const [toastXp, setToastXp] = useState(10);
   const [errorToastVisible, setErrorToastVisible] = useState(false);
   const [errorToastTitle, setErrorToastTitle] = useState('Action Failed');
@@ -459,11 +338,15 @@ export default function MissionsHomeScreen() {
   const weeklySkippedQuests = skippedQuests.filter((q) => q.type === 'weekly');
   const monthlySkippedQuests = skippedQuests.filter((q) => q.type === 'monthly');
 
-  // Automatically pop up DayCompleteScreen celebration ONCE per day when all daily tasks are completed/skipped
+  // The day counts as cleared when no daily task is left to do and at least
+  // one was completed (the rest may be skipped). All skipped isn't a clear.
+  const dayCleared = dailyQuests.length > 0 && dailyTodoQuests.length === 0 && dailyDoneQuests.length > 0;
+
+  // Automatically pop up the MissionResultsScreen celebration ONCE per day when the day is cleared
   useEffect(() => {
     if (loading) return;
 
-    if (dailyQuests.length > 0 && dailyTodoQuests.length === 0) {
+    if (dayCleared) {
       const todayStr = new Date().toISOString().split('T')[0];
       const storageKey = `hasShownDayComplete_${todayStr}`;
 
@@ -481,7 +364,7 @@ export default function MissionsHomeScreen() {
           console.warn('[DayCompleteModal] Storage check error:', err);
         });
     }
-  }, [loading, dailyQuests.length, dailyTodoQuests.length]);
+  }, [loading, dayCleared]);
 
   const prevTodoCountRef = useRef<number | null>(null);
 
@@ -808,6 +691,20 @@ export default function MissionsHomeScreen() {
           userBadges={(user as any)?.badges}
         />
 
+        {/* TODAY'S QUESTS HEADER + SHUFFLE (routine daily tasks only) */}
+        <View style={styles.questsHeaderRow}>
+          <Text style={styles.sectionTitleWide}>TODAY&apos;S QUESTS</Text>
+          <TouchableOpacity
+            style={[styles.addTaskButton, deletionPending && styles.addTaskButtonDisabled]}
+            onPress={() => setRoutineModalVisible(true)}
+            disabled={deletionPending}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="repeat" size={16} color="#0A0A0A" />
+            <Text style={styles.addTaskButtonText}>Shuffle</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* FILTER TABS ROW */}
         <View style={styles.filterTabsRow}>
           {/* TODO Tab */}
@@ -955,17 +852,19 @@ export default function MissionsHomeScreen() {
                           </Text>
                         </View>
 
-                        <TouchableOpacity
-                          style={styles.peakShareBtn}
-                          activeOpacity={0.85}
-                          onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setDayCompleteModalVisible(true);
-                          }}
-                        >
-                          <Text style={styles.peakShareBtnText}>CELEBRATE</Text>
-                          <Ionicons name="sparkles" size={14} color="#0A0A0A" />
-                        </TouchableOpacity>
+                        {dayCleared && (
+                          <TouchableOpacity
+                            style={styles.peakShareBtn}
+                            activeOpacity={0.85}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setDayCompleteModalVisible(true);
+                            }}
+                          >
+                            <Text style={styles.peakShareBtnText}>CELEBRATE</Text>
+                            <Ionicons name="sparkles" size={14} color="#0A0A0A" />
+                          </TouchableOpacity>
+                        )}
                       </LinearGradient>
                     ) : dailyTodoQuests.length > 0 ? (
                       <>
@@ -1232,6 +1131,12 @@ export default function MissionsHomeScreen() {
         }}
       />
 
+      <RoutineTasksModal
+        visible={routineModalVisible}
+        onClose={() => setRoutineModalVisible(false)}
+        onSaved={() => loadTasks()}
+      />
+
       <QuestActionModal
         visible={actionModalVisible}
         questTitle={selectedQuest?.title ?? ''}
@@ -1300,7 +1205,7 @@ export default function MissionsHomeScreen() {
 
       {/* Day Complete Modal Popup */}
       {showDayComplete && (
-        <DayCompleteScreen
+        <MissionResultsScreen
           quests={quests}
           onContinue={() => setDayCompleteModalVisible(false)}
         />
@@ -1568,6 +1473,32 @@ const styles = StyleSheet.create({
   },
 
   /* Filter Tabs */
+  questsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    // WeeklyTracker above already leaves 12.
+    marginTop: 12,
+    marginBottom: 14,
+  },
+  addTaskButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingLeft: 10,
+    paddingRight: 14,
+  },
+  addTaskButtonDisabled: {
+    opacity: 0.4,
+  },
+  addTaskButtonText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 13,
+    color: '#0A0A0A',
+  },
   filterTabsRow: {
     flexDirection: 'row',
     gap: 10,

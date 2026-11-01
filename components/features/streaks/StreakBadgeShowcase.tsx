@@ -608,6 +608,15 @@ export interface StreakBadgeShowcaseProps {
   getIntroSource?: (badge: StreakBadgeItem) => Promise<FlightRect | null>;
   sound?: boolean;
   haptics?: boolean;
+  /**
+   * Just looking (Home badge tap, Profile > Badges): badges before
+   * currentIndex show unlocked, the rest locked, and nothing can be cracked.
+   */
+  browseOnly?: boolean;
+  /** Badge in focus when it opens; defaults to currentIndex. */
+  initialViewIndex?: number;
+  /** Icon for the onClose button: ✕ for popups, a back arrow for pages. */
+  closeIcon?: 'close' | 'chevron-back';
 }
 
 export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
@@ -622,6 +631,9 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   getIntroSource,
   sound = true,
   haptics = true,
+  browseOnly = false,
+  initialViewIndex,
+  closeIcon = 'close',
 }) => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -633,12 +645,13 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
 
   // The badge in focus; swiping browses the others without changing which
   // one is current.
-  const [viewIndex, setViewIndex] = useState(currentIndex);
+  const focusIndex = initialViewIndex ?? currentIndex;
+  const [viewIndex, setViewIndex] = useState(focusIndex);
   const badge = STREAK_BADGES_DATA[viewIndex];
   const accent = BADGE_ACCENT[badge.id] || ORANGE;
   const copy = BADGE_COPY[badge.id];
   const opened = unlockedAt !== null;
-  const viewingCurrent = viewIndex === currentIndex;
+  const viewingCurrent = !browseOnly && viewIndex === currentIndex;
   const viewState: SlotState =
     viewIndex < currentIndex || (viewingCurrent && opened) ? 'unlocked' : viewingCurrent ? 'current' : 'locked';
   const size = Math.min(260, width * 0.6);
@@ -646,7 +659,7 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   const crackSound = useAudioPlayer(require('../../../assets/sounds/badge_crack.mp3'));
   const revealSound = useAudioPlayer(require('../../../assets/sounds/badge_reveal.mp3'));
 
-  const pos = useSharedValue(currentIndex);
+  const pos = useSharedValue(focusIndex);
   const ember = useSharedValue(0);
   const shake = useSharedValue(0);
   const crack = useSharedValue(0);
@@ -666,12 +679,12 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   // A new current badge (e.g. the test page moving on): bring it into focus
   // and reset the seal.
   useEffect(() => {
-    setViewIndex(currentIndex);
+    setViewIndex(focusIndex);
     crack.value = 0;
     shatter.value = 0;
     setTaps(0);
     setUnlockedAt(null);
-  }, [currentIndex, crack, shatter]);
+  }, [currentIndex, focusIndex, crack, shatter]);
 
   const play = (player: ReturnType<typeof useAudioPlayer>) => {
     if (!sound) return;
@@ -781,9 +794,13 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
     () =>
       STREAK_BADGES_DATA.map((_, i) => ({
         idx: i,
-        state: (i < currentIndex ? 'unlocked' : i === currentIndex ? 'current' : 'locked') as SlotState,
+        state: (i < currentIndex
+          ? 'unlocked'
+          : i === currentIndex && !browseOnly
+            ? 'current'
+            : 'locked') as SlotState,
       })),
-    [currentIndex]
+    [currentIndex, browseOnly]
   );
 
   // Swipe left/right to browse. Locked while the stone is shattering.
@@ -1001,9 +1018,14 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
 
         {/* Bottom */}
         <View style={[styles.footer, { paddingBottom: buttonGap }]}>
-          {viewingCurrent && opened && (
+          {((viewingCurrent && opened) || browseOnly) && (
             <Animated.View style={[styles.footerInner, textStyle]}>
-              <Pressable style={styles.button} onPress={handleContinue} accessibilityRole="button">
+              <Pressable
+                style={styles.button}
+                // Browsing: nothing to fly home, so Continue just leaves.
+                onPress={browseOnly ? () => (onContinue ? onContinue(badge) : onClose?.()) : handleContinue}
+                accessibilityRole="button"
+              >
                 <Text style={styles.buttonText}>{continueLabel}</Text>
               </Pressable>
             </Animated.View>
@@ -1016,9 +1038,9 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
             onPress={onClose}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel="Close"
+            accessibilityLabel={closeIcon === 'close' ? 'Close' : 'Back'}
           >
-            <Ionicons name="close" size={24} color="#FFFFFF" />
+            <Ionicons name={closeIcon} size={24} color="#FFFFFF" />
           </Pressable>
         )}
         </Animated.View>

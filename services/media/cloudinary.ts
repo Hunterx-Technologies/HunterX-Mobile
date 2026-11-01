@@ -80,7 +80,7 @@ export async function uploadImageToCloudinary(
   localUri: string,
   folder: CloudinaryFolder = 'misc'
 ): Promise<CloudinaryUploadResult> {
-  const { timestamp, signature, folder: signedFolder, apiKey, cloudName } =
+  const { timestamp, signature, folder: signedFolder, apiKey, cloudName, allowedFormats } =
     await fetchCloudinarySignature(folder);
 
   const filename = localUri.split('/').pop() || `upload-${timestamp}.jpg`;
@@ -104,6 +104,7 @@ export async function uploadImageToCloudinary(
   formData.append('timestamp', String(timestamp));
   formData.append('signature', signature);
   formData.append('folder', signedFolder);
+  if (allowedFormats) formData.append('allowed_formats', allowedFormats);
 
   const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
     method: 'POST',

@@ -64,28 +64,8 @@ export async function getAvatars(): Promise<AvatarItem[]> {
         prefetchAvatarImages(cachedAvatars);
         return cachedAvatars;
       }
-    } catch (err: any) {
-      const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-      if (isNotFound) {
-        try {
-          const { data } = await apiClient.get<ApiResponse<{ avatars: AvatarItem[] } | AvatarItem[]>>('/api/avatars');
-          const rawList = (data as any)?.data?.avatars || (data as any)?.data || (data as any)?.avatars || data;
-          if (Array.isArray(rawList) && rawList.length > 0) {
-            cachedAvatars = rawList.map((a: any) => ({
-              id: String(a.id),
-              name: a.name || `Avatar ${a.id}`,
-              image_url: a.image_url || a.imageUrl || a.url || '',
-              gender: a.gender,
-              is_default: !!a.is_default,
-              unlock_at_level: a.unlock_at_level ?? 0,
-            }));
-            prefetchAvatarImages(cachedAvatars);
-            return cachedAvatars;
-          }
-        } catch {
-          // Ignore inner error
-        }
-      }
+    } catch {
+      // Falls back to whatever is cached (or an empty list) below.
     } finally {
       fetchPromise = null;
       notifyAvatarsReady();

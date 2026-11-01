@@ -1,7 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { router } from 'expo-router';
 import {
   ActivityIndicator,
   Animated,
+  FlatList,
+  LayoutChangeEvent,
   ListRenderItem,
   StatusBar,
   StyleSheet,
@@ -31,13 +34,16 @@ import {
 } from '@/components/features/leaderboard/LeaderboardHunterRow';
 import { LeaderboardTop5Modal } from '@/components/features/leaderboard/LeaderboardTop5Modal';
 import { SystemSettingsModal } from '@/components/profile/SystemSettingsModal';
-import { InviteFriendsModal } from '@/components/profile/InviteFriendsModal';
+import { InviteNudgeCard } from '@/components/features/invite/InviteNudgeCard';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLeaderboardScope } from '@/hooks/useLeaderboard';
 import { useAvatarsReady } from '@/services/api/avatar.service';
-import type { LeaderboardEntry, LeaderboardScope } from '@/types/leaderboard';
+import type { LeaderboardEntry, LeaderboardMe, LeaderboardScope } from '@/types/leaderboard';
+
+// Gap between the floating "you" row and the bottom of the screen.
+const FLOATING_ME_BOTTOM = 8;
 
 const SCOPE_BY_TAB: Record<MainCategoryTab, LeaderboardScope> = {
   Global: 'global',
@@ -53,7 +59,7 @@ function toHunter(entry: LeaderboardEntry): LeaderboardHunter {
   return {
     id: entry.userId,
     rank: entry.rank,
-    displayName: entry.name,
+    displayName: entry.isMe ? 'You' : entry.name,
     score: entry.totalXp,
     level: entry.level,
     avatarUrl: entry.avatarThumbUrl,
@@ -76,16 +82,13 @@ export default function LeaderboardScreen() {
   );
   useAvatarsReady();
 
-  const userAny = user as any;
-  const displayName = userAny?.name ?? user?.displayName ?? 'Shadow Hunter';
-  const referralCode = userAny?.referral_code ?? undefined;
 
   const [category, setCategory] = useState<MainCategoryTab>('Global');
   const scope = SCOPE_BY_TAB[category];
 
   const {
     entries,
-    me,
+    me: rawMe,
     emptyState,
     nextCursor,
     isInitialLoading,
@@ -96,8 +99,8 @@ export default function LeaderboardScreen() {
   } = useLeaderboardScope(scope, user?.id != null ? String(user.id) : null);
 
   const [top5ModalVisible, setTop5ModalVisible] = useState(false);
+  const openInvite = useCallback(() => router.push('/invite-friends'), []);
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
-  const [inviteModalVisible, setInviteModalVisible] = useState(false);
 
   // Ranks 1-3 render as the existing gold/silver/bronze featured cards,
   // always a prefix of the combined, rank-ordered entries list — rendered
@@ -105,24 +108,87 @@ export default function LeaderboardScreen() {
   const top3 = useMemo(() => entries.filter((e) => e.rank != null && e.rank <= 3), [entries]);
   const rest = useMemo(() => entries.filter((e) => e.rank == null || e.rank > 3), [entries]);
 
-  // Don't float a duplicate of a row that's already visible on screen —
-  // once a page load reaches the viewer's own rank, their real row
-  // (correctly styled gold/silver/bronze if applicable) is enough.
-  const meAlreadyVisible = entries.some((e) => e.isMe);
+  const meEntry = useMemo(() => entries.find((e) => e.isMe) ?? null, [entries]);
+  const meInList = meEntry != null;
+
+  // `me.rank` is null while server rankings catch up; the viewer's own list
+  // row can still carry it, which keeps the card tappable for sharing.
+  const me = useMemo<LeaderboardMe | null>(
+    () =>
+      rawMe && rawMe.rank == null && meEntry?.rank != null
+        ? { ...rawMe, rank: meEntry.rank }
+        : rawMe,
+    [rawMe, meEntry]
+  );
 
   const meHunter = useMemo<LeaderboardHunter | null>(() => {
-    if (!me || me.status !== 'ranked' || meAlreadyVisible) return null;
+    if (!me || me.status !== 'ranked') return null;
     return {
       id: 'me',
       rank: me.rank,
-      displayName: me.name,
+      displayName: 'You',
       score: me.totalXp,
       level: me.level,
       avatarUrl: me.avatarThumbUrl,
       isCurrentUser: true,
       streak: me.streak,
     };
-  }, [me, meAlreadyVisible]);
+  }, [me]);
+
+  // Floating "you" row: pinned near the footer while the viewer's real row
+  // is off screen, handed off to the real row once it scrolls into the
+  // pinned spot, and pinned again once it scrolls up under the header.
+  const listRef = useRef<FlatList<ListItem>>(null);
+  const meRowRef = useRef<View>(null);
+  const [meRowLayout, setMeRowLayout] = useState<{ y: number; height: number } | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [stickyHeaderHeight, setStickyHeaderHeight] = useState(0);
+
+  // Position of the real row within the scroll content, so visibility can
+  // be derived from scrollY on the native thread.
+  const measureMeRow = useCallback(() => {
+    const row = meRowRef.current;
+    const content = (listRef.current?.getNativeScrollRef() as any)?.getInnerViewRef?.();
+    if (!row || !content) return;
+    row.measureLayout(content, (_x, y, _w, height) => {
+      setMeRowLayout((prev) => (prev?.y === y && prev?.height === height ? prev : { y, height }));
+    });
+  }, []);
+
+  useEffect(() => {
+    setMeRowLayout(null);
+  }, [scope]);
+
+  const floatingMeOpacity = useMemo(() => {
+    if (!meInList || !meRowLayout || viewportHeight === 0) return 1;
+    const { y, height } = meRowLayout;
+    // scrollY at which the real row reaches the floating row's slot.
+    const dockAt = y + height + FLOATING_ME_BOTTOM - viewportHeight;
+    // scrollY at which the real row is fully hidden under the sticky header.
+    const undockAt = y + height - stickyHeaderHeight;
+    if (undockAt <= dockAt + 1) {
+      return scrollY.interpolate({
+        inputRange: [dockAt - 1, dockAt],
+        outputRange: [1, 0],
+        extrapolate: 'clamp',
+      });
+    }
+    return scrollY.interpolate({
+      inputRange: [dockAt - 1, dockAt, undockAt, undockAt + 1],
+      outputRange: [1, 0, 0, 1],
+      extrapolate: 'clamp',
+    });
+  }, [meInList, meRowLayout, viewportHeight, stickyHeaderHeight, scrollY]);
+
+  // The real row is hidden while the floating copy shows, so it never peeks
+  // out below the floating row before the handoff.
+  const realMeOpacity = useMemo(
+    () =>
+      meHunter && typeof floatingMeOpacity !== 'number'
+        ? floatingMeOpacity.interpolate({ inputRange: [0, 1], outputRange: [1, 0] })
+        : 1,
+    [meHunter, floatingMeOpacity]
+  );
 
   // onEndReached can fire several times per scroll gesture; this plus
   // the hook's own in-flight guard keeps a fast scroll from firing the
@@ -151,7 +217,7 @@ export default function LeaderboardScreen() {
 
   // Sticks at the top of the clipped list area (HERO_STOP) once scrolled up.
   const stickyHeader = (
-    <View>
+    <View onLayout={(e: LayoutChangeEvent) => setStickyHeaderHeight(e.nativeEvent.layout.height)}>
       <LeaderboardHeroHeader scrollY={scrollY} />
       <View style={styles.solidSection}>
         <TopCategoryFilterBar category={category} onSelectCategory={setCategory} />
@@ -164,9 +230,20 @@ export default function LeaderboardScreen() {
     <View style={styles.solidSection}>
       <LeaderboardCommunityCard
         me={me}
+        userId={user?.id != null ? String(user.id) : null}
         onPressRanked={me?.rank != null ? () => setTop5ModalVisible(true) : undefined}
         onPressSettings={() => setSettingsModalVisible(true)}
       />
+
+      {/* Friends tab: always there above the list (the empty state has its
+          own button). Global: the weekly, dismissible nudge. */}
+      {scope === 'friends' ? (
+        !showSkeleton && !showBlockingError && entries.length > 0 ? (
+          <InviteNudgeCard onInvite={openInvite} persistent />
+        ) : null
+      ) : (
+        <InviteNudgeCard onInvite={openInvite} />
+      )}
 
       {!showSkeleton && !showBlockingError && entries.length > 0 ? (
         <View style={styles.tableHeaderRow}>
@@ -181,9 +258,17 @@ export default function LeaderboardScreen() {
 
       {!showSkeleton && top3.length > 0 ? (
         <View style={styles.top3Container}>
-          {top3.map((entry) => (
-            <LeaderboardHunterRow key={entry.userId} hunter={toHunter(entry)} />
-          ))}
+          {top3.map((entry) =>
+            entry.isMe ? (
+              <View key={entry.userId} ref={meRowRef} onLayout={measureMeRow}>
+                <Animated.View style={{ opacity: realMeOpacity }}>
+                  <LeaderboardHunterRow hunter={toHunter(entry)} />
+                </Animated.View>
+              </View>
+            ) : (
+              <LeaderboardHunterRow key={entry.userId} hunter={toHunter(entry)} />
+            )
+          )}
         </View>
       ) : null}
 
@@ -195,9 +280,10 @@ export default function LeaderboardScreen() {
           <TouchableOpacity
             style={styles.inviteButton}
             activeOpacity={0.85}
-            onPress={() => setInviteModalVisible(true)}
+            onPress={openInvite}
+            accessibilityRole="button"
           >
-            <Text style={styles.inviteButtonText}>Invite Friends</Text>
+            <Text style={styles.inviteButtonText}>Invite a friend</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -215,13 +301,23 @@ export default function LeaderboardScreen() {
       item.kind === 'intro' ? (
         listIntro
       ) : (
-        <View style={styles.solidSection}>
-          <LeaderboardHunterRow hunter={toHunter(item.entry)} />
+        <View
+          ref={item.entry.isMe ? meRowRef : undefined}
+          onLayout={item.entry.isMe ? measureMeRow : undefined}
+          style={styles.solidSection}
+        >
+          {item.entry.isMe ? (
+            <Animated.View style={{ opacity: realMeOpacity }}>
+              <LeaderboardHunterRow hunter={toHunter(item.entry)} />
+            </Animated.View>
+          ) : (
+            <LeaderboardHunterRow hunter={toHunter(item.entry)} />
+          )}
         </View>
       ),
     // listIntro is rebuilt each render; only the single intro cell depends on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [listIntro]
+    [listIntro, measureMeRow, realMeOpacity]
   );
 
   return (
@@ -237,7 +333,10 @@ export default function LeaderboardScreen() {
 
       {/* The list lives in a clipped area starting at HERO_STOP, so swiping
           up stops the title + pills mid-hero and rows scroll beneath them. */}
-      <View style={[styles.listArea, { top: insets.top + HERO_STOP }]}>
+      <View
+        style={[styles.listArea, { top: insets.top + HERO_STOP }]}
+        onLayout={(e: LayoutChangeEvent) => setViewportHeight(e.nativeEvent.layout.height)}
+      >
         {showBlockingError ? (
           <Animated.ScrollView
             bounces={false}
@@ -259,6 +358,7 @@ export default function LeaderboardScreen() {
           </Animated.ScrollView>
         ) : (
           <Animated.FlatList
+            ref={listRef}
             bounces={false}
             overScrollMode="never"
             data={listData}
@@ -267,11 +367,15 @@ export default function LeaderboardScreen() {
             ListHeaderComponent={stickyHeader}
             stickyHeaderIndices={[0]}
             ListFooterComponent={
-              <View style={styles.solidSection}>{isFetchingMore ? <FooterSpinner /> : null}</View>
+              <View style={styles.solidSection}>
+                {isFetchingMore ? <FooterSpinner /> : null}
+              </View>
             }
             onScroll={handleScroll}
             scrollEventThrottle={16}
             contentContainerStyle={[styles.scrollContent, { paddingTop: HERO_SPACER }]}
+            // Rows above the viewer's (intro, top 3) can change height.
+            onContentSizeChange={measureMeRow}
             onEndReached={handleEndReached}
             onEndReachedThreshold={1.5}
             onMomentumScrollBegin={() => {
@@ -289,12 +393,15 @@ export default function LeaderboardScreen() {
 
       <LeaderboardBrandBar scrollY={scrollY} top={insets.top} />
 
-      {/* Pinned "you" row — only while status is 'ranked', regardless of
-          whether this user's real row also happens to be on screen. */}
+      {/* Pinned "you" row — only while status is 'ranked' and the real row
+          isn't on screen. Never interactive, so touches reach the list. */}
       {meHunter ? (
-        <View style={styles.stickyBottomWrapper}>
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.stickyBottomWrapper, { opacity: floatingMeOpacity }]}
+        >
           <LeaderboardHunterRow hunter={meHunter} />
-        </View>
+        </Animated.View>
       ) : null}
 
       <LeaderboardTop5Modal
@@ -308,13 +415,6 @@ export default function LeaderboardScreen() {
         onClose={() => setSettingsModalVisible(false)}
         user={user}
         onUpdateUser={setUser}
-      />
-
-      <InviteFriendsModal
-        visible={inviteModalVisible}
-        onClose={() => setInviteModalVisible(false)}
-        referralCode={referralCode}
-        displayName={displayName}
       />
     </Screen>
   );
@@ -399,7 +499,7 @@ const styles = StyleSheet.create({
   },
   stickyBottomWrapper: {
     position: 'absolute',
-    bottom: 8,
+    bottom: FLOATING_ME_BOTTOM,
     left: 0,
     right: 0,
     zIndex: 99,

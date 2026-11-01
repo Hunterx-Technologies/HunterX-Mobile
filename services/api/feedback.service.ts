@@ -103,18 +103,6 @@ export async function sendFeedback(payload: FeedbackPayload): Promise<FeedbackRe
     const result = (data as any)?.data || data;
     return result;
   } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.post<ApiResponse<FeedbackResponseData>>('/api/feedback', body);
-        if (data && typeof data === 'object' && 'success' in data && (data as any).success === false) {
-          throw new Error((data as any).error?.message || (data as any).message || 'Failed to submit feedback');
-        }
-        return (data as any)?.data || data;
-      } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
-      }
-    }
     throw new Error(extractErrorMessage(err));
   }
 }
@@ -139,19 +127,6 @@ export async function fetchMyFeedback(): Promise<UserFeedbackItem[]> {
     }
     return extractFeedbackList(data);
   } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.get<ApiResponse<UserFeedbackItem[]>>('/api/feedback/mine');
-        if (data && typeof data === 'object' && 'success' in data && (data as any).success === false) {
-          throw new Error((data as any).error?.message || (data as any).message || 'Failed to fetch feedback history');
-        }
-        return extractFeedbackList(data);
-      } catch (innerErr: any) {
-        console.warn('[FeedbackService] fetchMyFeedback error:', innerErr);
-        return [];
-      }
-    }
     console.warn('[FeedbackService] fetchMyFeedback error:', err);
     return [];
   }

@@ -55,53 +55,44 @@ apiClient.interceptors.request.use(async (config) => {
 
 let refreshPromise: Promise<string | null> | null = null;
 
+const NO_REFRESH_URLS = ['/auth/login', '/auth/refresh', '/auth/logout'];
+
+// Called when the session is definitely over — the refresh token was
+// refused (expired, revoked, account deleted or suspended) — so the app can
+// sign out instead of failing every request. Registered by useAuthStore;
+// kept as a callback so this module doesn't import the store.
+let sessionExpiredHandler: ((code: string | null) => void) | null = null;
+
+export function setSessionExpiredHandler(handler: ((code: string | null) => void) | null) {
+  sessionExpiredHandler = handler;
+}
+
 export async function refreshAccessToken(): Promise<string | null> {
   const currentRefreshToken = await tokenStorage.getRefreshToken();
   if (!currentRefreshToken) return null;
 
   try {
-    let res;
-    try {
-      res = await axios.post<ApiResponse<{ accessToken?: string; refreshToken?: string; access_token?: string; refresh_token?: string }>>(
-        `${env.apiUrl}/auth/refresh`,
-        { refreshToken: currentRefreshToken, refresh_token: currentRefreshToken }
-      );
-    } catch (err: any) {
-      if (err?.response?.status === 404 || err?.message?.includes('404')) {
-        res = await axios.post<ApiResponse<{ accessToken?: string; refreshToken?: string; access_token?: string; refresh_token?: string }>>(
-          `${env.apiUrl}/api/auth/refresh`,
-          { refreshToken: currentRefreshToken, refresh_token: currentRefreshToken }
-        );
-      } else {
-        throw err;
-      }
+    const res = await axios.post<ApiResponse<{ access_token?: string; refresh_token?: string }>>(
+      `${env.apiUrl}/auth/refresh`,
+      { refreshToken: currentRefreshToken },
+      { timeout: 15000 }
+    );
+    const data = res.data && res.data.success ? res.data.data : null;
+    if (!data?.access_token) return null;
+
+    await tokenStorage.setTokens(data.access_token, data.refresh_token || currentRefreshToken);
+    return data.access_token;
+  } catch (err: any) {
+    const status: number | undefined = err?.response?.status;
+    // 400/401/403/404 = the server refused this session for good. Anything
+    // else (offline, timeout, 5xx) may pass, so the tokens are kept.
+    if (status && [400, 401, 403, 404].includes(status)) {
+      await tokenStorage.clearTokens();
+      sessionExpiredHandler?.(err?.response?.data?.error?.code ?? null);
     }
-
-    const resData = res.data;
-    if (resData && typeof resData === 'object' && 'success' in resData && resData.success === false) {
-      return null;
-    }
-
-    const accessToken =
-      (resData as any)?.data?.access_token ||
-      (resData as any)?.data?.accessToken ||
-      (resData as any)?.access_token ||
-      (resData as any)?.accessToken;
-
-    const newRefreshToken =
-      (resData as any)?.data?.refresh_token ||
-      (resData as any)?.data?.refreshToken ||
-      (resData as any)?.refresh_token ||
-      (resData as any)?.refreshToken ||
-      currentRefreshToken;
-
-    if (accessToken) {
-      await tokenStorage.setTokens(accessToken, newRefreshToken);
-      return accessToken;
-    }
-    return null;
-  } catch (err) {
-    console.warn('[refreshAccessToken] Failed to refresh token:', err);
+    // Status only — the error object carries the request body, which holds
+    // the refresh token.
+    console.warn('[refreshAccessToken] Failed to refresh token:', status ?? err?.message ?? 'unknown error');
     return null;
   }
 }
@@ -111,7 +102,13 @@ apiClient.interceptors.response.use(
   async (error: AxiosError<ApiResponse<unknown>>) => {
     const originalRequest = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
 
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retried) {
+    // A 401 that means "wrong password", not "expired token", is passed
+    // straight through — refreshing wouldn't change it.
+    const isCredentialCheck =
+      NO_REFRESH_URLS.includes(originalRequest?.url ?? '') ||
+      (error.response?.data as any)?.error?.code === 'INVALID_CURRENT_PASSWORD';
+
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retried && !isCredentialCheck) {
       originalRequest._retried = true;
 
       refreshPromise ??= refreshAccessToken().finally(() => {

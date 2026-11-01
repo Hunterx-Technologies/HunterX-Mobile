@@ -12,7 +12,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { fontFamilies } from "@/theme/typography";
-import type { QuestItem } from "@/app/(tabs)/index";
+import type { QuestItem } from "@/utils/quests";
 
 export interface PaidTaskPurchaseModalProps {
   visible: boolean;

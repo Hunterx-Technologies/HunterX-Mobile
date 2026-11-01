@@ -21,7 +21,7 @@ import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 const CURRENT_STEP = 3; // fourth step (0-indexed)
 
 type MotivationOption = {
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
 
     /* ─── Options ─── */
     optionsList: {
-        gap: 0,
+        gap: 12,
     },
     optionRow: {
         flexDirection: 'row',

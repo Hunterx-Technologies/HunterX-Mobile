@@ -20,5 +20,6 @@ const ViewShotCompat = forwardRef<ViewShotHandle, ViewShotCompatProps>(
     return <View {...rest} />;
   }
 );
+ViewShotCompat.displayName = 'ViewShotCompat';
 
 export default ViewShotCompat;

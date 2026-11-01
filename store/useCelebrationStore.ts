@@ -157,3 +157,11 @@ export function registerCelebrationPresenter<K extends CelebrationKind>(kind: K,
 export const showReward = (reward: UserReward) => {
   enqueueCelebration({ kind: 'reward', options: { reward } });
 };
+
+/** Drops everything queued or showing — on sign-out, so nothing carries over to the next account. */
+export function resetCelebrations() {
+  batch = [];
+  batchScheduled = false;
+  queuedRewardIds.clear();
+  useCelebrationStore.setState({ queue: [], current: null });
+}

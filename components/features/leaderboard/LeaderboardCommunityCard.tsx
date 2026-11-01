@@ -6,128 +6,36 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 import { fontFamilies } from '@/theme/typography';
 import type { LeaderboardMe } from '@/types/leaderboard';
+import { buildCardCopy } from '@/components/features/leaderboard/leaderboardCardCopy';
 
 interface LeaderboardCommunityCardProps {
   me: LeaderboardMe | null;
+  /** Seeds the once-a-day subtitle pick so it's stable per user. */
+  userId: string | null;
   onPressRanked?: () => void;
   onPressSettings?: () => void;
 }
 
-function buildCardCopy(me: LeaderboardMe): { title: React.ReactNode; subtitle: string; isLink: boolean } {
-  if (me.status === 'hidden') {
-    return {
-      title: <Text style={styles.titleWhite}>You're hidden from leaderboards</Text>,
-      subtitle: 'Tap to manage visibility in System Settings',
-      isLink: true,
-    };
-  }
-
-  if (me.status === 'unranked_no_xp') {
-    return {
-      title: <Text style={styles.titleWhite}>Complete your first quest to join the leaderboard</Text>,
-      subtitle: 'Finish a quest today and claim your first rank.',
-      isLink: false,
-    };
-  }
-
-  // status === 'ranked', top 3 — a badge + praise line instead of a
-  // percentage, echoing the gold/silver/bronze styling the row itself
-  // already uses for these exact ranks.
-  if (me.rank === 1) {
-    return {
-      title: (
-        <>
-          <Text style={styles.titleWhite}>You </Text>
-          <Text style={styles.titleDot}>• </Text>
-          <Text style={styles.titleOrange}>Apex Hunter 👑</Text>
-        </>
-      ),
-      subtitle: 'Unrivaled. No one stands above you.',
-      isLink: false,
-    };
-  }
-
-  if (me.rank === 2) {
-    return {
-      title: (
-        <>
-          <Text style={styles.titleWhite}>You </Text>
-          <Text style={styles.titleDot}>• </Text>
-          <Text style={styles.titleOrange}>Silver Hunter</Text>
-        </>
-      ),
-      subtitle: 'One step from the Apex — keep climbing.',
-      isLink: false,
-    };
-  }
-
-  if (me.rank === 3) {
-    return {
-      title: (
-        <>
-          <Text style={styles.titleWhite}>You </Text>
-          <Text style={styles.titleDot}>• </Text>
-          <Text style={styles.titleOrange}>Bronze Hunter</Text>
-        </>
-      ),
-      subtitle: 'Among the Elite Three. The hunt continues.',
-      isLink: false,
-    };
-  }
-
-  // status === 'ranked', rank 4+
-  if (me.topPercent != null) {
-    return {
-      title: (
-        <>
-          <Text style={styles.titleWhite}>You </Text>
-          <Text style={styles.titleDot}>• </Text>
-          <Text style={styles.titleOrange}>Top {me.topPercent}%</Text>
-        </>
-      ),
-      subtitle: 'See how you compare and what keeps you ahead.',
-      isLink: false,
-    };
-  }
-
-  if (me.rank != null) {
-    return {
-      title: (
-        <>
-          <Text style={styles.titleWhite}>You </Text>
-          <Text style={styles.titleDot}>• </Text>
-          <Text style={styles.titleOrange}>
-            Rank #{me.rank}{me.totalRanked != null ? ` of ${me.totalRanked}` : ''}
-          </Text>
-        </>
-      ),
-      subtitle: 'See how you compare and what keeps you ahead.',
-      isLink: false,
-    };
-  }
-
-  // Redis fallback mode — no rank available at all, only total XP.
-  return {
-    title: (
-      <>
-        <Text style={styles.titleWhite}>You </Text>
-        <Text style={styles.titleDot}>• </Text>
-        <Text style={styles.titleOrange}>{me.totalXp.toLocaleString('en-US')} XP</Text>
-      </>
-    ),
-    subtitle: 'Rankings are catching up — your XP is safe.',
-    isLink: false,
-  };
-}
-
 export const LeaderboardCommunityCard: React.FC<LeaderboardCommunityCardProps> = ({
   me,
+  userId,
   onPressRanked,
   onPressSettings,
 }) => {
-  if (!me) return null;
+  const copy = me ? buildCardCopy(me, userId ?? '') : null;
+  if (!me || !copy) return null;
 
-  const { title, subtitle, isLink } = buildCardCopy(me);
+  const { subtitle, isLink } = copy;
+  const title =
+    copy.highlight != null ? (
+      <>
+        <Text style={styles.titleWhite}>You </Text>
+        <Text style={styles.titleDot}>• </Text>
+        <Text style={styles.titleOrange}>{copy.highlight}</Text>
+      </>
+    ) : (
+      <Text style={styles.titleWhite}>{copy.title}</Text>
+    );
   const onPress = me.status === 'hidden' ? onPressSettings : me.status === 'ranked' ? onPressRanked : undefined;
 
   return (

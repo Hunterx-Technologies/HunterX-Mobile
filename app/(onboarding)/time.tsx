@@ -19,7 +19,7 @@ import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 const CURRENT_STEP = 6; // seventh step (0-indexed)
 
 type TimeOption = {
@@ -128,8 +128,8 @@ export default function TimeScreen() {
             setDailyTimeLabel(label);
             setDailyTimeAnswer(selected.answer);
         }
-        // Navigate to the oath screen (final onboarding step)
-        router.push('/(onboarding)/oath');
+        // Next: pick the daily routine tasks
+        router.push('/(onboarding)/routine');
     };
 
     return (

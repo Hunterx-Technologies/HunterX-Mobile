@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
-import { Stack, usePathname } from 'expo-router';
+import { Stack, router, usePathname, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
@@ -25,6 +25,7 @@ import { GlobalStreakBreak } from '@/components/features/streaks/GlobalStreakBre
 import { GlobalReward } from '@/components/features/reward/GlobalReward';
 import { preloadAppAssets } from '@/services/media/preloadAssets';
 import { getAvatars } from '@/services/api/avatar.service';
+import { captureInstallReferrer } from '@/services/referral/pendingReferral';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useUnseenRewardsSync } from '@/hooks/useUnseenRewardsSync';
 import { useStreakEventsSync } from '@/hooks/useStreakEventsSync';
@@ -62,16 +63,14 @@ function ScrollToTopOnNavigate() {
           document.body.scrollTop = 0;
         }
 
-        // Also reset scroll on all scrollable elements in the page
+        // Also reset the page's scroll containers — only elements that
+        // actually scroll, not every div in the document.
         const scrollableElements = document.querySelectorAll<HTMLElement>(
-          '[data-testid="scroll-view"], [style*="overflow"], div'
+          '[data-testid="scroll-view"], [style*="overflow"]'
         );
-        for (let i = 0; i < scrollableElements.length; i++) {
-          const el = scrollableElements[i];
-          if (el && el.scrollTop > 0) {
-            el.scrollTop = 0;
-          }
-        }
+        scrollableElements.forEach((el) => {
+          if (el.scrollTop > 0) el.scrollTop = 0;
+        });
       } catch (_) {}
     };
 
@@ -86,6 +85,35 @@ function ScrollToTopOnNavigate() {
       clearTimeout(t2);
     };
   }, [pathname]);
+
+  return null;
+}
+
+// Root screens anyone may open signed out: app/index.tsx (undefined),
+// invite links, and the not-found page.
+const PUBLIC_ROOT_SCREENS = new Set([undefined, 'invite', 'guestpass', '+not-found', 'invite-code-preview']);
+
+// A signed-in hunter who hasn't finished onboarding stays in the wizard,
+// and a signed-out visitor goes to Login. The (auth)/(onboarding)/(tabs)
+// layouts guard themselves; this covers the root screens (notifications,
+// rewards, feedback…) reachable by deep link or push notification.
+function OnboardingGate() {
+  const segments = useSegments();
+  const isSignedIn = useAuthStore((s) => s.user !== null);
+  const isOnboarded = useAuthStore((s) => s.isOnboarded);
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
+  const group = segments[0];
+
+  useEffect(() => {
+    if (isBootstrapping) return;
+    // undefined = app/index.tsx, which routes by itself.
+    if (group === undefined || group === '(auth)' || group === '(onboarding)' || group === '(tabs)') return;
+    if (!isSignedIn) {
+      if (!PUBLIC_ROOT_SCREENS.has(group)) router.replace('/(auth)/login');
+      return;
+    }
+    if (!isOnboarded) router.replace('/(onboarding)/name');
+  }, [group, isSignedIn, isOnboarded, isBootstrapping]);
 
   return null;
 }
@@ -120,6 +148,8 @@ export default function RootLayout() {
     // Warms the avatar catalog cache so the user's actual avatar_id resolves
     // to its image on first paint instead of falling back to a generic avatar.
     getAvatars().catch(() => {});
+    // Android: an invite code carried through the Play Store install.
+    captureInstallReferrer();
   }, []);
 
   // Health data (steps, calories, etc.) changes outside the app whenever
@@ -200,6 +230,7 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
             <Stack.Screen name="+not-found" />
           </Stack>
+          <OnboardingGate />
           <GlobalLevelUp />
           <GlobalStreakBadge />
           <GlobalReward />

@@ -1,5 +1,5 @@
 import type { ApiResponse } from '@/types/api';
-import type { TasksTodayData, CompleteTaskData, TaskStatus, ReopenTaskData, SubmitProofData, StreakEvent } from '@/types/task';
+import type { TasksTodayData, CompleteTaskData, TaskStatus, ReopenTaskData, SubmitProofData, StreakEvent, RoutineTask } from '@/types/task';
 
 import { apiClient } from './client';
 
@@ -78,4 +78,36 @@ export async function markStreakEventsSeen(ids: string[]): Promise<void> {
   if (!data.success) {
     throw new Error(data.error?.message || 'Failed to mark streak events seen');
   }
+}
+
+/** Routine tasks the onboarding picker offers (public — no account yet). */
+export async function fetchRoutineTaskOptions(): Promise<RoutineTask[]> {
+  const { data } = await apiClient.get<ApiResponse<{ tasks: RoutineTask[] }>>('/public/routine-tasks');
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to load routine tasks');
+  }
+  return data.data.tasks;
+}
+
+/** Every routine task, each marked `selected` if it's on this hunter's daily list. */
+export async function fetchMyRoutineTasks(): Promise<RoutineTask[]> {
+  const { data } = await apiClient.get<ApiResponse<{ tasks: RoutineTask[] }>>('/tasks/routine');
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to load your routine');
+  }
+  return data.data.tasks;
+}
+
+/**
+ * Replaces this hunter's routine tasks (at least one). Added tasks appear in
+ * today's list straight away; removed ones leave it unless already done today.
+ */
+export async function saveMyRoutineTasks(taskIds: string[]): Promise<RoutineTask[]> {
+  const { data } = await apiClient.put<ApiResponse<{ tasks: RoutineTask[] }>>('/tasks/routine', {
+    task_ids: taskIds,
+  });
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to update your routine');
+  }
+  return data.data.tasks;
 }

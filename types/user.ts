@@ -34,6 +34,10 @@ export type User = {
   authProvider?: string;
   provider?: string;
   onboarding_done?: boolean;
+  /** This hunter's own invite code (users.referral_code). */
+  referral_code?: string | null;
+  /** Hunters who signed up with this hunter's code (display only). */
+  accepted_invites_count?: number;
   weeklyStreak?: number;
   completedDaysCount?: number;
   user_progression?: {

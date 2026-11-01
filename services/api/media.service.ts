@@ -10,6 +10,8 @@ export interface CloudinarySignature {
   folder: string;
   apiKey: string;
   cloudName: string;
+  /** Signed by the backend — must be sent with the upload exactly as given. */
+  allowedFormats?: string;
 }
 
 export async function fetchCloudinarySignature(

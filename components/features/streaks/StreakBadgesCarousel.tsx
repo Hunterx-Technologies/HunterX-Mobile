@@ -112,9 +112,40 @@ export const STREAK_BADGES_DATA: StreakBadgeItem[] = [
   },
 ];
 
+/**
+ * Earned if the API lists it (by milestone or name); before the API has any
+ * badges, by streak length. Badges landed this session (earnedIds) count too.
+ */
+export function isBadgeEarned(
+  badge: StreakBadgeItem,
+  userBadges: UserBadgeData[] | undefined,
+  currentStreak: number,
+  earnedIds: number[]
+): boolean {
+  const isUnlocked =
+    Array.isArray(userBadges) && userBadges.length > 0
+      ? userBadges.some(
+          (b) =>
+            b.milestone_days === badge.dayNumber ||
+            (b.name && b.name.toLowerCase() === badge.title.toLowerCase())
+        )
+      : currentStreak >= badge.dayNumber;
+  return isUnlocked || earnedIds.includes(badge.id);
+}
+
+/** How many badges are earned, counting up to the first locked one (they unlock in order). */
+export function useEarnedBadgeCount(userBadges: UserBadgeData[] | undefined, currentStreak: number): number {
+  const earnedIds = useStreakBadgeStore((s) => s.earnedIds);
+  const firstLocked = STREAK_BADGES_DATA.findIndex(
+    (badge) => !isBadgeEarned(badge, userBadges, currentStreak, earnedIds)
+  );
+  return firstLocked < 0 ? STREAK_BADGES_DATA.length : firstLocked;
+}
+
 interface StreakBadgesCarouselProps {
   currentStreak?: number; // Current user streak days
   userBadges?: UserBadgeData[]; // User's earned badges array from API
+  /** Tapping an earned badge; locked ones don't respond. */
   onBadgePress?: (badge: StreakBadgeItem) => void;
 }
 
@@ -242,22 +273,16 @@ export const StreakBadgesCarousel: React.FC<StreakBadgesCarouselProps> = ({
             contentContainerStyle={[styles.scrollContent, { gap: cardGap }]}
           >
             {STREAK_BADGES_DATA.map((badge) => {
-              // Unlocked only if present in userBadges array from API, fallback to streak days
-              const isUnlocked =
-                Array.isArray(userBadges) && userBadges.length > 0
-                  ? userBadges.some(
-                      (b) =>
-                        b.milestone_days === badge.dayNumber ||
-                        (b.name && b.name.toLowerCase() === badge.title.toLowerCase())
-                    )
-                  : currentStreak >= badge.dayNumber;
-              const isEarned = isUnlocked || earnedIds.includes(badge.id);
+              const isEarned = isBadgeEarned(badge, userBadges, currentStreak, earnedIds);
 
               return (
                 <TouchableOpacity
                   key={badge.id}
                   activeOpacity={0.8}
                   onPress={() => handlePressBadge(badge)}
+                  disabled={!isEarned || !onBadgePress}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${badge.title}, ${badge.daysText}${isEarned ? '' : ', locked'}`}
                   style={[styles.badgeItemContainer, { width: cardWidth }]}
                 >
                   {/* Badge Graphic (Top) */}

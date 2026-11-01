@@ -17,6 +17,8 @@ export interface TaskItem {
   image_url_male?: string | null;
   image_url_female?: string | null;
   task_type: TaskType;
+  /** Optional routine task (built-in or admin-marked). Missing on older backends. */
+  is_routine?: boolean;
   xp_reward: number;
   xp_partial: number;
   allows_partial: boolean;
@@ -147,4 +149,19 @@ export interface StreakEvent {
   /** The streak the life protected, or the one that ended. */
   streak_days: number;
   created_at: string;
+}
+
+/** A routine daily task (sleep, water, protein, steps) offered in the routine picker. */
+export interface RoutineTask {
+  id: string;
+  title: string;
+  description: string | null;
+  tag: string | null;
+  xp_reward: number;
+  /** Image for the signed-in hunter's gender (onboarding: male fallback). */
+  image_url: string | null;
+  image_url_male: string | null;
+  image_url_female: string | null;
+  /** On this hunter's daily list. Only from GET /tasks/routine. */
+  selected?: boolean;
 }

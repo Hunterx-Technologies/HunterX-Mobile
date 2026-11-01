@@ -23,8 +23,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { buildOnboardingAnswers, useOnboardingStore } from '@/store/useOnboardingStore';
 import { showGlobalToast } from '@/store/useToastStore';
 
-const TOTAL_STEPS = 8;
-const CURRENT_STEP = 7; // eighth step (0-indexed)
+const TOTAL_STEPS = 9;
+const CURRENT_STEP = 8; // ninth step (0-indexed)
 
 export default function OathScreen() {
     const { isAuthenticated, submitOnboarding } = useAuth();

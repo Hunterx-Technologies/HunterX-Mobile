@@ -4,14 +4,12 @@ import {
   Animated,
   Easing,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import Feather from '@expo/vector-icons/Feather';
 
 import { Button } from '@/components/common/Button';
 import { DustParticles } from '@/components/common/DustParticles';
@@ -112,18 +110,6 @@ export default function AscensionScreen() {
           <Text style={styles.description}>
             The path is steep, but the view from the top belongs to the one who does not quit.
           </Text>
-
-          {/* Dismiss / Back X Button Container */}
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={12}
-            style={({ pressed }) => [
-              styles.closeIconButton,
-              pressed && styles.closeIconButtonPressed,
-            ]}
-          >
-            <Feather name="x" size={20} color="#71717A" />
-          </Pressable>
         </Animated.View>
 
         {/* Bottom CTA Button */}
@@ -207,21 +193,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 32,
     paddingHorizontal: 8,
-  },
-  closeIconButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  closeIconButtonPressed: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   bottomBar: {
     paddingHorizontal: 24,

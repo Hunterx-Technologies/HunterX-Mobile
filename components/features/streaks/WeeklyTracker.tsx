@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Image as ExpoImage } from 'expo-image';
@@ -7,11 +7,13 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { fontFamilies } from '@/theme/typography';
-import { getAvatarSource } from '@/app/(tabs)/profile';
+import { getAvatarSource } from '@/components/profile/AvatarSelectionModal';
 import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
 import type { WeekStatus } from '@/types/user';
 import { WeeklyProgressCard } from './WeeklyProgressCard';
-import { StreakBadgesCarousel, UserBadgeData } from './StreakBadgesCarousel';
+import { STREAK_BADGES_DATA, StreakBadgesCarousel, UserBadgeData, useEarnedBadgeCount } from './StreakBadgesCarousel';
+import { StreakBadgeShowcaseModal } from './StreakBadgeShowcase';
+import { useSettingsStore } from '@/store/useSettingsStore';
 
 export type DayStatus = 'completed' | 'today' | 'missed' | 'locked' | 'freeze';
 
@@ -241,6 +243,11 @@ export function WeeklyTracker({
   showBottomCard = true,
   onDayPress,
 }: WeeklyTrackerProps) {
+  const [viewingBadgeIndex, setViewingBadgeIndex] = useState<number | null>(null);
+  const earnedBadgeCount = useEarnedBadgeCount(userBadges, streakDays);
+  const soundEffectsEnabled = useSettingsStore((s) => s.soundEffectsEnabled);
+  const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
+
   const activeDays = useMemo(() => {
     if (days && days.length > 0) return days;
     return generateWeekDaysFromWeekStatus(weekStatus, completedDaysCount);
@@ -420,7 +427,25 @@ export function WeeklyTracker({
       </View>
 
       {/* STREAK BADGES CAROUSEL (7 BADGES, 4 IN VIEW RESPONSIVE) */}
-      <StreakBadgesCarousel currentStreak={streakDays} userBadges={userBadges} />
+      <StreakBadgesCarousel
+        currentStreak={streakDays}
+        userBadges={userBadges}
+        onBadgePress={(badge) => setViewingBadgeIndex(STREAK_BADGES_DATA.findIndex((b) => b.id === badge.id))}
+      />
+
+      {/* Tapping an earned badge opens the badge vault on it, just to look. */}
+      {viewingBadgeIndex !== null ? (
+        <StreakBadgeShowcaseModal
+          visible
+          browseOnly
+          currentIndex={earnedBadgeCount}
+          initialViewIndex={viewingBadgeIndex}
+          streakDays={streakDays}
+          sound={soundEffectsEnabled}
+          haptics={hapticsEnabled}
+          onClose={() => setViewingBadgeIndex(null)}
+        />
+      ) : null}
 
 
 

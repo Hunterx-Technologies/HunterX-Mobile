@@ -25,7 +25,7 @@ export function syncLevelUp(): Promise<void> {
 /**
  * Mounted once in app/_layout.tsx. A quest completion shows its level-up
  * straight from the response; this covers XP that arrives any other way
- * (an admin approving a proof, a referral bonus) and a screen cut short by
+ * (an admin approving a proof) and a screen cut short by
  * closing the app: when signed in and onboarded, and again on foreground.
  */
 export function useLevelUpSync() {

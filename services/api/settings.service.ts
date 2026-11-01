@@ -48,19 +48,6 @@ export async function getUserSettings(): Promise<UserSettings> {
     const result = (data as any)?.data?.settings || (data as any)?.data || (data as any)?.settings || data;
     return result;
   } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.get<ApiResponse<{ settings: UserSettings } | UserSettings>>('/api/users/me/settings');
-        if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-          throw new Error((data as any).error?.message || 'Failed to fetch user settings');
-        }
-        const result = (data as any)?.data?.settings || (data as any)?.data || (data as any)?.settings || data;
-        return result;
-      } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
-      }
-    }
     throw new Error(extractErrorMessage(err));
   }
 }
@@ -74,19 +61,6 @@ export async function updateUserSettings(partial: Partial<UserSettings>): Promis
     const result = (data as any)?.data?.settings || (data as any)?.data || (data as any)?.settings || data;
     return result;
   } catch (err: any) {
-    const isNotFound = err?.response?.status === 404 || (err?.message && err.message.includes('404'));
-    if (isNotFound) {
-      try {
-        const { data } = await apiClient.patch<ApiResponse<{ settings: UserSettings } | UserSettings>>('/api/users/me/settings', partial);
-        if (data && typeof data === 'object' && 'success' in data && data.success === false) {
-          throw new Error((data as any).error?.message || 'Failed to update user settings');
-        }
-        const result = (data as any)?.data?.settings || (data as any)?.data || (data as any)?.settings || data;
-        return result;
-      } catch (innerErr: any) {
-        throw new Error(extractErrorMessage(innerErr));
-      }
-    }
     throw new Error(extractErrorMessage(err));
   }
 }

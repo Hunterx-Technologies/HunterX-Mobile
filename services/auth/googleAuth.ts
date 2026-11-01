@@ -51,6 +51,10 @@ export async function signInWithGoogle(): Promise<string> {
 
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
+  // The SDK caches the last account and signIn() silently reuses it, so
+  // clear it first to always show the account picker.
+  await signOutGoogle();
+
   const response = await GoogleSignin.signIn();
   if (response.type === 'cancelled') {
     throw new GoogleSignInCancelledError();
@@ -62,6 +66,16 @@ export async function signInWithGoogle(): Promise<string> {
   }
 
   return idToken;
+}
+
+/** Clears the native SDK's cached Google account. Never throws — no cached session is fine. */
+export async function signOutGoogle(): Promise<void> {
+  if (!googleSignInModule) return;
+  try {
+    await googleSignInModule.GoogleSignin.signOut();
+  } catch {
+    // Nothing signed in — nothing to clear.
+  }
 }
 
 export function isGoogleSignInCancelled(err: unknown): boolean {

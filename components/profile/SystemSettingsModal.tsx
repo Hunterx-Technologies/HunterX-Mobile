@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { GoogleIcon } from '@/components/common/GoogleIcon';
 import { Screen } from '@/components/common/Screen';
 import { fontFamilies } from '@/theme/typography';
-import { changePassword, forgotPassword, getCurrentUser, updateUserEmail } from '@/services/api/auth.service';
+import { changePassword, confirmEmailChange, forgotPassword, getCurrentUser, requestEmailChange } from '@/services/api/auth.service';
 import { exportUserData } from '@/services/api/user.service';
 import {
   getUserSettings,
@@ -118,6 +118,11 @@ export function SystemSettingsModal({
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [newEmailInput, setNewEmailInput] = useState('');
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  // Email change is two steps: the new address gets a 6-digit code, and the
+  // code confirms it (password accounts also re-enter their password).
+  const [emailCodeSentTo, setEmailCodeSentTo] = useState<string | null>(null);
+  const [emailCodeInput, setEmailCodeInput] = useState('');
+  const [emailPasswordInput, setEmailPasswordInput] = useState('');
   const [isExportingData, setIsExportingData] = useState(false);
   const [toast, setToast] = useState<{ visible: boolean; message: string; type: HunterToastType }>({
     visible: false,
@@ -324,6 +329,13 @@ export function SystemSettingsModal({
     setIsChangeEmailModalVisible(true);
   };
 
+  const closeChangeEmail = () => {
+    setIsChangeEmailModalVisible(false);
+    setEmailCodeSentTo(null);
+    setEmailCodeInput('');
+    setEmailPasswordInput('');
+  };
+
   const handleChangeEmail = async () => {
     const trimmed = newEmailInput.trim();
     if (!trimmed || !trimmed.includes('@')) {
@@ -332,13 +344,32 @@ export function SystemSettingsModal({
     }
 
     if (trimmed.toLowerCase() === (user?.email || '').toLowerCase()) {
-      setIsChangeEmailModalVisible(false);
+      closeChangeEmail();
+      return;
+    }
+
+    if (!isSocialAuth && !emailPasswordInput) {
+      Alert.alert('Error', 'Enter your current password to change your email.');
       return;
     }
 
     try {
       setIsUpdatingEmail(true);
-      const updatedUser = await updateUserEmail(trimmed);
+      // Step 1 — send the code to the new address.
+      if (emailCodeSentTo !== trimmed) {
+        const message = await requestEmailChange(trimmed, isSocialAuth ? undefined : emailPasswordInput);
+        setEmailCodeSentTo(trimmed);
+        setEmailCodeInput('');
+        Alert.alert('Check Your Email', message);
+        return;
+      }
+
+      // Step 2 — the code confirms it.
+      if (!/^\d{6}$/.test(emailCodeInput.trim())) {
+        Alert.alert('Error', 'Enter the 6-digit code we emailed you.');
+        return;
+      }
+      const updatedUser = await confirmEmailChange(trimmed, emailCodeInput);
       onUpdateUser(updatedUser);
 
       try {
@@ -348,7 +379,7 @@ export function SystemSettingsModal({
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
       Alert.alert('Success', 'Your email address has been updated to ' + trimmed + '.');
-      setIsChangeEmailModalVisible(false);
+      closeChangeEmail();
       setNewEmailInput('');
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => { });
@@ -884,16 +915,16 @@ export function SystemSettingsModal({
 
               <View style={styles.settingItemDivider} />
 
-              {/* 8. Friends & Referrals */}
+              {/* 8. Friends & Invites */}
               <View style={styles.settingRow}>
                 <View style={styles.settingLeftGroup}>
                   <View style={styles.settingSubIconBox}>
                     <Ionicons name="people-outline" size={16} color="#FE5B01" />
                   </View>
                   <View style={styles.settingTextGroup}>
-                    <Text style={styles.settingTitle}>Friends & Referrals</Text>
+                    <Text style={styles.settingTitle}>Friends & Invites</Text>
                     <Text style={styles.settingSubtitle}>
-                      When a friend joins with your Guest Pass
+                      When a friend joins with your invite
                     </Text>
                   </View>
                 </View>
@@ -1146,12 +1177,16 @@ export function SystemSettingsModal({
           visible={isChangeEmailModalVisible}
           transparent
           animationType="fade"
-          onRequestClose={() => setIsChangeEmailModalVisible(false)}
+          onRequestClose={closeChangeEmail}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Change Email</Text>
-              <Text style={styles.modalSubtitleText}>Enter your new email address.</Text>
+              <Text style={styles.modalSubtitleText}>
+                {emailCodeSentTo
+                  ? `Enter the 6-digit code we sent to ${emailCodeSentTo}.`
+                  : 'Enter your new email address. We will send it a code to confirm.'}
+              </Text>
               <TextInput
                 style={styles.modalInput}
                 placeholder="New Email Address"
@@ -1160,11 +1195,34 @@ export function SystemSettingsModal({
                 autoCapitalize="none"
                 value={newEmailInput}
                 onChangeText={setNewEmailInput}
+                editable={!emailCodeSentTo}
               />
+              {!isSocialAuth && !emailCodeSentTo && (
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Current Password"
+                  placeholderTextColor="#71717A"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  value={emailPasswordInput}
+                  onChangeText={setEmailPasswordInput}
+                />
+              )}
+              {!!emailCodeSentTo && (
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="6-digit code"
+                  placeholderTextColor="#71717A"
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  value={emailCodeInput}
+                  onChangeText={setEmailCodeInput}
+                />
+              )}
               <View style={styles.modalActionRow}>
                 <TouchableOpacity
                   style={[styles.modalBtn, styles.cancelBtn]}
-                  onPress={() => setIsChangeEmailModalVisible(false)}
+                  onPress={closeChangeEmail}
                 >
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
@@ -1176,7 +1234,7 @@ export function SystemSettingsModal({
                   {isUpdatingEmail ? (
                     <ActivityIndicator size="small" color="#0D0F12" />
                   ) : (
-                    <Text style={styles.saveBtnText}>Save</Text>
+                    <Text style={styles.saveBtnText}>{emailCodeSentTo ? 'Confirm' : 'Send Code'}</Text>
                   )}
                 </TouchableOpacity>
               </View>

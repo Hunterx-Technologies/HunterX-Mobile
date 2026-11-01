@@ -14,6 +14,8 @@ export type LeaderboardMe = {
   topPercent: number | null;
   /** Current daily streak (0 if broken); null if it couldn't be loaded. Missing on older backends. */
   streak?: number | null;
+  /** XP still needed to pass the next hunter up. Optional; not sent by current backends. */
+  xpToNextRank?: number | null;
 };
 
 export type LeaderboardEntry = {

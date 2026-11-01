@@ -28,15 +28,15 @@ import {
 } from '@/services/auth/appleAuth';
 import {
   clearPendingReferral,
-  getPendingReferral,
   normalizeReferralCode,
   savePendingReferral,
 } from '@/services/referral/pendingReferral';
+import { InviteCodeInput } from '@/components/features/invite/InviteCodeInput';
 import { buildOnboardingAnswers, useOnboardingStore } from '@/store/useOnboardingStore';
 import { showGlobalToast } from '@/store/useToastStore';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
-import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter';
+import { PasswordStrengthMeter, meetsPasswordRules } from '@/components/common/PasswordStrengthMeter';
 import { API_ERROR, PENDING_RESTORE_MESSAGE, getApiErrorCode } from '@/services/api/errors';
 
 export default function SignupScreen() {
@@ -73,18 +73,11 @@ export default function SignupScreen() {
   const isFormValid =
     isValidEmail(email) &&
     isEmailVerified &&
-    password.length > 0 &&
+    meetsPasswordRules(password) &&
     confirmPassword.length > 0 &&
     password === confirmPassword;
 
-  const [focusedInput, setFocusedInput] = useState<'email' | 'password' | 'confirmPassword' | 'referral' | null>(null);
-
-  // Prefill from a Guest Pass link opened earlier (app/guestpass/[code].tsx).
-  useEffect(() => {
-    getPendingReferral().then((code) => {
-      if (code) setReferralCode((current) => current || code);
-    });
-  }, []);
+  const [focusedInput, setFocusedInput] = useState<'email' | 'password' | 'confirmPassword' | null>(null);
 
   // useAuthStore attaches the pending code to register / Google sign-in, so
   // mirror the field into it — including clearing it if the hunter erased it.
@@ -250,6 +243,10 @@ export default function SignupScreen() {
       await handleSendEmailOtp();
       return;
     }
+    if (!meetsPasswordRules(password)) {
+      setError('Password needs at least 8 characters, an uppercase letter, a number and a special character.');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -284,9 +281,11 @@ export default function SignupScreen() {
     try {
       const idToken = await signInWithGoogle();
       await syncPendingReferral();
-      const { isNew } = await loginWithGoogle(idToken, buildOnboardingAnswers());
-      if (isNew) {
+      const { isOnboarded, justOnboarded } = await loginWithGoogle(idToken, buildOnboardingAnswers());
+      if (justOnboarded) {
         router.replace('/(onboarding)/ascension');
+      } else if (!isOnboarded) {
+        router.replace('/(onboarding)/name');
       } else {
         router.replace('/(tabs)');
         setTimeout(() => {
@@ -319,9 +318,11 @@ export default function SignupScreen() {
       await syncPendingReferral();
       // Apple only shares the user's name once, so the backend names a new
       // account from onboarding Q1 (the hunter name) instead.
-      const { isNew } = await loginWithApple(idToken, nonce, buildOnboardingAnswers());
-      if (isNew) {
+      const { isOnboarded, justOnboarded } = await loginWithApple(idToken, nonce, buildOnboardingAnswers());
+      if (justOnboarded) {
         router.replace('/(onboarding)/ascension');
+      } else if (!isOnboarded) {
+        router.replace('/(onboarding)/name');
       } else {
         router.replace('/(tabs)');
         setTimeout(() => {
@@ -434,7 +435,7 @@ export default function SignupScreen() {
         {/* Sign-up only requires 8 characters, so no rule checklist here. */}
         {password.length > 0 && (
           <View style={styles.strengthMeter}>
-            <PasswordStrengthMeter password={password} showRules={false} />
+            <PasswordStrengthMeter password={password} showRules={!meetsPasswordRules(password)} />
           </View>
         )}
 
@@ -469,31 +470,7 @@ export default function SignupScreen() {
           </Pressable>
         </View>
 
-        <View
-          style={[
-            styles.inputWrapper,
-            focusedInput === 'referral' && styles.inputWrapperFocused,
-          ]}
-        >
-          <Feather
-            name="gift"
-            size={18}
-            color={focusedInput === 'referral' ? colors.accentGold : '#71717A'}
-            style={styles.inputIcon}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Referral Code (Optional)"
-            placeholderTextColor="#52525B"
-            autoCapitalize="characters"
-            autoCorrect={false}
-            maxLength={16}
-            value={referralCode}
-            onChangeText={(text) => setReferralCode(text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())}
-            onFocus={() => setFocusedInput('referral')}
-            onBlur={() => setFocusedInput(null)}
-          />
-        </View>
+        <InviteCodeInput value={referralCode} onChangeValue={setReferralCode} />
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 

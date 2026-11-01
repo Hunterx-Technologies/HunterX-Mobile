@@ -6,5 +6,11 @@ module.exports = defineConfig([
   expoConfig,
   {
     ignores: ["dist/*"],
-  }
+  },
+  {
+    // A web/HTML rule: React Native <Text> renders ' and " as typed.
+    rules: {
+      "react/no-unescaped-entities": "off",
+    },
+  },
 ]);

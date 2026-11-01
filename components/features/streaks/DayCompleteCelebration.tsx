@@ -73,7 +73,7 @@ const playOnce = (player: AudioPlayer) => {
   } catch {}
 };
 
-function Blob({ size, color, opacity = 1, id }: { size: number; color: string; opacity?: number; id: string }) {
+export function Blob({ size, color, opacity = 1, id }: { size: number; color: string; opacity?: number; id: string }) {
   return (
     <Svg width={size} height={size}>
       <Defs>
@@ -88,7 +88,7 @@ function Blob({ size, color, opacity = 1, id }: { size: number; color: string; o
 }
 
 /** Slow sunburst behind the flame. */
-function Rays({ size }: { size: number }) {
+export function Rays({ size }: { size: number }) {
   const c = size / 2;
   const count = 14;
   const half = (Math.PI / count) * 0.42;
@@ -114,9 +114,9 @@ function Rays({ size }: { size: number }) {
 }
 
 // Sparks pulled into the flame while it charges: angle (deg), phase.
-const CHARGE_SPARKS = Array.from({ length: 10 }, (_, i) => ({ angle: i * 36 + (i % 2) * 14, phase: (i % 5) * 0.16 }));
+export const CHARGE_SPARKS = Array.from({ length: 10 }, (_, i) => ({ angle: i * 36 + (i % 2) * 14, phase: (i % 5) * 0.16 }));
 
-function ChargeSpark({ charge, angle, phase }: { charge: SharedValue<number> } & (typeof CHARGE_SPARKS)[number]) {
+export function ChargeSpark({ charge, angle, phase }: { charge: SharedValue<number> } & (typeof CHARGE_SPARKS)[number]) {
   const style = useAnimatedStyle(() => {
     const t = clamp01(charge.value * 1.6 - phase);
     const r = 130 * (1 - t) + 12;
@@ -131,14 +131,14 @@ function ChargeSpark({ charge, angle, phase }: { charge: SharedValue<number> } &
 
 // Embers thrown out on ignition: angle (deg), reach, colour.
 const BURST_COLORS = ['#FFD84D', '#FF9B2F', '#FF4F1F', '#FFF7CC'];
-const BURST = Array.from({ length: 16 }, (_, i) => ({
+export const BURST = Array.from({ length: 16 }, (_, i) => ({
   angle: -90 + (i - 7.5) * 22 + (i % 3) * 6,
   reach: 110 + (i % 4) * 34,
   color: BURST_COLORS[i % 4],
   size: 5 + (i % 3) * 2,
 }));
 
-function BurstEmber({ burst, angle, reach, color, size }: { burst: SharedValue<number> } & (typeof BURST)[number]) {
+export function BurstEmber({ burst, angle, reach, color, size }: { burst: SharedValue<number> } & (typeof BURST)[number]) {
   const style = useAnimatedStyle(() => {
     const t = burst.value;
     const r = reach * (1 - Math.pow(1 - t, 3));
@@ -161,7 +161,7 @@ function BurstEmber({ burst, angle, reach, color, size }: { burst: SharedValue<n
 }
 
 // Embers drifting up once the flame is lit: x offset, phase, drift.
-const RISING = [
+export const RISING = [
   { x: -40, phase: 0, drift: -10 },
   { x: 30, phase: 0.2, drift: 12 },
   { x: -12, phase: 0.42, drift: -6 },
@@ -169,7 +169,7 @@ const RISING = [
   { x: 6, phase: 0.8, drift: -12 },
 ];
 
-function RisingEmber({ clock, lit, x, phase, drift }: {
+export function RisingEmber({ clock, lit, x, phase, drift }: {
   clock: SharedValue<number>;
   lit: SharedValue<number>;
 } & (typeof RISING)[number]) {

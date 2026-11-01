@@ -27,6 +27,9 @@ type OnboardingStore = {
   // exact strings.
   dailyTimeAnswer: string | null;
 
+  // Routine screen selection ("Pick your daily routine") — routine task ids.
+  routineTaskIds: string[];
+
   // Setters
   setHunterName: (name: string) => void;
   setGender: (gender: 'male' | 'female' | 'other') => void;
@@ -42,6 +45,7 @@ type OnboardingStore = {
   setDailyTimeId: (id: string) => void;
   setDailyTimeLabel: (label: string) => void;
   setDailyTimeAnswer: (answer: string) => void;
+  setRoutineTaskIds: (ids: string[]) => void;
 
   // Reset all onboarding data
   resetOnboarding: () => void;
@@ -63,6 +67,7 @@ export const useOnboardingStore = create<OnboardingStore>((set) => ({
   dailyTimeId: null,
   dailyTimeLabel: null,
   dailyTimeAnswer: null,
+  routineTaskIds: [],
 
   // Setters
   setHunterName: (name) => set({ hunterName: name }),
@@ -79,6 +84,7 @@ export const useOnboardingStore = create<OnboardingStore>((set) => ({
   setDailyTimeId: (id) => set({ dailyTimeId: id }),
   setDailyTimeLabel: (label) => set({ dailyTimeLabel: label }),
   setDailyTimeAnswer: (answer) => set({ dailyTimeAnswer: answer }),
+  setRoutineTaskIds: (ids) => set({ routineTaskIds: ids }),
 
   resetOnboarding: () =>
     set({
@@ -96,6 +102,7 @@ export const useOnboardingStore = create<OnboardingStore>((set) => ({
       dailyTimeId: null,
       dailyTimeLabel: null,
       dailyTimeAnswer: null,
+      routineTaskIds: [],
     }),
 }));
 
@@ -130,4 +137,9 @@ export function buildOnboardingAnswers(): OnboardingAnswerPayload[] {
     { questionId: 9, answer: state.dailyTimeAnswer || '30min' },
     { questionId: 10, answer: 'accepted' },
   ];
+}
+
+/** Routine tasks picked in the wizard, sent with sign-up / complete-onboarding. */
+export function pickedRoutineTaskIds(): string[] {
+  return useOnboardingStore.getState().routineTaskIds;
 }

@@ -36,38 +36,25 @@ import { DEFAULT_BLURHASH } from '@/services/media/cloudinary';
 
 // Modular Profile Components
 import { AvatarSelectionModal, getAvatarSource } from '@/components/profile/AvatarSelectionModal';
-export { getAvatarSource } from '@/components/profile/AvatarSelectionModal';
 import { EditNameModal } from '@/components/profile/EditNameModal';
 import { EditProfileFormData, EditProfileModal } from '@/components/profile/EditProfileModal';
 import { LegalDocumentModal } from '@/components/profile/LegalDocumentModal';
 import { AcknowledgementsModal } from '@/components/profile/AcknowledgementsModal';
 import { DISCLAIMER } from '@/constants/legal/disclaimer';
 import * as WebBrowser from 'expo-web-browser';
+import { env } from '@/config/env';
 
-// Terms and Privacy live on the website; opened in the in-app browser.
-const TERMS_URL = 'https://hunterx.co.in/terms';
-const PRIVACY_URL = 'https://hunterx.co.in/privacy';
+// Terms and Privacy live on the website (UAT or production, matching the
+// API); opened in the in-app browser.
+const TERMS_URL = `${env.websiteUrl}/terms`;
+const PRIVACY_URL = `${env.websiteUrl}/privacy`;
 const openLegalPage = (url: string) => {
   WebBrowser.openBrowserAsync(url).catch(() => Linking.openURL(url).catch(() => {}));
 };
-import { InviteFriendsModal } from '@/components/profile/InviteFriendsModal';
 import { RateHunterModal } from '@/components/profile/RateHunterModal';
 import { RecentActivityModal } from '@/components/profile/RecentActivityModal';
 import { SystemSettingsModal } from '@/components/profile/SystemSettingsModal';
 import { WeeklyProgressCard } from '@/components/features/streaks/WeeklyProgressCard';
-import { showLevelUp } from '@/store/useLevelUpStore';
-import { showStreakBadge } from '@/store/useStreakBadgeStore';
-import { showReward } from '@/store/useCelebrationStore';
-import {
-  getRewardsMockMode,
-  isRewardsMockEnabled,
-  rewardsMock as rewardsMockApi,
-  setRewardsMockEnabled,
-  setRewardsMockMode,
-  type RewardsMockMode,
-} from '@/services/api/rewards.mock';
-import type { UserReward } from '@/types/reward';
-import { showStreakBreak } from '@/store/useStreakBreakStore';
 
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { createAccountDeletionLink, getCurrentUser, refreshAccessToken, updateProfile, updateUserAvatar, type UpdateProfilePayload } from '@/services/api/auth.service';
@@ -75,20 +62,6 @@ import { DeletionPendingBanner } from '@/components/common/DeletionPendingBanner
 import { showGlobalToast } from '@/store/useToastStore';
 import { getUserSettings } from '@/services/api/settings.service';
 import { useAvatarsReady } from '@/services/api/avatar.service';
-
-/** A card summary for the Developer section's Reward Test (no prize, like the real thing). */
-const devSampleReward = (): UserReward => ({
-  id: `dev-${Date.now()}`,
-  type: 'SCRATCH_CARD',
-  rarity: 'rare',
-  source: 'STREAK_MILESTONE',
-  milestone_days: 7,
-  status: 'UNSEEN',
-  title: null,
-  description: null,
-  granted_at: new Date().toISOString(),
-  expires_at: null,
-});
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -121,7 +94,6 @@ export default function ProfileScreen() {
   // Modals Visibility
   const [isEditProfileModalVisible, setIsEditProfileModalVisible] = useState(false);
   const [isAvatarModalVisible, setIsAvatarModalVisible] = useState(false);
-  const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
   const [isRecentActivityModalVisible, setIsRecentActivityModalVisible] = useState(false);
   const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
   const [isRateModalVisible, setIsRateModalVisible] = useState(false);
@@ -132,10 +104,6 @@ export default function ProfileScreen() {
   const [isLogoutConfirmVisible, setIsLogoutConfirmVisible] = useState(false);
   const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
   const [isStartingDeletion, setIsStartingDeletion] = useState(false);
-  // Developer section: which rewards mock mode is on ('off' = real API).
-  const [rewardsMock, setRewardsMock] = useState<RewardsMockMode | 'off'>(() =>
-    isRewardsMockEnabled() ? getRewardsMockMode() : 'off'
-  );
 
   // Account Deletion Checker
   useEffect(() => {
@@ -345,14 +313,14 @@ export default function ProfileScreen() {
       case 'edit_profile':
         setIsEditProfileModalVisible(true);
         break;
+      case 'badges':
+        router.push('/badges');
+        break;
       case 'invite':
-        setIsInviteModalVisible(true);
+        router.push('/invite-friends');
         break;
       case 'activity':
         setIsRecentActivityModalVisible(true);
-        break;
-      case 'metrics':
-        router.push('/(tabs)/metrics');
         break;
       case 'settings':
         setIsSettingsModalVisible(true);
@@ -365,51 +333,6 @@ export default function ProfileScreen() {
         break;
       case 'send_feedback':
         router.push('/feedback');
-        break;
-      case 'reward_test':
-        // Through the real celebration queue. With the mock on, the card is
-        // also in the mock wallet, so "Got it!" opens it there.
-        showReward(isRewardsMockEnabled() ? rewardsMockApi.grant(7) : devSampleReward());
-        break;
-      case 'scratch_flow_test':
-        setRewardsMockEnabled(true);
-        setRewardsMock(getRewardsMockMode());
-        router.push('/rewards');
-        break;
-      case 'rewards_mock_mode': {
-        const order: (RewardsMockMode | 'off')[] = ['off', 'normal', 'slow', 'error', 'noCoupon'];
-        const next = order[(order.indexOf(rewardsMock) + 1) % order.length];
-        setRewardsMockEnabled(next !== 'off');
-        if (next !== 'off') setRewardsMockMode(next);
-        setRewardsMock(next);
-        break;
-      }
-      case 'streak_badge_test':
-        showStreakBadge({ currentIndex: 2, streakDays: 30 });
-        break;
-      case 'day_complete_test':
-        router.push('/day-complete?streak=30&xp=25');
-        break;
-      case 'streak_life_test': {
-        // Previews the card with this hunter's real streak and lives.
-        const lives = user?.user_progression?.streak_lives ?? 1;
-        showStreakBreak({
-          livesLeft: Math.max(0, lives - 1),
-          livesLost: 1,
-          streakLost: false,
-          streakDays: Math.max(1, user?.currentStreak ?? user?.user_progression?.daily_streak ?? 0),
-        });
-        break;
-      }
-      case 'streak_lost_test':
-        showStreakBreak({
-          livesLeft: 0,
-          streakLost: true,
-          streakDays: Math.max(1, user?.currentStreak ?? user?.user_progression?.daily_streak ?? 0),
-        });
-        break;
-      case 'level_up_test':
-        showLevelUp({ level: 3, rankName: 'Dormant III', tierLabel: 'DORMANT' });
         break;
       case 'instagram':
         Linking.openURL('https://instagram.com');
@@ -452,7 +375,6 @@ export default function ProfileScreen() {
   // reusing it here upscaled a 160px-wide image across a much bigger area
   // and came out blurry. Request a wider derivative for this one spot.
   const watermarkAvatarSource = getAvatarSource(user?.avatarUrl, userAny?.avatar_id, 700);
-  const referralCode = userAny?.referral_code ?? '45JLFI17';
 
   // Animated XP loader — Reanimated shared value driving the bar's `width`
   // entirely on the UI thread (RN's classic `Animated` can only animate
@@ -562,6 +484,8 @@ export default function ProfileScreen() {
                   style={styles.inviteIconOnlyBtn}
                   onPress={() => handleMenuPress('invite')}
                   activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Invite a friend"
                 >
                   <Ionicons name="paper-plane-outline" size={16} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -622,25 +546,29 @@ export default function ProfileScreen() {
             onPress={() => handleMenuPress('edit_profile')}
           />
           <MenuItem
-            icon="stats-chart-outline"
-            label="Health & Metrics"
-            onPress={() => handleMenuPress('metrics')}
-          />
-          <MenuItem
             icon="time-outline"
             label="Activities"
             onPress={() => handleMenuPress('activity')}
           />
-
           <MenuItem
-            icon="settings-outline"
-            label="System Settings"
-            onPress={() => handleMenuPress('settings')}
+            icon="ribbon-outline"
+            label="Badges"
+            onPress={() => handleMenuPress('badges')}
           />
           <MenuItem
             icon="gift-outline"
             label="Rewards"
             onPress={() => handleMenuPress('rewards')}
+          />
+          <MenuItem
+            icon="people-outline"
+            label="Invite a friend"
+            onPress={() => handleMenuPress('invite')}
+          />
+          <MenuItem
+            icon="settings-outline"
+            label="System Settings"
+            onPress={() => handleMenuPress('settings')}
             isLast
           />
         </View>
@@ -686,64 +614,6 @@ export default function ProfileScreen() {
             />
           </View>
         </View>
-
-        {/* DEVELOPER SECTION (dev builds only, for testing screens on a phone) */}
-        {__DEV__ && (
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionHeaderTitle}>Developer</Text>
-            <View style={styles.menuContainer}>
-              <MenuItem
-                icon="flask-outline"
-                label="Reward Test"
-                subtitle="Scratch card reward screen"
-                onPress={() => handleMenuPress('reward_test')}
-              />
-              <MenuItem
-                icon="card-outline"
-                label="Scratch Flow Test"
-                subtitle="Rewards wallet on the mock rewards API"
-                onPress={() => handleMenuPress('scratch_flow_test')}
-              />
-              <MenuItem
-                icon="options-outline"
-                label="Rewards Mock"
-                subtitle={`Mode: ${rewardsMock} (tap to switch)`}
-                onPress={() => handleMenuPress('rewards_mock_mode')}
-              />
-              <MenuItem
-                icon="trending-up-outline"
-                label="Level Up Test"
-                subtitle="Level up screen"
-                onPress={() => handleMenuPress('level_up_test')}
-              />
-              <MenuItem
-                icon="ribbon-outline"
-                label="Streak Badge Test"
-                subtitle="Badge unlock showcase"
-                onPress={() => handleMenuPress('streak_badge_test')}
-              />
-              <MenuItem
-                icon="checkmark-done-outline"
-                label="Day Complete Test"
-                subtitle="Day complete streak screen"
-                onPress={() => handleMenuPress('day_complete_test')}
-              />
-              <MenuItem
-                icon="flame-outline"
-                label="Streak Life Test"
-                subtitle="Lose 1 of 2 streak lives"
-                onPress={() => handleMenuPress('streak_life_test')}
-              />
-              <MenuItem
-                icon="cloud-outline"
-                label="Streak Lost Test"
-                subtitle="Lose the last streak life"
-                onPress={() => handleMenuPress('streak_lost_test')}
-                isLast
-              />
-            </View>
-          </View>
-        )}
 
         {/* LOG OUT CARD */}
         <View style={styles.menuContainer}>
@@ -791,13 +661,6 @@ export default function ProfileScreen() {
       </ScrollView>
 
       {/* MODULAR SUB-MODALS */}
-      <InviteFriendsModal
-        visible={isInviteModalVisible}
-        onClose={() => setIsInviteModalVisible(false)}
-        referralCode={referralCode}
-        displayName={displayName}
-      />
-
       <RecentActivityModal
         visible={isRecentActivityModalVisible}
         onClose={() => setIsRecentActivityModalVisible(false)}

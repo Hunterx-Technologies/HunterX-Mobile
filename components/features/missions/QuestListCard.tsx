@@ -5,7 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { fontFamilies } from "@/theme/typography";
-import type { QuestItem } from "@/app/(tabs)/index";
+import type { QuestItem } from "@/utils/quests";
 
 function QuestHeaderImage({ quest }: { quest: QuestItem }) {
   if (quest.image) {
@@ -109,7 +109,9 @@ function QuestListCardComponent({
       ? "Monthly"
       : quest.type === "locked"
       ? "Offer"
-      : "Routine";
+      : quest.isRoutine
+      ? "Routine"
+      : "Daily";
 
   return (
     <View

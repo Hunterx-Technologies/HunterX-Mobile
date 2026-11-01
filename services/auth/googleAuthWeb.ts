@@ -33,7 +33,9 @@ export async function signInWithGoogleWeb(): Promise<string> {
     usePKCE: false,
     // Google requires a nonce on the implicit id_token flow to guard
     // against token replay.
-    extraParams: { nonce: Crypto.randomUUID() },
+    // select_account forces the account chooser instead of reusing the
+    // browser's active Google session.
+    extraParams: { nonce: Crypto.randomUUID(), prompt: 'select_account' },
   });
 
   const result = await request.promptAsync(discovery);
