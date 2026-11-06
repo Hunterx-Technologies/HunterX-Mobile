@@ -92,7 +92,7 @@ export function SystemSettingsModal({
     notify_streak_freeze: true,
     notify_level_up: true,
     notify_reward_ready: true,
-    notify_announcements: true,
+    notify_announcements: false, // promotional — opt-in only (App Store 4.5.4)
     notify_social: true,
     notify_leaderboard: true,
     leaderboard_visible: true,
@@ -966,9 +966,9 @@ export function SystemSettingsModal({
                     <Ionicons name="megaphone-outline" size={16} color="#FE5B01" />
                   </View>
                   <View style={styles.settingTextGroup}>
-                    <Text style={styles.settingTitle}>Announcements & Broadcasts</Text>
+                    <Text style={styles.settingTitle}>Offers & Announcements</Text>
                     <Text style={styles.settingSubtitle}>
-                      Important messages & system updates from admin
+                      News, events and reward partner offers. Off unless you turn it on
                     </Text>
                   </View>
                 </View>

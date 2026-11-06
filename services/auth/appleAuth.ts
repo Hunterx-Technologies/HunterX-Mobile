@@ -20,6 +20,9 @@ export type AppleSignInResult = {
   // Apple embeds this verbatim in the token's `nonce` claim; the backend
   // checks it matches to block replayed tokens.
   nonce: string;
+  // One-time code the backend exchanges for Apple's refresh token, so
+  // deleting the account can revoke it (App Store Guideline 5.1.1(v)).
+  authorizationCode: string | null;
 };
 
 export async function isAppleSignInAvailable(): Promise<boolean> {
@@ -65,7 +68,7 @@ export async function signInWithApple(): Promise<AppleSignInResult> {
     throw new Error('Apple did not return an identity token');
   }
 
-  return { idToken: credential.identityToken, nonce };
+  return { idToken: credential.identityToken, nonce, authorizationCode: credential.authorizationCode ?? null };
 }
 
 export function isAppleSignInCancelled(err: unknown): boolean {

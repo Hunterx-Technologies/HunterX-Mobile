@@ -7,6 +7,7 @@ import { apiClient } from './client';
 import { tokenStorage } from './tokenStorage';
 import { getApiErrorCode } from './errors';
 import { AVATAR_THUMB_WIDTH, optimizeCloudinaryUrl } from '@/services/media/cloudinary';
+import type { AppleSignInResult } from '@/services/auth/appleAuth';
 
 // HunterX-Backend answers every auth call as { success, message, data }, with
 // tokens as data.access_token / data.refresh_token.
@@ -216,13 +217,19 @@ export async function loginWithGoogle(
 }
 
 export async function loginWithApple(
-  idToken: string,
-  nonce: string,
+  credential: AppleSignInResult,
   onboarding: OnboardingAnswerPayload[] = [],
   referralCode?: string,
   routineTaskIds: string[] = []
 ): Promise<AppleLoginResult> {
-  const body = { idToken, nonce, onboarding, ...signupExtras(referralCode, routineTaskIds) };
+  const { idToken, nonce, authorizationCode } = credential;
+  const body = {
+    idToken,
+    nonce,
+    ...(authorizationCode ? { authorization_code: authorizationCode } : {}),
+    onboarding,
+    ...signupExtras(referralCode, routineTaskIds),
+  };
   return socialLogin('APPLE', '/auth/apple', body, 'Apple sign-in failed');
 }
 

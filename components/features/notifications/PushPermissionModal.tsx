@@ -21,7 +21,8 @@ const CARD_WIDTH = Math.min(SCREEN_WIDTH - 40, 360);
 
 export interface PushPermissionModalProps {
   visible: boolean;
-  onEnable: () => void;
+  /** offersOptIn: the hunter ticked "Offers & announcements" (promotional push is opt-in, App Store 4.5.4). */
+  onEnable: (offersOptIn: boolean) => void;
   onDismiss: () => void;
   title?: string;
   subtitle?: string;
@@ -35,6 +36,8 @@ export function PushPermissionModal({
   subtitle = 'Get immediate directive alerts before your progress or rewards expire.',
 }: PushPermissionModalProps) {
   const [modalRendered, setModalRendered] = useState(visible);
+  // Unticked by default: promotional push needs an explicit opt-in.
+  const [offersOptIn, setOffersOptIn] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
@@ -43,6 +46,7 @@ export function PushPermissionModal({
   useEffect(() => {
     if (visible) {
       setModalRendered(true);
+      setOffersOptIn(false);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
       Animated.parallel([
@@ -101,7 +105,12 @@ export function PushPermissionModal({
 
   const handleEnable = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    onEnable();
+    onEnable(offersOptIn);
+  };
+
+  const toggleOffers = () => {
+    Haptics.selectionAsync().catch(() => {});
+    setOffersOptIn((v) => !v);
   };
 
   const handleDismiss = () => {
@@ -229,6 +238,22 @@ export function PushPermissionModal({
                 </View>
               </View>
             </View>
+
+            {/* Promotional opt-in (separate, unticked) */}
+            <TouchableOpacity
+              style={styles.optInRow}
+              onPress={toggleOffers}
+              activeOpacity={0.7}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: offersOptIn }}
+            >
+              <Ionicons
+                name={offersOptIn ? 'checkbox' : 'square-outline'}
+                size={18}
+                color={offersOptIn ? '#FE5B01' : '#71717A'}
+              />
+              <Text style={styles.optInText}>Also send me offers & announcements</Text>
+            </TouchableOpacity>
 
             {/* Spam Reassurance */}
             <View style={styles.reassuranceRow}>
@@ -451,6 +476,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A2129',
     marginVertical: 8,
     marginLeft: 46,
+  },
+  optInRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    paddingVertical: 4,
+    marginBottom: 10,
+  },
+  optInText: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    color: '#C4CBD2',
   },
   reassuranceRow: {
     flexDirection: 'row',

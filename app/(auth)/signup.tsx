@@ -314,11 +314,11 @@ export default function SignupScreen() {
     setError(null);
     setIsAppleLoading(true);
     try {
-      const { idToken, nonce } = await signInWithApple();
+      const credential = await signInWithApple();
       await syncPendingReferral();
       // Apple only shares the user's name once, so the backend names a new
       // account from onboarding Q1 (the hunter name) instead.
-      const { isOnboarded, justOnboarded } = await loginWithApple(idToken, nonce, buildOnboardingAnswers());
+      const { isOnboarded, justOnboarded } = await loginWithApple(credential, buildOnboardingAnswers());
       if (justOnboarded) {
         router.replace('/(onboarding)/ascension');
       } else if (!isOnboarded) {

@@ -160,10 +160,10 @@ export default function LoginScreen() {
     setError(null);
     setIsAppleLoading(true);
     try {
-      const { idToken, nonce } = await signInWithApple();
+      const credential = await signInWithApple();
       // Same as Google — a brand new account gets the onboarding wizard,
       // which attaches its answers to this account at the end.
-      const { isOnboarded } = await loginWithApple(idToken, nonce);
+      const { isOnboarded } = await loginWithApple(credential);
       router.replace(isOnboarded ? '/(tabs)' : '/(onboarding)/name');
     } catch (err) {
       if (!isAppleSignInCancelled(err)) {

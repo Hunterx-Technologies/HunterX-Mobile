@@ -24,10 +24,20 @@
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "environment": "production"
+    },
+    "testflight": {
+      "extends": "production",
+      "environment": "preview",
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api-uat.hunterx.co.in/api"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {},
+    "testflight": {}
   }
 }

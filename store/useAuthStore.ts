@@ -10,6 +10,7 @@ import { resetUserState } from '@/store/resetUserState';
 import { pickedRoutineTaskIds } from '@/store/useOnboardingStore';
 import type { User } from '@/types/user';
 import { API_ERROR, getApiErrorCode } from '@/services/api/errors';
+import type { AppleSignInResult } from '@/services/auth/appleAuth';
 
 /**
  * isOnboarded: the account has finished onboarding — the routes decide
@@ -58,8 +59,7 @@ type AuthState = {
     onboarding?: authService.OnboardingAnswerPayload[]
   ) => Promise<SocialLoginOutcome>;
   loginWithApple: (
-    idToken: string,
-    nonce: string,
+    credential: AppleSignInResult,
     onboarding?: authService.OnboardingAnswerPayload[]
   ) => Promise<SocialLoginOutcome>;
   logout: () => Promise<void>;
@@ -120,12 +120,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  loginWithApple: async (idToken, nonce, onboarding = []) => {
+  loginWithApple: async (credential, onboarding = []) => {
     set({ isAuthenticating: true });
     try {
       const referralCode = (await getPendingReferral()) || undefined;
       const routineTaskIds = onboarding.length > 0 ? pickedRoutineTaskIds() : [];
-      const result = await authService.loginWithApple(idToken, nonce, onboarding, referralCode, routineTaskIds);
+      const result = await authService.loginWithApple(credential, onboarding, referralCode, routineTaskIds);
       await clearPendingReferral();
       const { user, justOnboarded } = await resolveSocialLogin(result, onboarding, routineTaskIds);
       set({ user, isOnboarded: !!user.onboarding_done && !justOnboarded });

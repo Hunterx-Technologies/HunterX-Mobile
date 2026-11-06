@@ -45,7 +45,9 @@ Done (2026-10-09):
   Consider rotating it in Google Cloud → IAM → Service Accounts (it was pasted into a chat) and re-uploading.
 - [x] **Android — `google-services.json`** (2026-10-09): in repo root (app `1:991893509642:android:f5eef7b833b7a46c4971f3`),
   wired via `android.googleServicesFile` in `app.json`. Not a secret — commit it.
-- [ ] **iOS:** `eas credentials` (iOS → Push Notifications) to create/upload an APNs key (needs the Apple Developer account)
+- [x] **iOS — APNs key** (2026-11-06): EAS-generated push key `MCHL773ZGH` on team U6UNLW7PN7, assigned to
+  `com.hunterx.mobile`. Project moved to the client's Expo org (`@hunterxtechs-team/shakthi`, same project ID).
+  Ad Hoc profile `36L6DGVLTM` includes one test iPhone; add more with `eas device:create` + rebuild.
 - [ ] **New dev build** — `eas build --profile development` for both platforms (native module + plugin added); the
   current dev client can't load `expo-notifications`
 - [ ] Optional: `EXPO_ACCESS_TOKEN` in backend env if "Enhanced push security" is enabled at expo.dev

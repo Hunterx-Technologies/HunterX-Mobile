@@ -8,6 +8,7 @@ import {
   registerDeviceIfPermitted,
   requestPushPermission,
 } from '@/services/notifications/push';
+import { updateUserSettings } from '@/services/api/settings.service';
 
 /**
  * In-app explainer shown before the OS permission prompt, so the system dialog
@@ -26,8 +27,13 @@ export function usePushPermissionPrompt() {
     setVisible(true);
   }, []);
 
-  const accept = useCallback(async () => {
+  const accept = useCallback(async (offersOptIn = false) => {
     setVisible(false);
+    // Promotional push (admin broadcasts) is opt-in only — saved only when
+    // ticked, and whatever the OS answers, so it applies once push is on.
+    if (offersOptIn) {
+      updateUserSettings({ notify_announcements: true }).catch(() => {});
+    }
     const result = await requestPushPermission();
     if (result === 'granted') {
       registerDeviceIfPermitted({ force: true }).catch(() => {});
