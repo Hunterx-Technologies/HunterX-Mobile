@@ -33,12 +33,26 @@ async function prefetchUrl(url: string): Promise<void> {
  * and local sound assets so they render/play instantly with zero delay.
  */
 export async function preloadAppAssets(): Promise<void> {
+  await preloadPriorityAssets();
+  await preloadRemainingAssets();
+}
+
+/**
+ * The login/ascension hero images — needed the moment the launch splash
+ * ends, so these start right away.
+ */
+export async function preloadPriorityAssets(): Promise<void> {
+  await Promise.allSettled(PRIORITY_IMAGE_URLS.map(prefetchUrl));
+}
+
+/**
+ * Everything else (sound buffer, the Cloudinary catalog, streak badges).
+ * Started after the launch splash: done during it, the work made the splash
+ * animation stutter on low-end phones.
+ */
+export async function preloadRemainingAssets(): Promise<void> {
   // Pre-warm done.m4a audio buffer for ultra-snappy feedback
   preloadTaskDoneSound().catch(() => { });
-
-  // Give the login/ascension hero images a head start before the rest of the
-  // catalog starts competing for bandwidth.
-  await Promise.allSettled(PRIORITY_IMAGE_URLS.map(prefetchUrl));
 
   const imageUrls = Object.values(CLOUDINARY_ASSETS)
     .map((asset) => asset.uri)
@@ -52,6 +66,20 @@ export async function preloadAppAssets(): Promise<void> {
     optimizeCloudinaryUrl(asset.uri, STREAK_BADGE_WIDTH)
   );
 
-  // Pre-cache the remaining images in parallel across expo-image and React Native image caches
-  await Promise.allSettled([...imageUrls, ...badgeUrls].map(prefetchUrl));
+  // Pre-cache the rest, a few at a time: firing every download at once
+  // saturated low-end phones' CPU, disk and network for seconds.
+  await prefetchInBatches([...imageUrls, ...badgeUrls], PREFETCH_CONCURRENCY);
+}
+
+const PREFETCH_CONCURRENCY = 4;
+
+async function prefetchInBatches(urls: string[], concurrency: number): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < urls.length) {
+      const url = urls[next++];
+      await prefetchUrl(url);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker));
 }

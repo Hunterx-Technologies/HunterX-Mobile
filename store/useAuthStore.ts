@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import * as authService from '@/services/api/auth.service';
 import { tokenStorage } from '@/services/api/tokenStorage';
@@ -11,6 +12,37 @@ import { pickedRoutineTaskIds } from '@/store/useOnboardingStore';
 import type { User } from '@/types/user';
 import { API_ERROR, getApiErrorCode } from '@/services/api/errors';
 import type { AppleSignInResult } from '@/services/auth/appleAuth';
+import { markOffline, whenOnline } from '@/store/useConnectivityStore';
+
+// The signed-in user's last known profile, so opening the app offline lands
+// on Home instead of Login. Written whenever the user changes, removed on
+// sign-out / session end. Tokens stay in secure storage as before.
+const CACHED_USER_KEY = 'hunterx-cached-user-v1';
+
+// Longest sign-out waits for the server before signing out locally anyway.
+const LOGOUT_SERVER_WAIT_MS = 3000;
+
+async function readCachedUser(): Promise<User | null> {
+  try {
+    const json = await AsyncStorage.getItem(CACHED_USER_KEY);
+    return json ? (JSON.parse(json) as User) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Did the server actually refuse this session (expired/revoked token, deleted
+ * account)? Only then is the stored session thrown away. No response at all
+ * (offline, timeout) or a 5xx is not a refusal — the tokens are kept.
+ */
+function isSessionRefused(err: unknown): boolean {
+  const status = (err as any)?.status ?? (err as any)?.response?.status;
+  return (
+    getApiErrorCode(err) === API_ERROR.ACCOUNT_NOT_FOUND ||
+    (typeof status === 'number' && [400, 401, 403, 404].includes(status))
+  );
+}
 
 /**
  * isOnboarded: the account has finished onboarding — the routes decide
@@ -136,17 +168,32 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    // Before the session is cleared — the backend DELETE needs auth. Stops
-    // this device receiving the signed-out user's pushes.
-    await unregisterDevice();
-    await authService.logout();
-    await signOutGoogle();
+    // Server-side cleanup, both at once and best-effort:
+    // - unregister this device from push (needs auth, so before the tokens
+    //   are cleared) — stops the signed-out user's pushes arriving here;
+    // - revoke the refresh token.
+    // Capped at LOGOUT_SERVER_WAIT_MS: on a slow or flaky network these used
+    // to hold sign-out for 30s+ with nothing on screen, which looked like the
+    // Log Out button doing nothing. Whatever hasn't finished by then carries
+    // on in the background; signing out on this device never waits on it.
+    const refreshToken = await tokenStorage.getRefreshToken();
+    const serverCleanup = Promise.allSettled([
+      unregisterDevice(),
+      refreshToken ? authService.revokeSession(refreshToken) : Promise.resolve(),
+    ]);
+    await Promise.race([serverCleanup, new Promise((r) => setTimeout(r, LOGOUT_SERVER_WAIT_MS))]);
+
+    await tokenStorage.clearTokens();
+    signOutGoogle().catch(() => {}); // local SDK state only; never block on it
     resetUserState();
     set({ user: null });
   },
 
   setUser: (user) => set({ user }),
-  completeOnboarding: () => set({ isOnboarded: true }),
+  // Ascension calls this to let the hunter into Home. Only the server's
+  // record counts: reaching Ascension without saved answers (deep link,
+  // OTP fallback) must not open the app.
+  completeOnboarding: () => set((s) => ({ isOnboarded: !!s.user?.onboarding_done })),
 
   submitOnboarding: async (onboarding) => {
     set({ isAuthenticating: true });
@@ -172,17 +219,58 @@ export const useAuthStore = create<AuthState>((set) => ({
       const user = await authService.getCurrentUser();
       set({ user, isOnboarded: !!user.onboarding_done, isBootstrapping: false });
     } catch (err) {
-      // Token missing/expired and refresh (handled inside apiClient) failed
-      // too — or the account was deleted after its 30-day grace period.
-      await tokenStorage.clearTokens();
-      set({
-        user: null,
-        isBootstrapping: false,
-        accountNotFound: getApiErrorCode(err) === API_ERROR.ACCOUNT_NOT_FOUND,
-      });
+      if (isSessionRefused(err)) {
+        // Token expired and refresh (handled inside apiClient) failed too —
+        // or the account was deleted after its 30-day grace period.
+        await tokenStorage.clearTokens();
+        set({
+          user: null,
+          isBootstrapping: false,
+          accountNotFound: getApiErrorCode(err) === API_ERROR.ACCOUNT_NOT_FOUND,
+        });
+        return;
+      }
+
+      // Offline (or the server is having a moment): keep the session. Open
+      // with the last known profile, and refresh it once we're back online.
+      markOffline();
+      const cached = await readCachedUser();
+      if (cached) {
+        set({ user: cached, isOnboarded: !!cached.onboarding_done, isBootstrapping: false });
+        whenOnline().then(() => {
+          if (useAuthStore.getState().user) {
+            authService
+              .getCurrentUser()
+              .then((fresh) => set({ user: fresh, isOnboarded: !!fresh.onboarding_done }))
+              .catch((e) => {
+                if (isSessionRefused(e)) {
+                  tokenStorage.clearTokens();
+                  set({ user: null });
+                }
+              });
+          }
+        });
+        return;
+      }
+      // Nothing cached (e.g. first launch after an update): stay on the
+      // loading screen behind the offline pop-up and try again once online,
+      // rather than sending a signed-in hunter to Login.
+      whenOnline().then(() => useAuthStore.getState().restoreSession());
     }
   },
+
 }));
+
+// Keep the cached profile in step with the signed-in user (and drop it on
+// sign-out / session end, when user becomes null).
+useAuthStore.subscribe((state, prev) => {
+  if (state.user === prev.user) return;
+  if (state.user) {
+    AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(state.user)).catch(() => {});
+  } else {
+    AsyncStorage.removeItem(CACHED_USER_KEY).catch(() => {});
+  }
+});
 
 // The refresh token was refused (expired, revoked, account deleted or
 // suspended): sign out, so the route guards send the hunter to Login

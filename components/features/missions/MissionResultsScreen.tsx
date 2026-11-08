@@ -56,8 +56,7 @@ import type { LeaderboardEntry, LeaderboardMe } from '@/types/leaderboard';
 import type { ViewShotHandle } from '@/types/viewShot';
 import type { WeekStatusDay } from '@/types/user';
 
-// The page shown when the hunter clears the day's missions (also on
-// Profile → Developer → Mission Clear Test).
+// The page shown when the hunter clears the day's missions.
 //
 // It opens like the day-complete streak screen: on a dark screen the grey
 // flame charges, ignites with warm light and rays, and the count rolls up.

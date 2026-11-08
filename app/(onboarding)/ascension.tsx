@@ -16,10 +16,10 @@ import { DustParticles } from '@/components/common/DustParticles';
 import { Screen } from '@/components/common/Screen';
 import { fontFamilies } from '@/theme/typography';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/store/useAuthStore';
 import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
 import { optimizeCloudinaryUrl, DEFAULT_BLURHASH } from '@/services/media/cloudinary';
 import { playIntroAudio, preloadIntroAudio } from '@/services/audio/introSound';
-import * as Haptics from 'expo-haptics';
 
 // This is the first screen every new user lands on right after onboarding —
 // same reasoning as login.tsx's hero image: width-cap the Cloudinary
@@ -53,6 +53,14 @@ export default function AscensionScreen() {
   }, [fadeAnim, slideAnim]);
 
   const handleStart = () => {
+    // Only an account whose answers the server has saved may enter Home.
+    // Anyone else (signed out, or here without finishing the wizard) goes
+    // back to the start of onboarding.
+    const user = useAuthStore.getState().user;
+    if (!user?.onboarding_done) {
+      router.replace('/(onboarding)/name');
+      return;
+    }
     // Trigger intro audio with synchronized haptic sequence on button press
     playIntroAudio(true);
     completeOnboarding();

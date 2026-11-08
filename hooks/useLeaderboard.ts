@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
 import { fetchLeaderboardPage } from '@/services/api/leaderboard.service';
@@ -71,6 +72,30 @@ export function resetLeaderboardCache() {
   for (const s of SCOPES) statusCache.set(s, emptyStatus());
   notify();
 }
+
+/**
+ * The signed-in user's own name or avatar changed (Profile). The cached rows
+ * still carry the old ones and would keep showing them for up to
+ * STALE_TIME_MS, so refetch every scope that's been loaded, in the
+ * background — the backend has already updated its copy by the time the
+ * profile request returns. Rows stay on screen until the new page arrives.
+ */
+export function invalidateLeaderboardCache() {
+  for (const scope of SCOPES) {
+    if (dataCache.has(scope)) refreshScope(scope, { force: true });
+  }
+}
+
+// XP can also change while the app is in the background (a quest-proof photo
+// approved by the team, other hunters climbing), so coming back to the app
+// refetches whatever leaderboard pages are already loaded.
+let lastAppState: AppStateStatus = AppState.currentState;
+AppState.addEventListener('change', (next) => {
+  if (lastAppState.match(/inactive|background/) && next === 'active') {
+    invalidateLeaderboardCache();
+  }
+  lastAppState = next;
+});
 
 async function refreshScope(scope: LeaderboardScope, opts: { force?: boolean } = {}) {
   const status = statusCache.get(scope) ?? emptyStatus();

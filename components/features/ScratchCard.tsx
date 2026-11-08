@@ -12,9 +12,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
-import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
   Path,
   Defs,
@@ -29,7 +27,6 @@ import Svg, {
   Image as SvgImage,
 } from 'react-native-svg';
 import { fontFamilies } from '../../theme/typography';
-import { TopographyPattern } from '../ui/TopographyPattern';
 import { RewardProductImage, REWARD_IMAGE_WIDTH } from './reward/RewardProductImage';
 
 const HUNTERX_TITLE = require('../../assets/images/hunterx_card_title.png');
@@ -90,51 +87,6 @@ const GRID_COLS = 8;
 const GRID_ROWS = 10;
 const TOTAL_GRID_CELLS = GRID_COLS * GRID_ROWS;
 
-const RARITY_THEMES: Record<
-  ScratchRarity,
-  {
-    borderColor: string;
-    glowColor: string;
-    badgeBg: string;
-    textColor: string;
-    gradientColors: [string, string, string];
-    badgeLabel: string;
-  }
-> = {
-  legendary: {
-    borderColor: '#FE5B01',
-    glowColor: 'rgba(254, 91, 1, 0.45)',
-    badgeBg: 'rgba(254, 91, 1, 0.18)',
-    textColor: '#FE5B01',
-    gradientColors: ['#16181C', '#121316', '#0E0F12'],
-    badgeLabel: 'LEGENDARY LOOT',
-  },
-  epic: {
-    borderColor: '#C084FC',
-    glowColor: 'rgba(192, 132, 252, 0.45)',
-    badgeBg: 'rgba(192, 132, 252, 0.18)',
-    textColor: '#E9D5FF',
-    gradientColors: ['#16181C', '#141318', '#0E0F12'],
-    badgeLabel: 'EPIC DROP',
-  },
-  rare: {
-    borderColor: '#38BDF8',
-    glowColor: 'rgba(56, 189, 248, 0.45)',
-    badgeBg: 'rgba(56, 189, 248, 0.18)',
-    textColor: '#BAE6FD',
-    gradientColors: ['#16181C', '#10141A', '#0E0F12'],
-    badgeLabel: 'RARE REWARD',
-  },
-  common: {
-    borderColor: '#34D399',
-    glowColor: 'rgba(52, 211, 153, 0.35)',
-    badgeBg: 'rgba(52, 211, 153, 0.15)',
-    textColor: '#A7F3D0',
-    gradientColors: ['#16181C', '#101815', '#0E0F12'],
-    badgeLabel: 'HUNTER LOOT',
-  },
-};
-
 export const ScratchCard: React.FC<ScratchCardProps> = ({
   onComplete,
   isScratched = false,
@@ -181,7 +133,6 @@ export const ScratchCard: React.FC<ScratchCardProps> = ({
     setPoints([]);
   }, [status]);
 
-  const theme = RARITY_THEMES[rarity] || RARITY_THEMES.legendary;
   const emblemWidth = Math.round(width * 0.48);
   const emblemHeight = Math.round(emblemWidth * (839 / 857));
   const titleWidth = Math.round(width * 0.54);

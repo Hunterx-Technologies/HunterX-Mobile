@@ -25,6 +25,7 @@ import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
 import { optimizeCloudinaryUrl, DEFAULT_BLURHASH } from '@/services/media/cloudinary';
 import { submitRating } from '@/services/api/rating.service';
 import { showGlobalToast } from '@/store/useToastStore';
+import { cleanFreeText } from '@/utils/textInput';
 
 const HAS_SHOWN_STORE_REVIEW_KEY = 'hasShownStoreReviewPrompt';
 const STORE_REVIEW_PROMPT_DELAY_MS = 800;
@@ -331,7 +332,7 @@ export function RateHunterModal({ visible, onClose }: RateHunterModalProps) {
                     placeholder="Write your feedback..."
                     placeholderTextColor="#71717A"
                     value={rateFeedbackText}
-                    onChangeText={setRateFeedbackText}
+                    onChangeText={(t) => setRateFeedbackText(cleanFreeText(t))}
                     multiline
                     numberOfLines={3}
                     onFocus={() => {

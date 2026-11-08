@@ -1,6 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
 import { env } from '@/config/env';
+import { markOffline, markOnline } from '@/store/useConnectivityStore';
 import type { ApiResponse } from '@/types/api';
 
 import { tokenStorage } from './tokenStorage';
@@ -55,6 +56,8 @@ apiClient.interceptors.request.use(async (config) => {
 
 let refreshPromise: Promise<string | null> | null = null;
 
+const NETWORK_RETRY_DELAY_MS = 700;
+
 const NO_REFRESH_URLS = ['/auth/login', '/auth/refresh', '/auth/logout'];
 
 // Called when the session is definitely over — the refresh token was
@@ -98,9 +101,36 @@ export async function refreshAccessToken(): Promise<string | null> {
 }
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    markOnline();
+    return response;
+  },
   async (error: AxiosError<ApiResponse<unknown>>) => {
-    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
+    const originalRequest = error.config as
+      | (InternalAxiosRequestConfig & { _retried?: boolean; _networkRetried?: boolean })
+      | undefined;
+
+    // A read that failed before reaching the server (a dropped connection,
+    // not a timeout) is tried once more after a short pause, so a brief blip
+    // doesn't surface as an error. Writes are never repeated automatically.
+    if (
+      !error.response &&
+      !axios.isCancel(error) &&
+      error.code !== 'ECONNABORTED' &&
+      error.code !== 'ETIMEDOUT' &&
+      originalRequest &&
+      (originalRequest.method ?? 'get').toLowerCase() === 'get' &&
+      !originalRequest._networkRetried
+    ) {
+      originalRequest._networkRetried = true;
+      await new Promise((resolve) => setTimeout(resolve, NETWORK_RETRY_DELAY_MS));
+      return apiClient(originalRequest);
+    }
+
+    // No response at all = no internet (or it timed out): show the offline
+    // pop-up. Any response, even an error status, means we're online.
+    if (error.response) markOnline();
+    else if (!axios.isCancel(error)) markOffline();
 
     // A 401 that means "wrong password", not "expired token", is passed
     // straight through — refreshing wouldn't change it.

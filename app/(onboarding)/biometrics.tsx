@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Haptics from 'expo-haptics';
 
 import { Button } from '@/components/common/Button';
@@ -24,6 +23,9 @@ import { StepIndicator } from '@/components/common/StepIndicator';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
+import { playTickSound, preloadTickSound, releaseTickSound } from '@/services/audio/tickSound';
+import { digitsOnly } from '@/utils/textInput';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 1; // second step (0-indexed)
@@ -32,12 +34,6 @@ const CURRENT_STEP = 1; // second step (0-indexed)
 const MIN_AGE = 18;
 const MAX_AGE = 80;
 const TICK_SPACING = 16;
-
-const getMetabolicClassification = (currentAge: number) => {
-  if (currentAge < 30) return { label: 'PRIME VECTOR (OPTIMAL RECOVERY)', code: 'VEC-02' };
-  if (currentAge < 46) return { label: 'VETERAN ADAPTATION', code: 'VEC-03' };
-  return { label: 'APEX MASTERY PARAMETERS', code: 'VEC-04' };
-};
 
 export default function BiometricsScreen() {
   const storeGender = useOnboardingStore((s) => s.gender);
@@ -58,6 +54,7 @@ export default function BiometricsScreen() {
 
   const ageScrollRef = useRef<ScrollView>(null);
   const mainScrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(mainScrollRef);
 
   // Animations
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -76,7 +73,13 @@ export default function BiometricsScreen() {
         console.warn('Failed to trigger haptics', inner);
       }
     }
+    playTickSound();
   };
+
+  useEffect(() => {
+    preloadTickSound();
+    return releaseTickSound;
+  }, []);
 
   useEffect(() => {
     Animated.stagger(120, [
@@ -147,18 +150,6 @@ export default function BiometricsScreen() {
     if (clampedAge !== age) {
       setAge(clampedAge);
       triggerHaptic();
-    }
-  };
-
-  const handleSelectAge = (newAge: number) => {
-    const clamped = Math.max(MIN_AGE, Math.min(MAX_AGE, newAge));
-    if (clamped !== age) {
-      setAge(clamped);
-      triggerHaptic();
-      setTimeout(() => {
-        const targetX = (clamped - MIN_AGE) * TICK_SPACING;
-        ageScrollRef.current?.scrollTo({ x: targetX, animated: true });
-      }, 50);
     }
   };
 
@@ -406,7 +397,7 @@ export default function BiometricsScreen() {
                   style={styles.modalTextInput}
                   value={inputAge}
                   onChangeText={(txt) => {
-                    setInputAge(txt);
+                    setInputAge(digitsOnly(txt));
                     setErrorMsg('');
                   }}
                   keyboardType="number-pad"

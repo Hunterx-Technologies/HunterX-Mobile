@@ -30,6 +30,7 @@ import { palette } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import type { AppNotification } from '@/types/notification';
 import { formatRelativeTime } from '@/utils/formatters';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -54,6 +55,8 @@ const TYPE_ICON: Record<string, { icon: IconName; color: string }> = {
 const DEFAULT_ICON = { icon: 'notifications-outline' as IconName, color: palette.silver };
 
 export default function NotificationsScreen() {
+  const pageScrollRef = useRef<FlatList<any>>(null);
+  useScrollToTopOnFocus(pageScrollRef);
   const { isAuthenticated, isBootstrapping } = useAuth();
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
@@ -248,6 +251,7 @@ export default function NotificationsScreen() {
         </View>
       ) : (
         <FlatList
+        ref={pageScrollRef}
           data={items}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}

@@ -21,6 +21,7 @@ import { TimeRangeSelector } from './TimeRangeSelector';
 import { StepsHeroCard } from './StepsHeroCard';
 import { MetricGridCard } from './MetricGridCard';
 import { WeeklyActivityChart } from './WeeklyActivityChart';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 interface MetricsDashboardViewProps {
   onBack?: () => void;
@@ -31,6 +32,8 @@ export function MetricsDashboardView({
   onBack,
   showBackButton = true,
 }: MetricsDashboardViewProps) {
+  const pageScrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(pageScrollRef);
   const insets = useSafeAreaInsets();
   const {
     timeRange,
@@ -69,9 +72,6 @@ export function MetricsDashboardView({
   // "Last synced" to reflect right now, not up to an hour ago.
   useFocusEffect(
     useCallback(() => {
-      console.log('====================================================');
-      console.log(`📊 [MetricsDashboardView] Focused for provider: ${connectedProvider} — syncing + refreshing ${timeRangeRef.current}`);
-      console.log('====================================================');
       syncNow().then(() => {
         if (timeRangeRef.current !== 'Today') {
           fetchRangeData(timeRangeRef.current);
@@ -85,27 +85,6 @@ export function MetricsDashboardView({
   // mounted yet this session — no need to duplicate an AppState listener here.
 
   const currentData = datasets[timeRange] || datasets.Today;
-
-  const handleSettingsPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert(
-      'Metrics Settings',
-      'Manage health data sources, sync intervals, and fitness preferences.',
-      [
-        { text: 'Sync Now', onPress: () => syncNow() },
-        {
-          text: 'Disconnect Health',
-          style: 'destructive',
-          onPress: () => {
-            disconnectProvider();
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            if (onBack) onBack();
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
 
   const handleBannerPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -153,6 +132,7 @@ export function MetricsDashboardView({
       </View>
 
       <ScrollView
+        ref={pageScrollRef}
         bounces={false}
         overScrollMode="never"
         contentContainerStyle={[

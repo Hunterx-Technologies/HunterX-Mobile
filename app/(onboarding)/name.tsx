@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, router } from 'expo-router';
+import { router } from 'expo-router';
 import {
     Animated,
     Easing,
@@ -22,6 +22,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
+import { cleanName } from '@/utils/textInput';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 0; // first step (0-indexed)
@@ -45,6 +47,7 @@ export default function OnboardingNameScreen() {
     const contentAnim = useRef(new Animated.Value(0)).current;
     const buttonAnim = useRef(new Animated.Value(0)).current;
     const scrollRef = useRef<ScrollView>(null);
+    useScrollToTopOnFocus(scrollRef);
 
     useEffect(() => {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -146,7 +149,7 @@ export default function OnboardingNameScreen() {
                                 placeholder="Enter your hunter name"
                                 placeholderTextColor="#52525B"
                                 value={hunterName}
-                                onChangeText={setHunterName}
+                                onChangeText={(t) => setHunterName(cleanName(t))}
                                 onFocus={() => setIsFocused(true)}
                                 onBlur={() => setIsFocused(false)}
                                 maxLength={24}

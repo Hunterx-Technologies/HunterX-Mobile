@@ -68,7 +68,8 @@ export const showLevelUpFromApi = (info: LevelUpInfo | null | undefined) => {
     // The rank line ("Dormant III") already names the rank; no pill repeating it.
     tierLabel: '',
     description: info.level_up_message ?? '',
-    xpEarnedText: info.xp_earned_text,
+    // No "+N XP": levelling up doesn't award XP, so only the progress line shows.
+    xpEarnedText: '',
     nextLevelText: info.next_level_text,
     buttonLabel: info.button_label,
     dragonStage: stage?.image_url

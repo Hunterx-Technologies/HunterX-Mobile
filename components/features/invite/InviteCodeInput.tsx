@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import * as Clipboard from 'expo-clipboard';
 import Feather from '@expo/vector-icons/Feather';
 
-import { lookupReferralCode, type ReferralLookup } from '@/services/api/referral.service';
+import { lookupReferralCode } from '@/services/api/referral.service';
 import {
   clearPendingReferral,
   extractReferralCode,
@@ -23,8 +23,6 @@ type CheckState =
 type InviteCodeInputProps = {
   value: string;
   onChangeValue: (code: string) => void;
-  /** Swapped for a fake in the Developer menu preview. */
-  lookup?: (code: string) => Promise<ReferralLookup>;
   /** Starts open (preview); otherwise opens by itself only when a code is present. */
   initiallyExpanded?: boolean;
   /** false in previews: never read or write the real pending code. */
@@ -40,7 +38,6 @@ type InviteCodeInputProps = {
 export function InviteCodeInput({
   value,
   onChangeValue,
-  lookup = lookupReferralCode,
   initiallyExpanded = false,
   persist = true,
 }: InviteCodeInputProps) {
@@ -86,7 +83,7 @@ export function InviteCodeInput({
     let cancelled = false;
     setCheck({ state: 'checking' });
     const timer = setTimeout(() => {
-      lookup(code)
+      lookupReferralCode(code)
         .then((result) => {
           if (cancelled) return;
           if (result.valid && result.inviterName) setCheck({ state: 'valid', inviterName: result.inviterName });
@@ -102,7 +99,7 @@ export function InviteCodeInput({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [value, lookup, persist, isPrefilled]);
+  }, [value, persist, isPrefilled]);
 
   // New codes skip 0/O/1/I, but older ones (e.g. WZJE71J1) still contain
   // them, so every letter and digit is kept — same rule as the backend.

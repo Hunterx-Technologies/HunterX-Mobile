@@ -5,6 +5,8 @@ import { HealthConnectAdapter } from './HealthConnectAdapter';
 
 class DummyHealthAdapter implements HealthAdapter {
   async isAvailable() { return false; }
+  async getAvailability() { return 'unavailable' as const; }
+  async openSettings() {}
   async requestPermissions() { return false; }
   async checkPermissions() { return false; }
   async getTodaySummary() {

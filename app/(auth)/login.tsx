@@ -34,6 +34,9 @@ import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
 import { optimizeCloudinaryUrl, DEFAULT_BLURHASH } from '@/services/media/cloudinary';
 import { API_ERROR, getApiErrorCode } from '@/services/api/errors';
 import { showGlobalToast } from '@/store/useToastStore';
+import { emailError } from '@/utils/validation';
+import { noSpaces } from '@/utils/textInput';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 // This hero image is the very first thing a logged-out user ever sees, often
 // before app-wide prefetching (see preloadAppAssets) has had a chance to
@@ -61,6 +64,7 @@ export default function LoginScreen() {
   const buttonAnim = useRef(new Animated.Value(0)).current;
   const socialAnim = useRef(new Animated.Value(0)).current;
   const scrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(scrollRef);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -118,8 +122,17 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     setError(null);
+    const invalid = emailError(email);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    if (!password) {
+      setError('Password is required.');
+      return;
+    }
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       const isOnboarded = useAuthStore.getState().isOnboarded;
       if (isOnboarded) {
         router.replace('/(tabs)');
@@ -239,7 +252,7 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   keyboardType="email-address"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(t) => setEmail(noSpaces(t))}
                   onFocus={() => setFocusedInput('email')}
                   onBlur={() => setFocusedInput(null)}
                 />

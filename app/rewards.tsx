@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  Clipboard,
   Dimensions,
   BackHandler,
   ActivityIndicator,
@@ -31,6 +30,7 @@ import { showGlobalToast } from '@/store/useToastStore';
 import { hasPrize, rewardOriginLabel, type RewardTab, type RevealedReward, type UserReward } from '@/types/reward';
 import { useAuthStore } from '@/store/useAuthStore';
 import { API_ERROR, PENDING_DELETION_MESSAGE } from '@/services/api/errors';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_CARD_WIDTH = (SCREEN_WIDTH - 32 - 14) / 2;
@@ -136,9 +136,10 @@ export default function RewardsScreen() {
   // Coupon detail modal state (for viewing full terms on already scratched cards)
   const [selectedDetailsCard, setSelectedDetailsCard] = useState<CouponReward | null>(null);
   const [markingUsed, setMarkingUsed] = useState(false);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
+
+  useScrollToTopOnFocus(scrollRef);
   const scrollYRef = useRef(0);
   // Ignores responses for a tab that were overtaken by a newer request.
   const requestIds = useRef<Record<WalletTab, number>>({ ACTIVE: 0, USED: 0, EXPIRED: 0 });
@@ -249,15 +250,6 @@ export default function RewardsScreen() {
     });
   };
 
-  const handleCopyCode = (code: string) => {
-    Clipboard.setString(code);
-    setCopiedCode(code);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
-    setTimeout(() => {
-      setCopiedCode(null);
-    }, 2500);
-  };
-
   const closeCenterCard = () => {
     setActiveCenterCard(null);
     setScratchNotice(null);
@@ -343,14 +335,6 @@ export default function RewardsScreen() {
       <LinearGradient colors={['#0D0F12', '#0A0C0E', '#08090B']} style={StyleSheet.absoluteFillObject} />
 
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {/* Toast Notification */}
-        {copiedCode && (
-          <View style={styles.toastContainer}>
-            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
-            <Text style={styles.toastText}>Code {copiedCode} copied to clipboard!</Text>
-          </View>
-        )}
-
         {/* HEADER BAR (strictly adhering to project rules: background-less back button) */}
         <View style={styles.headerBar}>
           <TouchableOpacity

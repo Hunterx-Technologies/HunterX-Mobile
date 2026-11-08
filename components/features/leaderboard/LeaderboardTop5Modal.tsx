@@ -1,16 +1,14 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Dimensions,
   Image,
   Modal,
-  SafeAreaView,
   ScrollView,
   Share,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
@@ -25,8 +23,11 @@ import { fontFamilies } from '@/theme/typography';
 import type { LeaderboardMe } from '@/types/leaderboard';
 
 const TOP5_BG = require('@/assets/images/top5bg.jpg');
+// Dark vignette over the artwork — shared by the popup and the share image.
+const VIGNETTE_COLORS = ['rgba(2, 2, 3, 0.75)', 'rgba(2, 2, 3, 0.35)', 'rgba(2, 2, 3, 0.65)', '#020203'] as const;
+const VIGNETTE_LOCATIONS = [0, 0.25, 0.65, 1] as const;
 const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface LeaderboardTop5ModalProps {
   visible: boolean;
@@ -61,16 +62,40 @@ export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
   const avatarUrl = me?.avatarThumbUrl || FALLBACK_AVATAR;
   const bracketLabel = topBracketLabel(me?.rank, me?.topPercent);
   const shareCardRef = useRef<ViewShotHandle>(null);
+  // The artwork + vignette behind the popup are outside the captured area
+  // (they also sit behind the header bar), so the shared image used to have
+  // a transparent background — shown as plain black/white in chats. While a
+  // share image is taken, the same layers are drawn inside the capture too.
+  const [isCapturing, setIsCapturing] = useState(false);
+  const captureBgLoaded = useRef<(() => void) | null>(null);
 
   const formatScore = (val: number) => {
     return val.toLocaleString('en-US');
+  };
+
+  const captureWithBackground = async (): Promise<string | undefined> => {
+    // Wait for the in-capture artwork to be drawn (or 800 ms at most).
+    const bgReady = new Promise<void>((resolve) => {
+      captureBgLoaded.current = resolve;
+      setTimeout(resolve, 800);
+    });
+    setIsCapturing(true);
+    try {
+      await bgReady;
+      // One more frame so the layers are on screen before the snapshot.
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      return await shareCardRef.current?.capture?.();
+    } finally {
+      captureBgLoaded.current = null;
+      setIsCapturing(false);
+    }
   };
 
   const handleShare = async () => {
     const shareMessage = `🔥 I just reached ${bracketLabel} on HunterX! Discipline today, a stronger you tomorrow. Check out your rank on HunterX!`;
 
     try {
-      const cardImageUri = await shareCardRef.current?.capture?.();
+      const cardImageUri = await captureWithBackground();
       await RNShare.open({
         title: 'HunterX',
         message: shareMessage,
@@ -114,13 +139,8 @@ export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
 
           {/* Vignette Gradient Overlays */}
           <LinearGradient
-            colors={[
-              'rgba(2, 2, 3, 0.75)',
-              'rgba(2, 2, 3, 0.35)',
-              'rgba(2, 2, 3, 0.65)',
-              '#020203',
-            ]}
-            locations={[0, 0.25, 0.65, 1]}
+            colors={VIGNETTE_COLORS}
+            locations={VIGNETTE_LOCATIONS}
             style={StyleSheet.absoluteFillObject}
             pointerEvents="none"
           />
@@ -168,6 +188,24 @@ export const LeaderboardTop5Modal: React.FC<LeaderboardTop5ModalProps> = ({
               options={{ format: 'png', quality: 1 }}
               style={styles.shareCaptureWrapper}
             >
+            {isCapturing && (
+              <>
+                {/* Solid base: never a transparent PNG, even if the artwork fails. */}
+                <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#020203' }]} />
+                <Image
+                  source={TOP5_BG}
+                  style={StyleSheet.absoluteFillObject}
+                  resizeMode="cover"
+                  onLoadEnd={() => captureBgLoaded.current?.()}
+                />
+                <LinearGradient
+                  colors={VIGNETTE_COLORS}
+                  locations={VIGNETTE_LOCATIONS}
+                  style={StyleSheet.absoluteFillObject}
+                  pointerEvents="none"
+                />
+              </>
+            )}
 
             {/* TOP BRANDING ROW */}
             <View style={styles.topBrandingRow}>
@@ -295,6 +333,8 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   shareCaptureWrapper: {
+    // Transparent so the popup's artwork shows through in the app; the share
+    // image gets its own background layers while capturing (isCapturing).
     backgroundColor: 'transparent',
     paddingTop: 4,
     paddingBottom: 8,

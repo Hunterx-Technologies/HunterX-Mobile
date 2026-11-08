@@ -13,7 +13,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 
-import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');

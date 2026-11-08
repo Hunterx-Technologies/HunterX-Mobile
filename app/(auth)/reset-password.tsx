@@ -20,11 +20,15 @@ import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { resetPassword } from '@/services/api/auth.service';
 import { PasswordStrengthMeter, meetsPasswordRules } from '@/components/common/PasswordStrengthMeter';
+import { noSpaces } from '@/utils/textInput';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const easeOut = Easing.out(Easing.cubic);
 
 // ── Main Screen ──────────────────────────────────────────────────────────────
 export default function ResetPasswordScreen() {
+  const pageScrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(pageScrollRef);
   const { height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -119,6 +123,7 @@ export default function ResetPasswordScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+        ref={pageScrollRef}
           bounces={false}
           overScrollMode="never"
           contentContainerStyle={[styles.scroll, { paddingTop: cardTopOffset }]}
@@ -170,7 +175,7 @@ export default function ResetPasswordScreen() {
                   placeholderTextColor="#52525B"
                   secureTextEntry={!showNew}
                   value={newPassword}
-                  onChangeText={setNewPassword}
+                  onChangeText={(t) => setNewPassword(noSpaces(t))}
                   onFocus={() => setFocusedField('new')}
                   onBlur={() => setFocusedField(null)}
                   autoCapitalize="none"
@@ -207,7 +212,7 @@ export default function ResetPasswordScreen() {
                   placeholderTextColor="#52525B"
                   secureTextEntry={!showConfirm}
                   value={confirmPassword}
-                  onChangeText={setConfirmPassword}
+                  onChangeText={(t) => setConfirmPassword(noSpaces(t))}
                   onFocus={() => setFocusedField('confirm')}
                   onBlur={() => setFocusedField(null)}
                   autoCapitalize="none"

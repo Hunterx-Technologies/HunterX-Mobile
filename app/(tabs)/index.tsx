@@ -14,18 +14,17 @@ import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useScrollToTop } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { fetchTasksToday, completeTask, reopenTask } from '@/services/api/tasks.service';
-import type { TaskItem } from '@/types/task';
+import { invalidateLeaderboardCache } from '@/hooks/useLeaderboard';
 import { mapTaskToQuest, type QuestItem } from '@/utils/quests';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { usePushPermissionPrompt } from '@/hooks/usePushPermissionPrompt';
 import { PushPermissionModal } from '@/components/features/notifications/PushPermissionModal';
-import { getCurrentUser } from '@/services/api/auth.service';
-import { optimizeCloudinaryUrl, DEFAULT_BLURHASH } from '@/services/media/cloudinary';
+import { getCurrentUser, msSinceCurrentUserFetched } from '@/services/api/auth.service';
+import { DEFAULT_BLURHASH } from '@/services/media/cloudinary';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Screen } from '@/components/common/Screen';
@@ -56,8 +55,10 @@ import { API_ERROR, PENDING_DELETION_MESSAGE, getApiErrorCode } from '@/services
 import { showLevelUpFromApi } from '@/store/useLevelUpStore';
 import { useStreakBreakStore } from '@/store/useStreakBreakStore';
 import { StreakPillLanding } from '@/components/features/streaks/StreakPillLanding';
-
-const LAST_TASK_SHEET_DATE_KEY = '@hunterx_task_sheet_last_shown_date';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
+import { readTasksTodayCache, writeTasksTodayCache } from '@/services/cache/tasksTodayCache';
+import { devWarn } from '@/services/health/devLog';
+import type { TasksTodayData } from '@/types/task';
 
 function getTodayDateStr(): string {
   const now = new Date();
@@ -67,73 +68,38 @@ function getTodayDateStr(): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-const INITIAL_QUESTS: QuestItem[] = [
-  {
-    id: '1',
-    title: 'Sleep 8 Hours',
-    category: 'REST',
-    xpReward: 10,
-    type: 'daily',
-    showTickButton: true,
-    showWrongButton: true,
-    hasStatusPopup: false,
-    imageHeight: 120,
-    image: null,
-    status: 'todo',
-  },
-  {
-    id: '2',
-    title: 'Drink 3L Water',
-    category: 'HYDRATE',
-    xpReward: 10,
-    type: 'daily',
-    showTickButton: true,
-    showWrongButton: true,
-    hasStatusPopup: false,
-    image: null,
-    status: 'todo',
-  },
-  {
-    id: '3',
-    title: 'Protein Goal',
-    category: 'NUTRITION',
-    xpReward: 10,
-    type: 'daily',
-    showTickButton: true,
-    showWrongButton: true,
-    hasStatusPopup: false,
-    targetValue: '128 g',
-    image: null,
-    imageStyle: { height: 170, top: -25 },
-    status: 'todo',
-  },
-  {
-    id: '4',
-    title: 'Run 10km',
-    category: 'CARDIO',
-    xpReward: 10,
-    type: 'weekly',
-    showTickButton: true,
-    showWrongButton: true,
-    hasStatusPopup: false,
-    image: null,
-    status: 'todo',
-  },
-];
+// Returning to Home within this window keeps what's on screen instead of refetching.
+const HOME_REFRESH_MIN_MS = 20_000;
+// A profile fetched this recently isn't fetched again on Home's focus.
+const PROFILE_FRESH_MS = 5_000;
 
-const ANIME_AVATARS = [
-  'https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=400&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=400&auto=format&fit=crop',
-];
+function mapTasksToday(data: TasksTodayData): QuestItem[] {
+  return [
+    ...(data.daily || []).map((item) => mapTaskToQuest(item, 'daily')),
+    ...(data.weekly || []).map((item) => mapTaskToQuest(item, 'weekly')),
+    ...(data.monthly || []).map((item) => mapTaskToQuest(item, 'monthly')),
+    ...(data.locked || []).map((item) => mapTaskToQuest(item, 'locked')),
+  ];
+}
+
+/** "Day Complete" auto-opens once per (local) day, per account — not per device. */
+const dayCompleteStorageKey = (userId: string | number | undefined) =>
+  `hasShownDayComplete_${userId ?? 'anon'}_${getTodayDateStr()}`;
+
+// Time for a closing modal to finish animating before the next one opens
+// (iOS drops a modal presented while another is still dismissing).
+const MODAL_GAP_MS = 450;
 
 export default function MissionsHomeScreen() {
   const { user } = useAuth();
   // Shows the streak break card when a life was used since the last visit.
-  const { lastDrop, roll } = useLootDrop();
+  const { lastDrop } = useLootDrop();
   const params = useLocalSearchParams<{ fromAscension?: string }>();
   const isFromAscension = params.fromAscension === 'true';
 
   const scrollRef = useRef<ScrollView>(null);
+
+  useScrollToTopOnFocus(scrollRef);
   useScrollToTop(scrollRef);
 
   // Lets the streak badge popup scroll home to the Badges section.
@@ -225,6 +191,15 @@ export default function MissionsHomeScreen() {
   // plain mount would just duplicate that request. Callers that need fresh
   // XP/streak/level after something actually changed it server-side (a
   // screen focus, or after completeTask/reopenTask) pass true.
+  const userIdKey = user?.id != null ? String(user.id) : null;
+  const userIdKeyRef = useRef(userIdKey);
+  userIdKeyRef.current = userIdKey;
+  /** When today's tasks last came from the server (not the saved copy), and for whom. */
+  const lastLoadRef = useRef<{ at: number; day: string; userId: string | null } | null>(null);
+  /** True once this screen has the server's answer, not just the saved copy. */
+  const [tasksFresh, setTasksFresh] = useState(false);
+  const tasksFreshRef = useRef(false);
+
   const loadTasks = useCallback(async (options?: { refreshUser?: boolean }) => {
     try {
       setError(null);
@@ -232,12 +207,12 @@ export default function MissionsHomeScreen() {
         fetchTasksToday(),
         options?.refreshUser ? getCurrentUser() : Promise.resolve(null),
       ]);
-      const mappedDaily = (tasksData.daily || []).map((item) => mapTaskToQuest(item, 'daily'));
-      const mappedWeekly = (tasksData.weekly || []).map((item) => mapTaskToQuest(item, 'weekly'));
-      const mappedMonthly = (tasksData.monthly || []).map((item) => mapTaskToQuest(item, 'monthly'));
-      const mappedLocked = (tasksData.locked || []).map((item) => mapTaskToQuest(item, 'locked'));
-      const mapped = [...mappedDaily, ...mappedWeekly, ...mappedMonthly, ...mappedLocked];
+      const mapped = mapTasksToday(tasksData);
       setQuests(mapped);
+      tasksFreshRef.current = true;
+      setTasksFresh(true);
+      lastLoadRef.current = { at: Date.now(), day: getTodayDateStr(), userId: userIdKeyRef.current };
+      if (userIdKeyRef.current) writeTasksTodayCache(userIdKeyRef.current, tasksData);
       if (refreshedUser) {
         useAuthStore.getState().setUser(refreshedUser);
       }
@@ -252,7 +227,10 @@ export default function MissionsHomeScreen() {
         }
       });
     } catch (err: any) {
-      console.error('[LoadTasks Error]', err);
+      devWarn('[LoadTasks Error]', err);
+      // With the saved copy on screen (e.g. offline), keep showing it rather
+      // than replacing today's quests with an error.
+      if (!tasksFreshRef.current && questsRef.current.length > 0) return;
       setError(err?.message || 'Failed to load tasks');
     } finally {
       setLoading(false);
@@ -262,10 +240,35 @@ export default function MissionsHomeScreen() {
   const unreadNotifications = useNotificationStore((s) => s.unreadCount);
   const refreshUnreadNotifications = useNotificationStore((s) => s.refreshUnreadCount);
 
+  // Show the saved copy of today's quests straight away (cold start,
+  // offline); the server's answer replaces it as soon as it arrives.
+  useEffect(() => {
+    if (!userIdKey) return;
+    let cancelled = false;
+    readTasksTodayCache(userIdKey).then((cached) => {
+      if (cancelled || !cached || tasksFreshRef.current) return;
+      setQuests(mapTasksToday(cached));
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userIdKey]);
+
   useFocusEffect(
     useCallback(() => {
       scrollRef.current?.scrollTo({ y: 0, animated: false });
-      loadTasks({ refreshUser: true });
+      // Coming straight back (e.g. a quick look at another tab) keeps what's
+      // on screen; every change made on Home reloads it itself anyway.
+      const last = lastLoadRef.current;
+      const isFresh =
+        !!last &&
+        last.userId === userIdKeyRef.current &&
+        last.day === getTodayDateStr() &&
+        Date.now() - last.at < HOME_REFRESH_MIN_MS;
+      // The profile is refreshed too, unless it arrived moments ago (e.g. the
+      // session restore at app start).
+      if (!isFresh) loadTasks({ refreshUser: msSinceCurrentUserFetched() > PROFILE_FRESH_MS });
       refreshUnreadNotifications();
     }, [loadTasks, refreshUnreadNotifications])
   );
@@ -288,7 +291,26 @@ export default function MissionsHomeScreen() {
   // popups is up, instead of opening on top of it. Day Complete waits its
   // turn in the other direction: it opens once nothing is celebrating.
   const celebrating = useCelebrationStore((s) => s.current !== null || s.queue.length > 0);
-  const showDayComplete = dayCompleteModalVisible && !celebrating;
+  // Counts as idle a moment after the last celebration closes: iOS can't
+  // present a modal while another is still dismissing — it silently doesn't
+  // appear — so Day Complete waits for the closing animation to finish.
+  const [celebrationsIdle, setCelebrationsIdle] = useState(!celebrating);
+  useEffect(() => {
+    if (celebrating) {
+      setCelebrationsIdle(false);
+      return;
+    }
+    const timer = setTimeout(() => setCelebrationsIdle(true), MODAL_GAP_MS);
+    return () => clearTimeout(timer);
+  }, [celebrating]);
+  const showDayComplete = dayCompleteModalVisible && celebrationsIdle;
+  // Bumped on every open so the screen is mounted fresh — if a previous
+  // open never made it onto the screen, Celebrate still opens it.
+  const [dayCompleteKey, setDayCompleteKey] = useState(0);
+  const openDayComplete = useCallback(() => {
+    setDayCompleteKey((k) => k + 1);
+    setDayCompleteModalVisible(true);
+  }, []);
   const holdCelebrations = taskBottomSheetVisible || showDayComplete || showBlackIntroOverlay || pushPrompt.visible;
   useEffect(() => {
     setCelebrationHold('home', holdCelebrations);
@@ -307,19 +329,18 @@ export default function MissionsHomeScreen() {
     return () => clearTimeout(timer);
   }, [isHomeModalOpen, user?.xp, maybeOfferPush]);
 
-  const displayName = user?.displayName ? user.displayName.toUpperCase() : 'SEYMEN';
-  const displayXP = (user?.xp ?? 1240).toLocaleString();
-  const displayLevel = user?.level ?? 8;
-  const displayStreak = user?.currentStreak ?? user?.user_progression?.daily_streak ?? 16;
+  // Neutral values until the profile has loaded — never someone else's stats.
+  const displayName = user?.displayName ? user.displayName.toUpperCase() : 'HUNTER';
+  const displayXP = (user?.xp ?? 0).toLocaleString();
+  const displayLevel = user?.level ?? 1;
+  const displayStreak = user?.currentStreak ?? user?.user_progression?.daily_streak ?? 0;
   const completedDays =
     user?.completedDaysCount ??
     (user?.week_status?.days
       ? user.week_status.days.filter((d) => d.status === 'DONE' || d.status === 'COMPLETED').length
-      : user?.weeklyStreak ?? user?.user_progression?.weekly_streak ?? (displayStreak > 0 ? Math.min(displayStreak, 7) : 1));
+      : user?.weeklyStreak ?? user?.user_progression?.weekly_streak ?? Math.min(displayStreak, 7));
 
   const dailyQuests = quests.filter((q) => q.type === 'daily');
-  const weeklyQuests = quests.filter((q) => q.type === 'weekly');
-  const monthlyQuests = quests.filter((q) => q.type === 'monthly');
   const lockedQuests = quests.filter((q) => q.status === 'locked' || q.type === 'locked');
 
   const todoQuests = quests.filter((q) => q.status === 'todo');
@@ -342,29 +363,44 @@ export default function MissionsHomeScreen() {
   // one was completed (the rest may be skipped). All skipped isn't a clear.
   const dayCleared = dailyQuests.length > 0 && dailyTodoQuests.length === 0 && dailyDoneQuests.length > 0;
 
-  // Automatically pop up the MissionResultsScreen celebration ONCE per day when the day is cleared
+  // Automatically pop up the MissionResultsScreen celebration ONCE per day when the day is cleared.
+  // It waits until home's other popups (the quest's action sheet, "Quest
+  // Cleared", proof upload…) have closed, so it never opens on top of one
+  // still animating away — on iOS that open is silently dropped.
+  const [dayCompletePending, setDayCompletePending] = useState(false);
   useEffect(() => {
-    if (loading) return;
-
-    if (dayCleared) {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const storageKey = `hasShownDayComplete_${todayStr}`;
-
-      AsyncStorage.getItem(storageKey)
-        .then((hasShown) => {
-          if (!hasShown) {
-            AsyncStorage.setItem(storageKey, 'true').catch(() => { });
-            const timer = setTimeout(() => {
-              setDayCompleteModalVisible(true);
-            }, 350);
-            return () => clearTimeout(timer);
-          }
-        })
-        .catch((err) => {
-          console.warn('[DayCompleteModal] Storage check error:', err);
-        });
+    if (loading || !tasksFresh) return;
+    if (!dayCleared) {
+      // Not (or no longer) cleared — e.g. a skipped task was reopened. Forget
+      // that it was shown, so clearing the day again earns the screen again.
+      setDayCompletePending(false);
+      AsyncStorage.removeItem(dayCompleteStorageKey(user?.id)).catch(() => { });
+      return;
     }
-  }, [loading, dayCleared]);
+    let cancelled = false;
+    AsyncStorage.getItem(dayCompleteStorageKey(user?.id))
+      .then((hasShown) => {
+        if (!cancelled && !hasShown) setDayCompletePending(true);
+      })
+      .catch((err) => {
+        console.warn('[DayCompleteModal] Storage check error:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, tasksFresh, dayCleared, user?.id]);
+
+  const otherHomeModalOpen =
+    dropVisible || actionModalVisible || taskBottomSheetVisible || showBlackIntroOverlay || !!proofQuest;
+  useEffect(() => {
+    if (!dayCompletePending || otherHomeModalOpen) return;
+    const timer = setTimeout(() => {
+      setDayCompletePending(false);
+      AsyncStorage.setItem(dayCompleteStorageKey(user?.id), 'true').catch(() => { });
+      openDayComplete();
+    }, MODAL_GAP_MS);
+    return () => clearTimeout(timer);
+  }, [dayCompletePending, otherHomeModalOpen, openDayComplete, user?.id]);
 
   const prevTodoCountRef = useRef<number | null>(null);
 
@@ -474,6 +510,11 @@ export default function MissionsHomeScreen() {
       showLevelUpFromApi(data.level_up);
       (data.rewards_earned ?? []).forEach(showReward);
 
+      // XP changed — the backend has already moved this hunter on the
+      // leaderboard (a first completed task is what puts a new hunter on it
+      // at all), so drop the cached page instead of showing the old one.
+      invalidateLeaderboardCache();
+
       const serverStatus = data.status === 'COMPLETED' ? 'done' : data.status === 'PARTIAL' ? 'partial' : data.status === 'SKIPPED' ? 'skipped' : 'todo';
 
       setQuests((prev) =>
@@ -492,10 +533,10 @@ export default function MissionsHomeScreen() {
         const refreshedUser = await getCurrentUser();
         useAuthStore.getState().setUser(refreshedUser);
       } catch (userErr) {
-        console.error('[RefreshUser Error]', userErr);
+        devWarn('[RefreshUser Error]', userErr);
       }
     } catch (err: any) {
-      console.error('[CompleteTask Error]', err);
+      devWarn('[CompleteTask Error]', err);
       setQuests(previousQuests);
       setCompletedToastVisible(false);
 
@@ -578,17 +619,25 @@ export default function MissionsHomeScreen() {
         q.id === questId ? { ...q, status: 'todo', earnedXp: undefined } : q
       )
     );
+    // A skipped quest that's reset is back in To-Do — take the user there
+    // so they see it, instead of leaving them on the (now shorter) Skipped list.
+    const wasSkipped = previousQuests.find((q) => q.id === questId)?.status === 'skipped';
+    if (wasSkipped) setActiveTab('todo');
     try {
       await reopenTask(questId);
+      // XP taken back can change rank, or remove the hunter from the board.
+      invalidateLeaderboardCache();
       try {
         const refreshedUser = await getCurrentUser();
         useAuthStore.getState().setUser(refreshedUser);
       } catch (userErr) {
-        console.error('[RefreshUser Error]', userErr);
+        devWarn('[RefreshUser Error]', userErr);
       }
     } catch (err: any) {
-      console.error('[ReopenTask Error]', err);
+      devWarn('[ReopenTask Error]', err);
       setQuests(previousQuests);
+      // The quest is back in Skipped, so put the user back there too.
+      if (wasSkipped) setActiveTab('skipped');
 
       const status = err.response?.status;
       const message = err.response?.data?.message || err.message || 'Failed to reopen task';
@@ -602,7 +651,7 @@ export default function MissionsHomeScreen() {
       setErrorToastSubtitle(message);
       setErrorToastVisible(true);
     }
-  }, [loadTasks, showDeletionPendingNotice]);
+  }, [showDeletionPendingNotice]);
 
   return (
     <Screen style={styles.screen}>
@@ -858,7 +907,7 @@ export default function MissionsHomeScreen() {
                             activeOpacity={0.85}
                             onPress={() => {
                               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                              setDayCompleteModalVisible(true);
+                              openDayComplete();
                             }}
                           >
                             <Text style={styles.peakShareBtnText}>CELEBRATE</Text>
@@ -1206,6 +1255,7 @@ export default function MissionsHomeScreen() {
       {/* Day Complete Modal Popup */}
       {showDayComplete && (
         <MissionResultsScreen
+          key={dayCompleteKey}
           quests={quests}
           onContinue={() => setDayCompleteModalVisible(false)}
         />

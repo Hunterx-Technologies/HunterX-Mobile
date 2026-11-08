@@ -7,6 +7,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 import { colors } from '@/theme/colors';
 import { useAuth } from '@/hooks/useAuth';
+import { confirmExitApp } from '@/utils/confirmExitApp';
 
 export default function TabsLayout() {
   const { isAuthenticated, isOnboarded, isBootstrapping } = useAuth();
@@ -25,7 +26,9 @@ export default function TabsLayout() {
           pathname === '/(tabs)/index' ||
           pathname === '/'
         ) {
-          return true; // Blocks native back press from returning to onboarding/auth
+          // Never go back to login/onboarding; ask whether to close the app.
+          confirmExitApp();
+          return true;
         }
 
         // If on another tab (Profile, Battles, Inventory), navigate back to Home tab

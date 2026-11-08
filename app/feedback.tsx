@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   BackHandler,
   Keyboard,
   KeyboardAvoidingView,
@@ -39,6 +38,9 @@ import {
 } from '@/services/api/feedback.service';
 import { uploadImageToCloudinary } from '@/services/media/cloudinary';
 import { fontFamilies } from '@/theme/typography';
+import { cleanFreeText } from '@/utils/textInput';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
+import { devWarn } from '@/services/health/devLog';
 
 const CATEGORIES: { id: ApiFeedbackCategory; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: 'bug_report', label: 'Bug Report', icon: 'bug-outline' },
@@ -57,8 +59,9 @@ const MAX_LENGTH = 1000;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 export default function FeedbackScreen() {
-  const { user, isAuthenticated, isBootstrapping } = useAuth();
+  const { isAuthenticated, isBootstrapping } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(scrollRef);
 
   // Tab State
   const [activeTab, setActiveTab] = useState<'raise' | 'history'>('raise');
@@ -187,22 +190,12 @@ export default function FeedbackScreen() {
   };
 
   const handlePickScreenshot = async () => {
-    console.log('[FeedbackScreen] handlePickScreenshot triggered');
     Keyboard.dismiss();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
-    console.log('[FeedbackScreen] Dismissing keyboard & waiting 150ms...');
     await new Promise((resolve) => setTimeout(resolve, 150));
 
     try {
-      console.log('[FeedbackScreen] Checking media library permissions...');
-      const permRes = await ImagePicker.getMediaLibraryPermissionsAsync().catch((pErr) => {
-        console.log('[FeedbackScreen] getMediaLibraryPermissionsAsync caught:', pErr);
-        return null;
-      });
-      console.log('[FeedbackScreen] Permission status:', permRes);
-
-      console.log('[FeedbackScreen] Launching ImagePicker.launchImageLibraryAsync...');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
@@ -210,24 +203,18 @@ export default function FeedbackScreen() {
         selectionLimit: 1,
       });
 
-      console.log('[FeedbackScreen] ImagePicker result:', JSON.stringify(result));
-
       if (result && !result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        console.log('[FeedbackScreen] Selected asset:', asset.uri, 'fileSize:', asset.fileSize);
         if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE_BYTES) {
           showToast('Image size exceeds 10MB limit. Please select a smaller image.', 'warning');
           return;
         }
         if (asset.uri) {
           setScreenshotUri(asset.uri);
-          console.log('[FeedbackScreen] Screenshot URI set successfully!');
         }
-      } else {
-        console.log('[FeedbackScreen] Image picking canceled or no assets selected.');
       }
     } catch (err: any) {
-      console.error('[FeedbackScreen] ERROR during image picking:', err);
+      devWarn('[FeedbackScreen] ERROR during image picking:', err);
       showToast('Unable to open image library. Please try again.', 'error');
     }
   };
@@ -276,7 +263,7 @@ export default function FeedbackScreen() {
           const uploadRes = await uploadImageToCloudinary(screenshotUri, 'misc');
           uploadedScreenshotUrl = uploadRes.url;
         } catch (uploadErr) {
-          console.log('Cloudinary upload error, continuing with submission:', uploadErr);
+          devWarn('Cloudinary upload error, continuing with submission:', uploadErr);
         }
       }
 
@@ -300,7 +287,7 @@ export default function FeedbackScreen() {
       setActiveTab('history');
       loadFeedbackHistory();
     } catch (err: any) {
-      console.log('Feedback submission failed:', err);
+      devWarn('Feedback submission failed:', err);
       const serverMsg =
         err?.message ||
         'Unable to submit feedback. Please check your connection and try again.';
@@ -487,7 +474,7 @@ export default function FeedbackScreen() {
                     placeholder={currentPlaceholder}
                     placeholderTextColor="#71717A"
                     value={feedbackText}
-                    onChangeText={setFeedbackText}
+                    onChangeText={(t) => setFeedbackText(cleanFreeText(t))}
                     onFocus={() => {
                       setIsInputFocused(true);
                       setTimeout(() => {
@@ -500,6 +487,18 @@ export default function FeedbackScreen() {
                     maxLength={MAX_LENGTH}
                     textAlignVertical="top"
                   />
+                  {/* No category yet: the input is disabled, and a disabled
+                      TextInput doesn't reliably report taps, so this layer
+                      catches them and says what to do first. */}
+                  {!selectedCategory && (
+                    <TouchableOpacity
+                      style={StyleSheet.absoluteFillObject}
+                      activeOpacity={1}
+                      onPress={() => showToast('Select a category before writing your feedback.', 'info')}
+                      accessibilityRole="button"
+                      accessibilityLabel="Select a category first"
+                    />
+                  )}
                 </View>
 
                 {feedbackText.length > 0 && feedbackText.length < MIN_LENGTH && (

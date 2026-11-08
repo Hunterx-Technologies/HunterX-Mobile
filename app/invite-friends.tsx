@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
@@ -33,27 +33,19 @@ import {
   readInviteCache,
   writeInviteCache,
 } from "@/services/referral/inviteCache";
-import {
-  PREVIEW_CODE,
-  PREVIEW_OFFLINE_CACHE,
-  isInvitePreview,
-  previewSource,
-} from "@/services/referral/inviteFixtures";
 import RNShare from "@/services/share/RNShare";
 import { showGlobalToast } from "@/store/useToastStore";
 import { colors } from "@/theme/colors";
 import { fontFamilies } from "@/theme/typography";
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 export default function InviteFriendsScreen() {
+  const pageScrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(pageScrollRef);
   const { user, isAuthenticated, isBootstrapping } = useAuth();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ preview?: string }>();
-  // Developer menu previews (dev builds only) run on fixtures, not the API.
-  const preview =
-    __DEV__ && isInvitePreview(params.preview) ? params.preview : null;
-
   const userId = user?.id ? String(user.id) : null;
-  const profileCode = preview ? PREVIEW_CODE : (user?.referral_code ?? null);
+  const profileCode = user?.referral_code ?? null;
   const fallbackCount = user?.accepted_invites_count ?? 0;
 
   const [cachedCode, setCachedCode] = useState<string | null>(null);
@@ -66,9 +58,8 @@ export default function InviteFriendsScreen() {
   const code = profileCode ?? cachedCode;
 
   const source: InvitedFriendsSource = useMemo(
-    () =>
-      preview ? previewSource(preview) : fetchInvitedFriends(fallbackCount),
-    [preview, fallbackCount],
+    () => fetchInvitedFriends(fallbackCount),
+    [fallbackCount],
   );
 
   const load = useCallback(async () => {
@@ -76,19 +67,17 @@ export default function InviteFriendsScreen() {
       const fresh = await source();
       setJoinedCount(fresh.count);
       setIsOffline(false);
-      if (userId && !preview) writeInviteCache(userId, { friends: fresh });
+      if (userId) writeInviteCache(userId, { friends: fresh });
     } catch (err) {
       setIsOffline(isNetworkError(err));
-      if (preview === "offline")
-        setJoinedCount((current) => current ?? PREVIEW_OFFLINE_CACHE.count);
     }
-  }, [source, userId, preview]);
+  }, [source, userId]);
 
   // Cached code + count first (instant, and all there is offline), then the network.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (userId && !preview) {
+      if (userId) {
         const cached = await readInviteCache(userId);
         if (cancelled) return;
         if (cached?.code) setCachedCode(cached.code);
@@ -100,12 +89,12 @@ export default function InviteFriendsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [userId, preview, load]);
+  }, [userId, load]);
 
   useEffect(() => {
-    if (userId && profileCode && !preview)
+    if (userId && profileCode)
       writeInviteCache(userId, { code: profileCode });
-  }, [userId, profileCode, preview]);
+  }, [userId, profileCode]);
 
   useEffect(() => {
     if (!isCopied) return;
@@ -114,7 +103,7 @@ export default function InviteFriendsScreen() {
   }, [isCopied]);
 
   if (isBootstrapping) return null;
-  if (!isAuthenticated && !preview) return <Redirect href="/(auth)/login" />;
+  if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
 
   const link = code ? inviteLink(code) : null;
 
@@ -183,6 +172,7 @@ export default function InviteFriendsScreen() {
       </View>
 
       <ScrollView
+        ref={pageScrollRef}
         bounces={false}
         overScrollMode="never"
         contentContainerStyle={[
@@ -210,7 +200,7 @@ export default function InviteFriendsScreen() {
           <GuestPassCard
             ref={cardRef}
             code={code}
-            issuerName={preview ? "Shadow" : user?.displayName}
+            issuerName={user?.displayName}
             onCopyCode={handleCopyCode}
             onShareQr={() => shareCard("qr")}
           />

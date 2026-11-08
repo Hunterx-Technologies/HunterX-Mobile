@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Animated,
   Easing,
@@ -38,10 +39,12 @@ import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { PasswordStrengthMeter, meetsPasswordRules } from '@/components/common/PasswordStrengthMeter';
 import { API_ERROR, PENDING_RESTORE_MESSAGE, getApiErrorCode } from '@/services/api/errors';
+import { emailError, isValidEmail } from '@/utils/validation';
+import { noSpaces } from '@/utils/textInput';
 
 export default function SignupScreen() {
+  const insets = useSafeAreaInsets();
   const { signup, loginWithGoogle, loginWithApple, isAuthenticating } = useAuth();
-  const storeHunterName = useOnboardingStore((s) => s.hunterName);
   const verifiedEmail = useOnboardingStore((s) => s.verifiedEmail);
   const setVerifiedEmail = useOnboardingStore((s) => s.setVerifiedEmail);
 
@@ -63,12 +66,10 @@ export default function SignupScreen() {
   const [otpCanResend, setOtpCanResend] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
-  const [otpSuccessMsg, setOtpSuccessMsg] = useState<string | null>(null);
   const [isOtpSlotFocused, setIsOtpSlotFocused] = useState(false);
   const otpInputRef = useRef<TextInput>(null);
 
   const isEmailVerified = !!verifiedEmail && verifiedEmail === email.trim();
-  const isValidEmail = (emailStr: string) => /\S+@\S+\.\S+/.test(emailStr.trim());
 
   const isFormValid =
     isValidEmail(email) &&
@@ -149,15 +150,15 @@ export default function SignupScreen() {
 
   const handleSendEmailOtp = async () => {
     const cleanEmail = email.trim();
-    if (!isValidEmail(cleanEmail)) {
-      setError('Please enter a valid email address');
+    const invalid = emailError(cleanEmail);
+    if (invalid) {
+      setError(invalid);
       return;
     }
     setError(null);
     setSendingOtp(true);
     try {
-      const msg = await resendOtp(cleanEmail);
-      setOtpSuccessMsg(msg || 'Verification code sent to your email. It expires in 10 minutes.');
+      await resendOtp(cleanEmail);
       // Open OTP popup modal directly over signup screen
       setOtpCode('');
       setOtpError(null);
@@ -200,8 +201,7 @@ export default function SignupScreen() {
     setOtpCanResend(false);
     setOtpTimer(60);
     try {
-      const msg = await resendOtp(email.trim());
-      setOtpSuccessMsg(msg || 'Verification code sent to your email. It expires in 10 minutes.');
+      await resendOtp(email.trim());
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : 'Failed to resend code');
     }
@@ -235,8 +235,9 @@ export default function SignupScreen() {
   const handleSignup = async () => {
     setError(null);
     const cleanEmail = email.trim();
-    if (!isValidEmail(cleanEmail)) {
-      setError('Please enter a valid email address');
+    const invalid = emailError(cleanEmail);
+    if (invalid) {
+      setError(invalid);
       return;
     }
     if (!isEmailVerified) {
@@ -339,8 +340,25 @@ export default function SignupScreen() {
     }
   };
 
+  // Back to the previous page (the oath, when coming from onboarding); Login
+  // when Signup was opened directly and there's nothing to go back to.
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(auth)/login');
+  };
+
   return (
     <Screen style={styles.container}>
+      <Pressable
+        onPress={handleBack}
+        hitSlop={12}
+        style={[styles.backBtn, { top: insets.top + 10 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+      </Pressable>
+
       <Animated.View style={createAnimatedStyle(titleAnim)}>
         <Text style={styles.title}>THE SYSTEM AWAITS</Text>
         <Text style={styles.subtitle}>Create your account and take your first step as a Hunter</Text>
@@ -367,7 +385,8 @@ export default function SignupScreen() {
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
-            onChangeText={(txt) => {
+            onChangeText={(raw) => {
+              const txt = noSpaces(raw);
               setEmail(txt);
               if (verifiedEmail && txt.trim() !== verifiedEmail) {
                 setVerifiedEmail(null);
@@ -419,7 +438,7 @@ export default function SignupScreen() {
             placeholderTextColor="#52525B"
             secureTextEntry={!showPassword}
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(t) => setPassword(noSpaces(t))}
             onFocus={() => setFocusedInput('password')}
             onBlur={() => setFocusedInput(null)}
           />
@@ -457,7 +476,7 @@ export default function SignupScreen() {
             placeholderTextColor="#52525B"
             secureTextEntry={!showConfirmPassword}
             value={confirmPassword}
-            onChangeText={setConfirmPassword}
+            onChangeText={(t) => setConfirmPassword(noSpaces(t))}
             onFocus={() => setFocusedInput('confirmPassword')}
             onBlur={() => setFocusedInput(null)}
           />
@@ -639,6 +658,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
     backgroundColor: '#000000',
+  },
+  // Standard header back button (see AGENTS.md): no background or border.
+  backBtn: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontFamily: fontFamilies.bold,

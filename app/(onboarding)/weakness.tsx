@@ -12,8 +12,6 @@ import {
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import Entypo from '@expo/vector-icons/Entypo';
 
 import { Button } from '@/components/common/Button';
 import { Screen } from '@/components/common/Screen';
@@ -21,6 +19,7 @@ import { StepIndicator } from '@/components/common/StepIndicator';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 4; // fifth step (0-indexed)
@@ -98,6 +97,7 @@ export default function WeaknessScreen() {
     const listAnim = useRef(new Animated.Value(0)).current;
     const buttonAnim = useRef(new Animated.Value(0)).current;
     const scrollRef = useRef<ScrollView>(null);
+    useScrollToTopOnFocus(scrollRef);
 
     useEffect(() => {
         scrollRef.current?.scrollTo({ y: 0, animated: false });

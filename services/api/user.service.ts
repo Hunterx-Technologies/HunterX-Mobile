@@ -13,6 +13,8 @@ export interface UserActivityLog {
   id: string | number;
   task_id?: string | number;
   title: string;
+  /** Older backends send no status — those logs were all completed. */
+  status?: 'completed' | 'partial' | 'skipped';
   xp_earned: number;
   schedule_date?: string | null;
   completed_at?: string;
@@ -63,22 +65,38 @@ export async function fetchUserActivity(page = 1, limit = 10): Promise<UserActiv
   }
 }
 
-export interface DataExportResponse {
-  message?: string;
-  downloadUrl?: string;
-  download_url?: string;
+/**
+ * "My Data" status (GET/POST /users/me/data-export).
+ * email: the address the export goes to, masked ("sh•••••@gmail.com").
+ * nextAvailableAt: null when another export can be requested now.
+ */
+export interface DataExportStatus {
+  email: string | null;
+  lastRequestedAt: string | null;
+  nextAvailableAt: string | null;
 }
 
-export async function exportUserData(): Promise<{ message: string; downloadUrl?: string }> {
+/** When the last export was requested, and when another is allowed. */
+export async function getDataExportStatus(): Promise<DataExportStatus> {
   try {
-    const { data } = await apiClient.post<ApiResponse<DataExportResponse>>('/users/me/data-export');
+    const { data } = await apiClient.get<ApiResponse<DataExportStatus>>('/users/me/data-export');
+    return (data as any)?.data ?? { email: null, lastRequestedAt: null, nextAvailableAt: null };
+  } catch (err: any) {
+    throw new Error(extractErrorMessage(err));
+  }
+}
+
+/** Emails the user their data as an Excel attachment. Once per 24h. */
+export async function exportUserData(): Promise<{ message: string; status: DataExportStatus | null }> {
+  try {
+    const { data } = await apiClient.post<ApiResponse<DataExportStatus>>('/users/me/data-export');
     if (data && typeof data === 'object' && 'success' in data && data.success === false) {
       throw new Error((data as any).error?.message || (data as any).message || 'Failed to request data export');
     }
-    const result = (data as any)?.data || data;
-    const message = result?.message || 'Data export requested successfully.';
-    const downloadUrl = result?.downloadUrl || result?.download_url;
-    return { message, downloadUrl };
+    return {
+      message: (data as any)?.message || 'We emailed you your data.',
+      status: (data as any)?.data ?? null,
+    };
   } catch (err: any) {
     throw new Error(extractErrorMessage(err));
   }

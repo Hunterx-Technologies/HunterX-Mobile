@@ -114,8 +114,6 @@ const TOP_FADE = 90;
 
 const clamp = Extrapolation.CLAMP;
 const cubicOut = Easing.out(Easing.cubic);
-const backOut = Easing.out(Easing.back(1.7));
-
 /** Cracks in a 100x100 box, grouped by the tap that opens them. */
 const CRACKS: string[][] = [
   ['M50,30 L46,40 L52,47 L47,58', 'M52,47 L60,50 L66,46'],
@@ -581,8 +579,8 @@ const LandSpark: React.FC<{ angle: number; radius: number; center: number; accen
 export interface StreakBadgeShowcaseProps {
   /** Index in STREAK_BADGES_DATA of the badge waiting to be opened. */
   currentIndex: number;
-  /** Current streak in days, shown in the chip. */
-  streakDays: number;
+  /** Current streak in days. No longer shown — the chip names only the milestone. */
+  streakDays?: number;
   /** Called after the badge is revealed. */
   onUnlocked?: (badge: StreakBadgeItem) => void;
   /** Called by the button once the badge is open. */
@@ -621,7 +619,6 @@ export interface StreakBadgeShowcaseProps {
 
 export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   currentIndex,
-  streakDays,
   onUnlocked,
   onContinue,
   continueLabel = 'Continue',
@@ -1011,7 +1008,7 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
           <View style={[styles.chip, { borderColor: `${accent}55` }]}>
             <Ionicons name="flame" size={13} color={ORANGE} />
             <Text style={styles.chipText}>
-              {badge.daysText} milestone · {streakDays}-day streak
+              {badge.daysText} milestone
             </Text>
           </View>
         </Animated.View>

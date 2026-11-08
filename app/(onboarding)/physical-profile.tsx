@@ -24,6 +24,9 @@ import { StepIndicator } from '@/components/common/StepIndicator';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
+import { playTickSound, preloadTickSound, releaseTickSound } from '@/services/audio/tickSound';
+import { digitsOnly } from '@/utils/textInput';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 2; // third step (0-indexed)
@@ -88,6 +91,7 @@ export default function PhysicalProfileScreen() {
 
   const rulerScrollRef = useRef<ScrollView>(null);
   const mainScrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(mainScrollRef);
   const startWeightRef = useRef(targetWeight);
 
   const triggerHaptic = () => {
@@ -96,11 +100,16 @@ export default function PhysicalProfileScreen() {
     } catch (e) {
       console.warn('Failed to trigger haptics', e);
     }
+    playTickSound();
   };
+
+  useEffect(() => {
+    preloadTickSound();
+    return releaseTickSound;
+  }, []);
 
   // Computed displayed weights & min/max bounds
   const displayWeight = weightUnit === 'kg' ? weight : weight * KG_TO_LBS;
-  const displayTargetWeight = weightUnit === 'kg' ? targetWeight : targetWeight * KG_TO_LBS;
   const minWeightVal = 40; // minimum weight is 40 in either unit as requested
   const maxWeightVal = weightUnit === 'kg' ? 160 : 350;
 
@@ -591,7 +600,7 @@ export default function PhysicalProfileScreen() {
                     style={styles.modalTextInput}
                     value={inputWeight}
                     onChangeText={(txt) => {
-                      setInputWeight(txt);
+                      setInputWeight(txt.replace(/[^0-9.]/g, ''));
                       setWeightError('');
                     }}
                     keyboardType="decimal-pad"
@@ -691,7 +700,7 @@ export default function PhysicalProfileScreen() {
                   style={styles.modalTextInput}
                   value={inputHeight}
                   onChangeText={(txt) => {
-                    setInputHeight(txt);
+                    setInputHeight(digitsOnly(txt));
                     setHeightError('');
                   }}
                   keyboardType="number-pad"

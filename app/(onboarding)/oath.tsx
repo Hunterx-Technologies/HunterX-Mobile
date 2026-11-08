@@ -21,7 +21,9 @@ import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useAuth } from '@/hooks/useAuth';
 import { buildOnboardingAnswers, useOnboardingStore } from '@/store/useOnboardingStore';
-import { showGlobalToast } from '@/store/useToastStore';
+import { useAuthStore } from '@/store/useAuthStore';
+import { getCurrentUser } from '@/services/api/auth.service';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 8; // ninth step (0-indexed)
@@ -44,6 +46,7 @@ export default function OathScreen() {
     const contentAnim = useRef(new Animated.Value(0)).current;
     const buttonAnim = useRef(new Animated.Value(0)).current;
     const scrollRef = useRef<ScrollView>(null);
+    useScrollToTopOnFocus(scrollRef);
 
     useEffect(() => {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -89,14 +92,27 @@ export default function OathScreen() {
                 router.replace('/(onboarding)/ascension');
             } catch (err: any) {
                 const errMsg = err instanceof Error ? err.message : 'Could not save your answers';
-                if (errMsg.toLowerCase().includes('already exist') || errMsg.toLowerCase().includes('already registered')) {
-                    router.replace('/(tabs)');
-                    setTimeout(() => {
-                        showGlobalToast('User Account is already exist', 'info');
-                    }, 350);
-                } else {
-                    setSubmitError(errMsg);
+                // 409 "already completed": an earlier attempt saved the answers
+                // but its response was lost (e.g. a timeout, then a retry).
+                // Take the server's word for it and carry on to Ascension —
+                // going to Home without refreshing the user would bounce the
+                // hunter back to step 1, since isOnboarded is still false here.
+                const alreadyDone =
+                    err?.status === 409 ||
+                    /already (been )?completed|already exist|already registered/i.test(errMsg);
+                if (alreadyDone) {
+                    try {
+                        const fresh = await getCurrentUser();
+                        useAuthStore.getState().setUser(fresh);
+                        if (fresh.onboarding_done) {
+                            router.replace('/(onboarding)/ascension');
+                            return;
+                        }
+                    } catch {
+                        // Fall through to showing the error.
+                    }
                 }
+                setSubmitError(errMsg);
             } finally {
                 setIsSubmitting(false);
             }

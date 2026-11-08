@@ -5,6 +5,7 @@ import { useNotificationStore } from '@/store/useNotificationStore';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
 import { useStreakBreakStore } from '@/store/useStreakBreakStore';
+import { clearTasksTodayCache } from '@/services/cache/tasksTodayCache';
 
 /**
  * Clears everything that belongs to the signed-in account, on sign-out or
@@ -20,6 +21,7 @@ export function resetUserState() {
   useStreakBreakStore.setState({ visible: false, options: null, pillLandedAt: null });
   useNotificationStore.getState().setUnreadCount(0);
   useOnboardingStore.getState().resetOnboarding();
+  clearTasksTodayCache();
   if (useMetricsStore.getState().isHealthConnected) {
     useMetricsStore.getState().disconnectProvider();
   }

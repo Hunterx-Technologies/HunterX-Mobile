@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
-import type { HealthAdapter, DailyHealthSummary, DayBarSample } from './HealthAdapter';
+import { HealthProviderError } from './HealthAdapter';
+import type { HealthAdapter, HealthAvailability, DailyHealthSummary, DayBarSample } from './HealthAdapter';
 import { devLog, devWarn } from './devLog';
 
 // Android health data via Health Connect. Google Fit, Samsung Health, the
@@ -168,39 +169,80 @@ async function summarizeDay(dayStart: Date, dayEnd: Date): Promise<DailyHealthSu
   return summary;
 }
 
+// initialize() binds the Health Connect client. Done once and shared, instead
+// of on every permission check while several reads are already in flight.
+let initPromise: Promise<boolean> | null = null;
+
+function ensureClient(): Promise<boolean> {
+  if (!initPromise) {
+    initPromise = Promise.resolve(HealthConnect.initialize())
+      .then((ok: boolean) => {
+        if (!ok) initPromise = null; // let a later call retry
+        return !!ok;
+      })
+      .catch((e: any) => {
+        initPromise = null;
+        throw e;
+      });
+  }
+  return initPromise;
+}
+
 export class HealthConnectAdapter implements HealthAdapter {
   async isAvailable(): Promise<boolean> {
-    if (Platform.OS !== 'android') return false;
+    return (await this.getAvailability()) === 'available';
+  }
+
+  // Android 14+ has Health Connect built in. Android 13 and below need the
+  // Health Connect app from the Play Store, and an outdated or missing app
+  // reports PROVIDER_UPDATE_REQUIRED — the user can fix that by installing
+  // or updating it, unlike SDK_UNAVAILABLE.
+  async getAvailability(): Promise<HealthAvailability> {
+    if (Platform.OS !== 'android') return 'unavailable';
     if (!HealthConnect) {
-      console.error('[HealthConnectAdapter] react-native-health-connect failed to load');
-      return false;
+      devWarn('[HealthConnectAdapter] react-native-health-connect failed to load');
+      return 'unavailable';
     }
     try {
       const status = await HealthConnect.getSdkStatus();
       devLog('[HealthConnectAdapter] SDK status:', status);
-      return status === HealthConnect.SdkAvailabilityStatus?.SDK_AVAILABLE;
+      const S = HealthConnect.SdkAvailabilityStatus ?? {};
+      if (status === (S.SDK_AVAILABLE ?? 3)) return 'available';
+      if (status === (S.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED ?? 2)) return 'update_required';
+      return 'unavailable';
     } catch (e: any) {
-      console.error('[HealthConnectAdapter] getSdkStatus failed:', e?.message || e);
-      return false;
+      devWarn('[HealthConnectAdapter] getSdkStatus failed:', e?.message || e);
+      return 'unavailable';
     }
   }
 
-  /** Shows the Health Connect permission screen. True when at least Steps was allowed. */
+  /**
+   * Shows the Health Connect permission screen. True when at least Steps is
+   * allowed. After the user refuses once or twice Android stops showing the
+   * screen and this resolves straight away with nothing granted — the caller
+   * then sends them to openSettings().
+   */
   async requestPermissions(): Promise<boolean> {
     if (Platform.OS !== 'android' || !HealthConnect) return false;
+    if (!(await ensureClient())) {
+      throw new HealthProviderError('failed', 'Health Connect could not be started on this device.');
+    }
+    // Already allowed (e.g. reconnecting): skip the permission screen.
+    if (hasEssential(await HealthConnect.getGrantedPermissions())) return true;
+
+    const granted = await HealthConnect.requestPermission(REQUESTED_PERMISSIONS);
+    devLog('[HealthConnectAdapter] requestPermission →', JSON.stringify(granted));
+    if (hasEssential(granted)) return true;
+    // Some versions return only the newly granted set; check what's in effect.
+    return hasEssential(await HealthConnect.getGrantedPermissions());
+  }
+
+  async openSettings(): Promise<void> {
+    if (Platform.OS !== 'android' || !HealthConnect) return;
     try {
-      if (!(await HealthConnect.initialize())) {
-        console.error('[HealthConnectAdapter] initialize() returned false');
-        return false;
-      }
-      const granted = await HealthConnect.requestPermission(REQUESTED_PERMISSIONS);
-      devLog('[HealthConnectAdapter] requestPermission →', JSON.stringify(granted));
-      if (hasEssential(granted)) return true;
-      // Some versions return only the newly granted set; check what's in effect.
-      return hasEssential(await HealthConnect.getGrantedPermissions());
+      HealthConnect.openHealthConnectSettings();
     } catch (e: any) {
-      console.error('[HealthConnectAdapter] requestPermissions failed:', e?.message || e);
-      return false;
+      devWarn('[HealthConnectAdapter] openHealthConnectSettings failed:', e?.message || e);
     }
   }
 
@@ -210,7 +252,7 @@ export class HealthConnectAdapter implements HealthAdapter {
   async checkPermissions(): Promise<boolean> {
     if (Platform.OS !== 'android' || !HealthConnect) return true;
     try {
-      if (!(await HealthConnect.initialize())) return false;
+      if (!(await ensureClient())) return false;
       return hasEssential(await HealthConnect.getGrantedPermissions());
     } catch (e: any) {
       devWarn('[HealthConnectAdapter] checkPermissions failed:', e?.message || e);

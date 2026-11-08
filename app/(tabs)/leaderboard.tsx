@@ -41,6 +41,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useLeaderboardScope } from '@/hooks/useLeaderboard';
 import { useAvatarsReady } from '@/services/api/avatar.service';
 import type { LeaderboardEntry, LeaderboardMe, LeaderboardScope } from '@/types/leaderboard';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 // Gap between the floating "you" row and the bottom of the screen.
 const FLOATING_ME_BOTTOM = 8;
@@ -73,10 +74,15 @@ export default function LeaderboardScreen() {
   const setUser = useAuthStore((s) => s.setUser);
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
+  // Plain-number copy of the scroll offset for JS decisions (scope switch).
+  const scrollOffsetRef = useRef(0);
   const handleScroll = useMemo(
     () =>
       Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
         useNativeDriver: true,
+        listener: (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+          scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+        },
       }),
     [scrollY]
   );
@@ -110,6 +116,8 @@ export default function LeaderboardScreen() {
 
   const meEntry = useMemo(() => entries.find((e) => e.isMe) ?? null, [entries]);
   const meInList = meEntry != null;
+  const meInListRef = useRef(meInList);
+  meInListRef.current = meInList;
 
   // `me.rank` is null while server rankings catch up; the viewer's own list
   // row can still carry it, which keeps the card tappable for sharing.
@@ -139,8 +147,11 @@ export default function LeaderboardScreen() {
   // is off screen, handed off to the real row once it scrolls into the
   // pinned spot, and pinned again once it scrolls up under the header.
   const listRef = useRef<FlatList<ListItem>>(null);
+  useScrollToTopOnFocus(listRef);
   const meRowRef = useRef<View>(null);
-  const [meRowLayout, setMeRowLayout] = useState<{ y: number; height: number } | null>(null);
+  // null = not measured yet; 'missing' = the row isn't rendered (e.g. far
+  // down a virtualized list); otherwise its position in the scroll content.
+  const [meRowLayout, setMeRowLayout] = useState<{ y: number; height: number } | 'missing' | null>(null);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [stickyHeaderHeight, setStickyHeaderHeight] = useState(0);
 
@@ -148,19 +159,66 @@ export default function LeaderboardScreen() {
   // be derived from scrollY on the native thread.
   const measureMeRow = useCallback(() => {
     const row = meRowRef.current;
+    if (!row) {
+      // 'missing' only when the viewer IS in the loaded rows but their row
+      // isn't rendered (far down the list). While a scope's first page is
+      // still loading there are no rows at all — that isn't 'missing', and
+      // treating it so flashed the pinned "You" over the list for a frame.
+      setMeRowLayout(meInListRef.current ? 'missing' : null);
+      return;
+    }
     const content = (listRef.current?.getNativeScrollRef() as any)?.getInnerViewRef?.();
-    if (!row || !content) return;
+    if (!content) return;
     row.measureLayout(content, (_x, y, _w, height) => {
-      setMeRowLayout((prev) => (prev?.y === y && prev?.height === height ? prev : { y, height }));
+      setMeRowLayout((prev) =>
+        prev && prev !== 'missing' && prev.y === y && prev.height === height ? prev : { y, height }
+      );
     });
   }, []);
 
+  // Switching Global ⇄ Friends: forget the old scope's row position, then
+  // measure the new one a frame after it renders. Waiting for onLayout alone
+  // missed rows that land at the same spot (onLayout doesn't fire), leaving
+  // the pinned and the real "You" row both on screen.
   useEffect(() => {
     setMeRowLayout(null);
   }, [scope]);
 
+  // Re-measure once rows render — after a scope switch and as pages load.
+  useEffect(() => {
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(measureMeRow);
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, [scope, entries, measureMeRow]);
+
+  const handleSelectCategory = useCallback(
+    (next: MainCategoryTab) => {
+      if (next === category) return;
+      // Scrolled past the hero: start the new scope right under the pinned
+      // tabs, instead of keeping an offset into the old (often longer) list.
+      if (scrollOffsetRef.current > HERO_SPACER) {
+        listRef.current?.scrollToOffset({ offset: HERO_SPACER, animated: false });
+      }
+      // In the same update as the switch, so the new scope's first frame
+      // doesn't use the old scope's row position (that frame showed the
+      // pinned "You" over the list with a gap where the real row belongs).
+      setMeRowLayout(null);
+      setCategory(next);
+    },
+    [category]
+  );
+
   const floatingMeOpacity = useMemo(() => {
-    if (!meInList || !meRowLayout || viewportHeight === 0) return 1;
+    // Not in the loaded rows, or in them but not rendered: pin the copy.
+    if (!meInList || meRowLayout === 'missing') return 1;
+    // Rendered but not measured yet (e.g. right after Global ⇄ Friends):
+    // show the real row only — never both, and never a gap where it belongs.
+    if (!meRowLayout || viewportHeight === 0) return 0;
     const { y, height } = meRowLayout;
     // scrollY at which the real row reaches the floating row's slot.
     const dockAt = y + height + FLOATING_ME_BOTTOM - viewportHeight;
@@ -182,13 +240,13 @@ export default function LeaderboardScreen() {
 
   // The real row is hidden while the floating copy shows, so it never peeks
   // out below the floating row before the handoff.
-  const realMeOpacity = useMemo(
-    () =>
-      meHunter && typeof floatingMeOpacity !== 'number'
-        ? floatingMeOpacity.interpolate({ inputRange: [0, 1], outputRange: [1, 0] })
-        : 1,
-    [meHunter, floatingMeOpacity]
-  );
+  // Whichever of the two is showing, the other hides — exactly one "You"
+  // row is ever on screen.
+  const realMeOpacity = useMemo(() => {
+    if (!meHunter) return 1;
+    if (typeof floatingMeOpacity === 'number') return 1 - floatingMeOpacity;
+    return floatingMeOpacity.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  }, [meHunter, floatingMeOpacity]);
 
   // onEndReached can fire several times per scroll gesture; this plus
   // the hook's own in-flight guard keeps a fast scroll from firing the
@@ -220,7 +278,7 @@ export default function LeaderboardScreen() {
     <View onLayout={(e: LayoutChangeEvent) => setStickyHeaderHeight(e.nativeEvent.layout.height)}>
       <LeaderboardHeroHeader scrollY={scrollY} />
       <View style={styles.solidSection}>
-        <TopCategoryFilterBar category={category} onSelectCategory={setCategory} />
+        <TopCategoryFilterBar category={category} onSelectCategory={handleSelectCategory} />
       </View>
     </View>
   );
@@ -235,15 +293,11 @@ export default function LeaderboardScreen() {
         onPressSettings={() => setSettingsModalVisible(true)}
       />
 
-      {/* Friends tab: always there above the list (the empty state has its
-          own button). Global: the weekly, dismissible nudge. */}
-      {scope === 'friends' ? (
-        !showSkeleton && !showBlockingError && entries.length > 0 ? (
-          <InviteNudgeCard onInvite={openInvite} persistent />
-        ) : null
-      ) : (
-        <InviteNudgeCard onInvite={openInvite} />
-      )}
+      {/* Invite card: Friends tab only, always there above the list (the
+          empty state has its own button). Global has none. */}
+      {scope === 'friends' && !showSkeleton && !showBlockingError && entries.length > 0 ? (
+        <InviteNudgeCard onInvite={openInvite} persistent />
+      ) : null}
 
       {!showSkeleton && !showBlockingError && entries.length > 0 ? (
         <View style={styles.tableHeaderRow}>

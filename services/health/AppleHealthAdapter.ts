@@ -1,5 +1,6 @@
-import { Platform } from 'react-native';
-import type { HealthAdapter, DailyHealthSummary, DayBarSample } from './HealthAdapter';
+import { Linking, Platform } from 'react-native';
+import { HealthProviderError } from './HealthAdapter';
+import type { HealthAdapter, HealthAvailability, DailyHealthSummary, DayBarSample } from './HealthAdapter';
 import { devLog, devWarn } from './devLog';
 
 // react-native-health (the old bridge-only HealthKit binding this adapter
@@ -46,6 +47,24 @@ function localDateKey(d: Date): string {
 
 export class AppleHealthAdapter implements HealthAdapter {
   private isInitialized = false;
+  // One authorization request at a time. After a restart every read calls
+  // ensureInitialized() and the metrics screen starts several reads at once;
+  // overlapping requestAuthorization calls make HealthKit reject all but one.
+  private authPromise: Promise<boolean> | null = null;
+
+  async getAvailability(): Promise<HealthAvailability> {
+    return (await this.isAvailable()) ? 'available' : 'unavailable';
+  }
+
+  // HealthKit has no API to open an app's Health permissions, so open the
+  // Health app; access is under Profile → Apps → HunterX.
+  async openSettings(): Promise<void> {
+    try {
+      await Linking.openURL('x-apple-health://');
+    } catch {
+      await Linking.openSettings().catch(() => {});
+    }
+  }
 
   async isAvailable(): Promise<boolean> {
     if (Platform.OS !== 'ios' || !HealthKit) {
@@ -69,16 +88,29 @@ export class AppleHealthAdapter implements HealthAdapter {
     if (Platform.OS !== 'ios' || !HealthKit || typeof HealthKit.requestAuthorization !== 'function') {
       return false;
     }
-    try {
+    if (!this.authPromise) {
       // Safe to call every time — HealthKit only shows the system prompt for
       // types not yet decided on; already-authorized types resolve silently.
-      const granted = await HealthKit.requestAuthorization({ toRead: READ_TYPES });
-      this.isInitialized = true;
-      return !!granted;
-    } catch (e) {
-      devWarn('[AppleHealthAdapter] requestPermissions failed:', e);
-      return false;
+      // It resolves true even when the user turns everything off (Apple hides
+      // read-permission decisions), so false/throw means it couldn't ask at
+      // all, e.g. the HealthKit entitlement is missing from the build.
+      this.authPromise = HealthKit.requestAuthorization({ toRead: READ_TYPES })
+        .then((granted: boolean) => {
+          this.isInitialized = !!granted;
+          return !!granted;
+        })
+        .catch((e: any) => {
+          devWarn('[AppleHealthAdapter] requestPermissions failed:', e);
+          throw new HealthProviderError(
+            'failed',
+            e?.message ? `Apple Health couldn't be opened: ${e.message}` : "Apple Health couldn't be opened."
+          );
+        })
+        .finally(() => {
+          this.authPromise = null;
+        });
     }
+    return this.authPromise!;
   }
 
   async checkPermissions(): Promise<boolean> {
@@ -89,7 +121,8 @@ export class AppleHealthAdapter implements HealthAdapter {
 
   private async ensureInitialized(): Promise<boolean> {
     if (this.isInitialized) return true;
-    return this.requestPermissions();
+    // Reads fall back to empty data rather than throwing.
+    return this.requestPermissions().catch(() => false);
   }
 
   private async sumQuantity(identifier: string, unit: string, startDate: Date, endDate: Date): Promise<number> {

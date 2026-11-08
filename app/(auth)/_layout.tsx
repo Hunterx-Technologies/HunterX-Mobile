@@ -3,6 +3,7 @@ import { Stack, Redirect, useFocusEffect, usePathname } from 'expo-router';
 import { BackHandler } from 'react-native';
 
 import { useAuth } from '@/hooks/useAuth';
+import { confirmExitApp } from '@/utils/confirmExitApp';
 
 export default function AuthLayout() {
   const { isAuthenticated, isOnboarded, isBootstrapping } = useAuth();
@@ -19,7 +20,9 @@ export default function AuthLayout() {
           pathname === '/(auth)' ||
           pathname.includes('login')
         ) {
-          return true; // Intercept & block back press
+          // Don't go back to tabs/profile; ask whether to close the app.
+          confirmExitApp();
+          return true;
         }
         return false;
       };

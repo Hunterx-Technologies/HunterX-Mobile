@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { router } from 'expo-router';
 import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { registerCelebrationPresenter } from '@/store/useCelebrationStore';
 import { StreakBadgeShowcaseModal } from './StreakBadgeShowcase';
@@ -20,7 +21,9 @@ const findHomeSlot = async (badgeId: number) => {
 
 /** App-wide streak badge popup, opened with showStreakBadge(). Mounted once in the root layout. */
 export function GlobalStreakBadge() {
-  const { visible, options, hideStreakBadge, landBadge } = useStreakBadgeStore();
+  const { visible, options, hideStreakBadge, landBadge } = useStreakBadgeStore(
+    useShallow((s) => ({ visible: s.visible, options: s.options, hideStreakBadge: s.hideStreakBadge, landBadge: s.landBadge }))
+  );
   const soundEffectsEnabled = useSettingsStore((s) => s.soundEffectsEnabled);
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
 

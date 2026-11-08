@@ -22,11 +22,14 @@ import { verifyOtp, resendOtp } from '@/services/api/auth.service';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const OTP_LENGTH = 6;
 const easeOutCubic = Easing.out(Easing.cubic);
 
 export default function VerifyOtpScreen() {
+  const pageScrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(pageScrollRef);
   const { email, fromSignup } = useLocalSearchParams<{ email: string; fromSignup?: string }>();
   const insets = useSafeAreaInsets();
   const setVerifiedEmail = useOnboardingStore((s) => s.setVerifiedEmail);
@@ -178,6 +181,7 @@ export default function VerifyOtpScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+        ref={pageScrollRef}
           bounces={false}
           overScrollMode="never"
           contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 12 }]}

@@ -9,6 +9,8 @@ export const API_ERROR = {
   ACCOUNT_PENDING_DELETION: 'ACCOUNT_PENDING_DELETION',
   /** Signing up again with an identity whose account waits to be deleted. */
   ACCOUNT_PENDING_DELETION_LOGIN_TO_RESTORE: 'ACCOUNT_PENDING_DELETION_LOGIN_TO_RESTORE',
+  /** Forgot password for a Google/Apple-only account: there's no password to reset. */
+  SOCIAL_ACCOUNT: 'SOCIAL_ACCOUNT',
 } as const;
 
 export function getApiErrorCode(err: unknown): string | null {

@@ -238,10 +238,17 @@ export async function loginWithApple(
 // signing out offline still clears the device.
 export async function logout(): Promise<void> {
   const refreshToken = await tokenStorage.getRefreshToken();
-  if (refreshToken) {
-    await apiClient.post('/auth/logout', { refreshToken }, { timeout: 5000 }).catch(() => { });
-  }
+  if (refreshToken) await revokeSession(refreshToken);
   await tokenStorage.clearTokens();
+}
+
+/**
+ * Tells the server to revoke this refresh token. Best-effort and never
+ * touches local storage, so it can finish in the background after sign-out
+ * without affecting a session started in the meantime.
+ */
+export async function revokeSession(refreshToken: string): Promise<void> {
+  await apiClient.post('/auth/logout', { refreshToken }, { timeout: 5000 }).catch(() => { });
 }
 
 let inFlightCurrentUser: Promise<User> | null = null;
@@ -249,6 +256,13 @@ let inFlightCurrentUser: Promise<User> | null = null;
 // Restores a session on app start — apiClient already attaches the stored
 // access token (and transparently refreshes it on a 401), so this just
 // confirms it's still valid and fetches the user it belongs to.
+let lastCurrentUserFetchAt = 0;
+
+/** How long ago the profile last arrived from the server (Infinity if never). */
+export function msSinceCurrentUserFetched(): number {
+  return lastCurrentUserFetchAt ? Date.now() - lastCurrentUserFetchAt : Infinity;
+}
+
 export async function getCurrentUser(): Promise<User> {
   if (inFlightCurrentUser) {
     return inFlightCurrentUser;
@@ -257,6 +271,7 @@ export async function getCurrentUser(): Promise<User> {
   inFlightCurrentUser = (async () => {
     try {
       const data = await call<{ user: any }>(() => apiClient.get('/auth/me'), 'Failed to fetch profile');
+      lastCurrentUserFetchAt = Date.now();
       return toUser(data.user);
     } finally {
       inFlightCurrentUser = null;
@@ -309,7 +324,7 @@ export async function forgotPassword(email: string): Promise<string> {
   try {
     const { data } = await apiClient.post('/auth/forgot-password', { email });
     return data?.message ||
-      'If an account exists for this email, we have sent instructions to reset your Secret Key. Check your spam folder if it does not arrive within 2 minutes.';
+      'We have sent instructions to reset your Secret Key to this email. Check your spam folder if it does not arrive within 2 minutes.';
   } catch (err) {
     throw apiFailure(err);
   }

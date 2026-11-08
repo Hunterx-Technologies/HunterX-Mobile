@@ -18,6 +18,7 @@ import { fontFamilies } from '@/theme/typography';
 import { ACKNOWLEDGEMENTS } from '@/constants/legal/acknowledgements';
 import { LegalHeaderBar, LegalSectionView, RichText, legalStyles } from './LegalDocumentModal';
 import licensesJson from '@/assets/licenses.json';
+import { cleanFreeText } from '@/utils/textInput';
 
 // Profile → Acknowledgements. Same look as the Disclaimer (shared header,
 // section and text pieces). Section 1 is followed by the open-source list
@@ -34,7 +35,10 @@ export interface LicenseEntry {
   text: string;
 }
 
-const LICENSES = licensesJson as LicenseEntry[];
+// Stored with each distinct licence text once (see scripts/generate-licenses.js).
+type LicensesFile = { texts: string[]; packages: (Omit<LicenseEntry, 'text'> & { t: number })[] };
+const { texts: LICENSE_TEXTS, packages: LICENSE_PACKAGES } = licensesJson as LicensesFile;
+const LICENSES: LicenseEntry[] = LICENSE_PACKAGES.map(({ t, ...entry }) => ({ ...entry, text: LICENSE_TEXTS[t] ?? '' }));
 const [OPEN_SOURCE, ...OTHER_SECTIONS] = ACKNOWLEDGEMENTS.sections;
 const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' });
 
@@ -132,7 +136,7 @@ export function AcknowledgementsModal({ visible, onClose }: AcknowledgementsModa
         <TextInput
           style={styles.searchInput}
           value={query}
-          onChangeText={setQuery}
+          onChangeText={(t) => setQuery(cleanFreeText(t))}
           placeholder="Search packages"
           placeholderTextColor="#52525B"
           autoCapitalize="none"

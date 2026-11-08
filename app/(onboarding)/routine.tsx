@@ -22,11 +22,14 @@ import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 import type { RoutineTask } from '@/types/task';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 7; // eighth step (0-indexed)
 
 export default function RoutineScreen() {
+  const pageScrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(pageScrollRef);
     const storeRoutineTaskIds = useOnboardingStore((s) => s.routineTaskIds);
     const setRoutineTaskIds = useOnboardingStore((s) => s.setRoutineTaskIds);
     const gender = useOnboardingStore((s) => s.gender);
@@ -119,6 +122,7 @@ export default function RoutineScreen() {
 
             {/* ─── Scrollable Content ─── */}
             <ScrollView
+        ref={pageScrollRef}
                 bounces={false}
                 overScrollMode="never"
                 contentContainerStyle={styles.scrollContent}

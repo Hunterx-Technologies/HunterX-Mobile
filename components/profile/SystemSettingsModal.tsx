@@ -18,7 +18,7 @@ import { GoogleIcon } from '@/components/common/GoogleIcon';
 import { Screen } from '@/components/common/Screen';
 import { fontFamilies } from '@/theme/typography';
 import { changePassword, confirmEmailChange, forgotPassword, getCurrentUser, requestEmailChange } from '@/services/api/auth.service';
-import { exportUserData } from '@/services/api/user.service';
+import { exportUserData, getDataExportStatus, type DataExportStatus } from '@/services/api/user.service';
 import {
   getUserSettings,
   updateUserSettings,
@@ -28,6 +28,8 @@ import { useSettingsContext } from '@/context/SettingsContext';
 import { HunterSwitch } from './HunterSwitch';
 import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter';
 import { HunterToast, type HunterToastType } from '@/components/common/HunterToast';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { emailError } from '@/utils/validation';
 import { showGlobalToast } from '@/store/useToastStore';
 import {
   getPushPermission,
@@ -36,6 +38,7 @@ import {
   runPushDiagnostics,
   type PushPermission,
 } from '@/services/notifications/push';
+import { digitsOnly, noSpaces } from '@/utils/textInput';
 
 // Dev builds and test APKs (eas.json `apk-local` sets EXPO_PUBLIC_PUSH_DEBUG) — never production.
 const SHOW_PUSH_DIAGNOSTICS = __DEV__ || process.env.EXPO_PUBLIC_PUSH_DEBUG === 'true';
@@ -61,6 +64,22 @@ export interface SystemSettingsModalProps {
   setSoundEffectsEnabled?: (val: boolean) => void;
   hapticsEnabled?: boolean;
   setHapticsEnabled?: (val: boolean) => void;
+}
+
+/** "Today, 5:46 PM" / "6 Nov, 5:46 PM" */
+function formatExportTime(iso: string): string {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const isToday = d.toDateString() === new Date().toDateString();
+  return isToday ? `Today, ${time}` : `${d.getDate()} ${d.toLocaleString('en', { month: 'short' })}, ${time}`;
+}
+
+/** "in 21 h" / "in 40 min" / "now" */
+function formatNextExport(iso: string): string {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return 'now';
+  const hours = Math.floor(ms / 3_600_000);
+  return hours >= 1 ? `in ${hours} h` : `in ${Math.max(1, Math.ceil(ms / 60_000))} min`;
 }
 
 export function SystemSettingsModal({
@@ -98,7 +117,6 @@ export function SystemSettingsModal({
     leaderboard_visible: true,
   });
 
-  const [isFetchingAccountSettings, setIsFetchingAccountSettings] = useState(false);
   // OS-level push permission — the backend toggles below are moot without it.
   const [pushPermission, setPushPermission] = useState<PushPermission>('unsupported');
 
@@ -124,6 +142,8 @@ export function SystemSettingsModal({
   const [emailCodeInput, setEmailCodeInput] = useState('');
   const [emailPasswordInput, setEmailPasswordInput] = useState('');
   const [isExportingData, setIsExportingData] = useState(false);
+  const [exportStatus, setExportStatus] = useState<DataExportStatus | null>(null);
+  const [isExportConfirmVisible, setIsExportConfirmVisible] = useState(false);
   const [toast, setToast] = useState<{ visible: boolean; message: string; type: HunterToastType }>({
     visible: false,
     message: '',
@@ -139,7 +159,6 @@ export function SystemSettingsModal({
   useEffect(() => {
     let isMounted = true;
     if (visible) {
-      setIsFetchingAccountSettings(true);
       getUserSettings()
         .then((data) => {
           if (isMounted && data) {
@@ -151,13 +170,22 @@ export function SystemSettingsModal({
         })
         .catch((err) => {
           console.warn('[SystemSettingsModal] Error fetching account settings:', err);
-        })
-        .finally(() => {
-          if (isMounted) setIsFetchingAccountSettings(false);
         });
     }
     return () => {
       isMounted = false;
+    };
+  }, [visible]);
+
+  // "My Data": where the export goes and whether one was requested lately.
+  useEffect(() => {
+    if (!visible) return;
+    let alive = true;
+    getDataExportStatus()
+      .then((status) => alive && setExportStatus(status))
+      .catch(() => {});
+    return () => {
+      alive = false;
     };
   }, [visible]);
 
@@ -316,19 +344,6 @@ export function SystemSettingsModal({
       : providerUpper;
   const isSocialAuth = p === 'GOOGLE' || p === 'APPLE';
 
-  const handlePressChangeEmail = () => {
-    if (!isSocialAuth) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => { });
-      Alert.alert(
-        'Action Restricted',
-        'Accounts registered via Email & Password cannot update their primary email address.'
-      );
-      return;
-    }
-    setNewEmailInput(user?.email || '');
-    setIsChangeEmailModalVisible(true);
-  };
-
   const closeChangeEmail = () => {
     setIsChangeEmailModalVisible(false);
     setEmailCodeSentTo(null);
@@ -338,8 +353,9 @@ export function SystemSettingsModal({
 
   const handleChangeEmail = async () => {
     const trimmed = newEmailInput.trim();
-    if (!trimmed || !trimmed.includes('@')) {
-      Alert.alert('Error', 'Please enter a valid email address.');
+    const invalid = emailError(trimmed);
+    if (invalid) {
+      showToast(invalid, 'error');
       return;
     }
 
@@ -389,24 +405,36 @@ export function SystemSettingsModal({
     }
   };
 
-  const handleDownloadData = async () => {
-    if (isExportingData) return;
+  const exportCoolingDown =
+    !!exportStatus?.nextAvailableAt && new Date(exportStatus.nextAvailableAt).getTime() > Date.now();
+
+  const sendDataExport = async () => {
     setIsExportingData(true);
     try {
       const res = await exportUserData();
-      showToast(
-        res.message || 'Your data export has been sent to your registered email address.',
-        'success'
-      );
+      if (res.status) setExportStatus(res.status);
+      showToast(res.message, 'success');
     } catch (err: any) {
-      showToast(
-        err.message || 'Unable to request data export. Please try again later.',
-        'error'
-      );
+      showToast(err.message || 'Unable to request data export. Please try again later.', 'error');
+      // e.g. 429 from another device: refresh so the row shows the cooldown.
+      getDataExportStatus().then(setExportStatus).catch(() => {});
     } finally {
       setIsExportingData(false);
+      setIsExportConfirmVisible(false);
     }
   };
+
+  // Confirm first, so it's clear where the file goes and that it's once a day.
+  // ConfirmDialog, not Alert.alert: Alert is a no-op on web.
+  const handleDownloadData = () => {
+    if (isExportingData) return;
+    if (exportCoolingDown) {
+      showToast(`You can request another export ${formatNextExport(exportStatus!.nextAvailableAt!)}.`, 'info');
+      return;
+    }
+    setIsExportConfirmVisible(true);
+  };
+
 
   const allOn = accountSettings.notify_all;
 
@@ -1005,7 +1033,7 @@ export function SystemSettingsModal({
           <Text style={styles.sectionHeader}>DATA & PRIVACY</Text>
           <View style={styles.settingsGroupCard}>
             <TouchableOpacity
-              style={styles.settingRow}
+              style={[styles.settingRow, exportCoolingDown && { opacity: 0.6 }]}
               onPress={handleDownloadData}
               disabled={isExportingData}
               activeOpacity={0.7}
@@ -1021,7 +1049,10 @@ export function SystemSettingsModal({
                 <View style={styles.settingTextGroup}>
                   <Text style={styles.settingTitle}>Download My Data</Text>
                   <Text style={styles.settingSubtitle}>
-                    Request an archive of your workouts, quests & stats
+                    {exportStatus?.lastRequestedAt
+                      ? `Last sent ${formatExportTime(exportStatus.lastRequestedAt)}` +
+                        (exportCoolingDown ? ` · next ${formatNextExport(exportStatus.nextAvailableAt!)}` : '')
+                      : 'Get your quests, XP & stats by email'}
                   </Text>
                 </View>
               </View>
@@ -1035,6 +1066,16 @@ export function SystemSettingsModal({
 
           <View style={{ height: 40 }} />
         </ScrollView>
+
+        <ConfirmDialog
+          visible={isExportConfirmVisible}
+          title="Download my data"
+          message={`We'll email your data as an Excel file${exportStatus?.email ? ` to ${exportStatus.email}` : ''}. You can do this once a day.`}
+          confirmLabel="Send email"
+          loading={isExportingData}
+          onConfirm={sendDataExport}
+          onCancel={() => setIsExportConfirmVisible(false)}
+        />
 
         {/* Change Password Modal */}
         <Modal
@@ -1088,7 +1129,7 @@ export function SystemSettingsModal({
                   editable={!isChangingPassword}
                   value={newPasswordInput}
                   onChangeText={(t) => {
-                    setNewPasswordInput(t);
+                    setNewPasswordInput(noSpaces(t));
                     setPasswordError(null);
                   }}
                 />
@@ -1118,7 +1159,7 @@ export function SystemSettingsModal({
                   editable={!isChangingPassword}
                   value={confirmPasswordInput}
                   onChangeText={(t) => {
-                    setConfirmPasswordInput(t);
+                    setConfirmPasswordInput(noSpaces(t));
                     setPasswordError(null);
                   }}
                 />
@@ -1194,7 +1235,7 @@ export function SystemSettingsModal({
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={newEmailInput}
-                onChangeText={setNewEmailInput}
+                onChangeText={(t) => setNewEmailInput(noSpaces(t))}
                 editable={!emailCodeSentTo}
               />
               {!isSocialAuth && !emailCodeSentTo && (
@@ -1216,7 +1257,7 @@ export function SystemSettingsModal({
                   keyboardType="number-pad"
                   maxLength={6}
                   value={emailCodeInput}
-                  onChangeText={setEmailCodeInput}
+                  onChangeText={(t) => setEmailCodeInput(digitsOnly(t))}
                 />
               )}
               <View style={styles.modalActionRow}>

@@ -20,15 +20,16 @@ import { colors } from '@/theme/colors';
 // The launch animation, shown once on a cold start over the app as it loads.
 // The empty glass tile appears with a glint, the X's blue-and-gold stroke slashes in from the
 // top left, then the sword plunges in from the top right and locks across it
-// with a flash and a small shake. From there it matches
-// AnimatedSplash: the "HunterX" wordmark slides out, a sheen passes over the
-// logo and it fades into the app (about 2.9s).
+// with a flash and a small shake. Then the "HunterX" wordmark slides out, a
+// sheen passes over the logo and it fades into the app (about 2.9s).
 //
 // The pieces are cut from app_logo.png (assets/images/splash) on the same
 // 1024 canvas, so once they land they line up exactly; the real logo then
 // crossfades in under the flash.
 
-const LOGO = require('../../assets/images/app_logo.png');
+// 768px copy of app_logo.png — drawn at ≤ ~460px; the 1024px original cost
+// low-end phones an extra ~1.7 MB bitmap decode in the middle of the animation.
+const LOGO = require('../../assets/images/splash/logo_full.png');
 const TILE = require('../../assets/images/splash/logo_tile.jpg');
 const STROKE = require('../../assets/images/splash/logo_stroke.png');
 const SWORD = require('../../assets/images/splash/logo_sword.png');

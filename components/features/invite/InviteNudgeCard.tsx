@@ -39,6 +39,10 @@ export function InviteNudgeCard({
   persistent?: boolean;
 }) {
   const [visible, setVisible] = useState(persistent);
+  // Fade out only when the user taps ✕. Being unmounted by the parent (e.g.
+  // Leaderboard switching Global ⇄ Friends, which swaps this card for the
+  // persistent one) must not fade, or the two cards overlap mid-switch.
+  const [isDismissing, setIsDismissing] = useState(false);
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
@@ -54,10 +58,18 @@ export function InviteNudgeCard({
 
   if (!visible) return null;
 
+  const dismiss = () => {
+    setIsDismissing(true);
+    // Unmount on the next frame, once `exiting` below is set.
+    requestAnimationFrame(() => setVisible(false));
+  };
+
   return (
     <Animated.View
-      entering={reduceMotion ? undefined : FadeIn.duration(300)}
-      exiting={reduceMotion ? undefined : FadeOut.duration(200)}
+      // Fade in only when the weekly nudge appears; the persistent card is
+      // simply there.
+      entering={reduceMotion || persistent ? undefined : FadeIn.duration(300)}
+      exiting={reduceMotion || !isDismissing ? undefined : FadeOut.duration(200)}
       style={[styles.card, persistent && styles.cardPersistent]}
     >
       <View style={styles.iconBox}>
@@ -76,7 +88,7 @@ export function InviteNudgeCard({
       </Pressable>
       {persistent ? null : (
         <Pressable
-          onPress={() => setVisible(false)}
+          onPress={dismiss}
           hitSlop={10}
           accessibilityRole="button"
           accessibilityLabel={INVITE_COPY.nudgeDismiss}

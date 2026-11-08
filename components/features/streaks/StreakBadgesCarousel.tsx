@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { fontFamilies } from '@/theme/typography';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';

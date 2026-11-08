@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { AppState, AppStateStatus, Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus, Platform, StyleSheet, View } from 'react-native';
 import { Stack, router, usePathname, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -18,12 +18,13 @@ import { colors } from '@/theme/colors';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useMetricsStore } from '@/store/useMetricsStore';
 import { GlobalToast } from '@/components/common/GlobalToast';
+import { OfflineNotice } from '@/components/common/OfflineNotice';
 import { SwordSplash } from '@/components/common/SwordSplash';
 import { GlobalLevelUp } from '@/components/features/levelUp/GlobalLevelUp';
 import { GlobalStreakBadge } from '@/components/features/streaks/GlobalStreakBadge';
 import { GlobalStreakBreak } from '@/components/features/streaks/GlobalStreakBreak';
 import { GlobalReward } from '@/components/features/reward/GlobalReward';
-import { preloadAppAssets } from '@/services/media/preloadAssets';
+import { preloadPriorityAssets, preloadRemainingAssets } from '@/services/media/preloadAssets';
 import { getAvatars } from '@/services/api/avatar.service';
 import { captureInstallReferrer } from '@/services/referral/pendingReferral';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
@@ -91,7 +92,7 @@ function ScrollToTopOnNavigate() {
 
 // Root screens anyone may open signed out: app/index.tsx (undefined),
 // invite links, and the not-found page.
-const PUBLIC_ROOT_SCREENS = new Set([undefined, 'invite', 'guestpass', '+not-found', 'invite-code-preview']);
+const PUBLIC_ROOT_SCREENS = new Set([undefined, 'invite', 'guestpass', '+not-found']);
 
 // A signed-in hunter who hasn't finished onboarding stays in the wizard,
 // and a signed-out visitor goes to Login. The (auth)/(onboarding)/(tabs)
@@ -104,18 +105,28 @@ function OnboardingGate() {
   const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   const group = segments[0];
 
-  useEffect(() => {
-    if (isBootstrapping) return;
-    // undefined = app/index.tsx, which routes by itself.
-    if (group === undefined || group === '(auth)' || group === '(onboarding)' || group === '(tabs)') return;
-    if (!isSignedIn) {
-      if (!PUBLIC_ROOT_SCREENS.has(group)) router.replace('/(auth)/login');
-      return;
-    }
-    if (!isOnboarded) router.replace('/(onboarding)/name');
-  }, [group, isSignedIn, isOnboarded, isBootstrapping]);
+  // undefined = app/index.tsx, which routes by itself.
+  const selfGuarded =
+    group === undefined || group === '(auth)' || group === '(onboarding)' || group === '(tabs)';
+  const target: '/(auth)/login' | '/(onboarding)/name' | null =
+    isBootstrapping || selfGuarded
+      ? null
+      : !isSignedIn
+        ? PUBLIC_ROOT_SCREENS.has(group)
+          ? null
+          : '/(auth)/login'
+        : !isOnboarded
+          ? '/(onboarding)/name'
+          : null;
 
-  return null;
+  useEffect(() => {
+    if (target) router.replace(target);
+  }, [target]);
+
+  // The redirect runs after this render, so cover the screen until it does —
+  // a signed-out or not-yet-onboarded hunter must never see an inner screen.
+  if (!target) return null;
+  return <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />;
 }
 
 function PushNotificationsObserver() {
@@ -141,15 +152,34 @@ export default function RootLayout() {
   // The animated launch splash plays once per cold start, over the app as it loads.
   const [showSplash, setShowSplash] = useState(true);
 
-  // Runs once on app start — reads the persisted access token and warms image cache
+  // Runs once on app start: what the first screen needs, right away.
   useEffect(() => {
     useAuthStore.getState().restoreSession();
-    preloadAppAssets();
+    preloadPriorityAssets();
     // Warms the avatar catalog cache so the user's actual avatar_id resolves
     // to its image on first paint instead of falling back to a generic avatar.
     getAvatars().catch(() => {});
-    // Android: an invite code carried through the Play Store install.
-    captureInstallReferrer();
+  }, []);
+
+  // Everything else waits for the launch splash to finish — run during it,
+  // this work (dozens of image downloads, health queries) made the splash
+  // animation stutter on low-end phones.
+  const splashDone = useRef<{ promise: Promise<void>; resolve: () => void } | null>(null);
+  if (!splashDone.current) {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => (resolve = r));
+    splashDone.current = { promise, resolve };
+  }
+  useEffect(() => {
+    if (!showSplash) splashDone.current?.resolve();
+  }, [showSplash]);
+
+  useEffect(() => {
+    splashDone.current?.promise.then(() => {
+      preloadRemainingAssets();
+      // Android: an invite code carried through the Play Store install.
+      captureInstallReferrer();
+    });
   }, []);
 
   // Health data (steps, calories, etc.) changes outside the app whenever
@@ -166,8 +196,12 @@ export default function RootLayout() {
       useMetricsStore.getState().syncHealthMetricsIfNeeded();
     };
 
-    // Cold start: wait for the persisted connection state to load first.
-    useMetricsStore.getState().initFromStorage().then(refreshHealthMetrics);
+    // Cold start: wait for the persisted connection state to load first —
+    // and for the launch splash to end, so the health queries don't compete
+    // with its animation.
+    Promise.all([useMetricsStore.getState().initFromStorage(), splashDone.current?.promise]).then(
+      refreshHealthMetrics
+    );
 
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (nextState === 'active') {
@@ -237,6 +271,8 @@ export default function RootLayout() {
           <GlobalStreakBreak />
           <GlobalToast />
           {showSplash && <SwordSplash onFinish={() => setShowSplash(false)} />}
+          {/* After the splash, so the intro animation isn't covered by it. */}
+          {!showSplash && <OfflineNotice />}
         </SettingsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

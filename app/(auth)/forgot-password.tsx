@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { Link, router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Animated,
   Easing,
@@ -23,8 +24,12 @@ import { DustParticles } from '@/components/common/DustParticles';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { forgotPassword } from '@/services/api/auth.service';
+import { API_ERROR, getApiErrorCode } from '@/services/api/errors';
+import { emailError } from '@/utils/validation';
 import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
 import { optimizeCloudinaryUrl, DEFAULT_BLURHASH } from '@/services/media/cloudinary';
+import { noSpaces } from '@/utils/textInput';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const HERO_ASPECT_RATIO = 1264 / 848; // image height / image width
 const HERO_TOP_OFFSET = 55;
@@ -32,7 +37,12 @@ const HERO_TOP_OFFSET = 55;
 const HERO_CONTENT_RATIO = 0.58;
 
 export default function ForgotPasswordScreen() {
+  const pageScrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(pageScrollRef);
   const { width: screenWidth } = useWindowDimensions();
+  // Back button sits just under the status bar / notch on every device —
+  // a fixed offset left it far down on phones (and web) with a short one.
+  const insets = useSafeAreaInsets();
   // Calculate where the form should start based on the actual rendered hero height
   const heroHeight = screenWidth * HERO_ASPECT_RATIO;
   const formStartY = HERO_TOP_OFFSET + heroHeight * HERO_CONTENT_RATIO;
@@ -77,13 +87,9 @@ export default function ForgotPasswordScreen() {
 
   const handleSendRecovery = async () => {
     const cleanEmail = email.trim();
-    if (!cleanEmail) {
-      setError('Email is required');
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(cleanEmail)) {
-      setError('Please enter a valid email address');
+    const invalid = emailError(cleanEmail);
+    if (invalid) {
+      setError(invalid);
       return;
     }
 
@@ -96,6 +102,20 @@ export default function ForgotPasswordScreen() {
         params: { email: cleanEmail, message: msg },
       });
     } catch (err: any) {
+      const code = getApiErrorCode(err);
+      if (code === API_ERROR.ACCOUNT_NOT_FOUND) {
+        setError('No HunterX account is registered with this email.');
+        return;
+      }
+      if (code === API_ERROR.SOCIAL_ACCOUNT) {
+        // The server names the provider: "This account signs in with Google…"
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : 'This account signs in with Google or Apple, so it has no password to reset. Use Continue with Google or Apple to log in.'
+        );
+        return;
+      }
       setError(err instanceof Error && err.message ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
@@ -133,7 +153,7 @@ export default function ForgotPasswordScreen() {
       </View>
 
       {/* Back Button positioned on top of the background */}
-      <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={12}>
+      <Pressable onPress={() => router.back()} style={[styles.backButton, { top: insets.top + 10 }]} hitSlop={12}>
         <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
       </Pressable>
 
@@ -142,6 +162,7 @@ export default function ForgotPasswordScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+        ref={pageScrollRef}
           bounces={false}
           overScrollMode="never"
           contentContainerStyle={styles.scrollContent}
@@ -176,7 +197,10 @@ export default function ForgotPasswordScreen() {
                   autoCapitalize="none"
                   keyboardType="email-address"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(text) => {
+                    setEmail(noSpaces(text));
+                    if (error) setError(null);
+                  }}
                   onFocus={() => setIsFocused(true)}
                   onBlur={() => setIsFocused(false)}
                 />
@@ -249,7 +273,6 @@ const styles = StyleSheet.create({
   // headerSpacer removed — height is now dynamic (inline style)
   backButton: {
     position: 'absolute',
-    top: 54,
     left: 24,
     zIndex: 10,
     width: 38,

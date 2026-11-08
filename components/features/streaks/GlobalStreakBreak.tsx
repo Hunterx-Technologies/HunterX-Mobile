@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { router } from 'expo-router';
 import { useStreakBreakStore } from '@/store/useStreakBreakStore';
+import { useShallow } from 'zustand/react/shallow';
 import { registerCelebrationPresenter } from '@/store/useCelebrationStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { StreakBreakModal } from './StreakBreakCard';
@@ -20,7 +21,9 @@ const findStreakPill = async () => {
 
 /** App-wide "streak life lost" card, opened with showStreakBreak(). Mounted once in the root layout. */
 export function GlobalStreakBreak() {
-  const { visible, options, hideStreakBreak, landOnPill } = useStreakBreakStore();
+  const { visible, options, hideStreakBreak, landOnPill } = useStreakBreakStore(
+    useShallow((s) => ({ visible: s.visible, options: s.options, hideStreakBreak: s.hideStreakBreak, landOnPill: s.landOnPill }))
+  );
   const soundEffectsEnabled = useSettingsStore((s) => s.soundEffectsEnabled);
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
 

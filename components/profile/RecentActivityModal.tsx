@@ -90,7 +90,7 @@ export function RecentActivityModal({
     ? new Date(memberSinceStr)
         .toLocaleString('en-US', { month: 'short', year: 'numeric' })
         .toUpperCase()
-    : 'AUG 2026';
+    : '—';
 
   const currentStreak = summary?.current_streak ?? user?.streak ?? user?.current_streak ?? 0;
   const currentStreakPadded = String(currentStreak).padStart(2, '0');
@@ -179,6 +179,12 @@ export function RecentActivityModal({
     </View>
   );
 
+const STATUS_LABEL: Record<'completed' | 'partial' | 'skipped', string> = {
+  completed: 'Completed',
+  partial: 'Partially done',
+  skipped: 'Skipped',
+};
+
 function formatDateBadge(item: UserActivityLog): { month: string; day: string } {
   let dateObj: Date | null = null;
 
@@ -213,6 +219,7 @@ function formatDateBadge(item: UserActivityLog): { month: string; day: string } 
     const isLast = index === logs.length - 1;
     const { month, day } = formatDateBadge(item);
     const timeLabel = item.date_label || (item.completed_at ? new Date(item.completed_at).toLocaleDateString() : 'Today');
+    const status = item.status ?? 'completed';
 
     return (
       <View
@@ -229,22 +236,33 @@ function formatDateBadge(item: UserActivityLog): { month: string; day: string } 
 
         {/* Task Info */}
         <View style={styles.taskInfoWrap}>
-          <Text style={styles.recentTaskTitle} numberOfLines={1}>
+          <Text
+            style={[styles.recentTaskTitle, status === 'skipped' && styles.recentTaskTitleSkipped]}
+            numberOfLines={1}
+          >
             {item.title}
           </Text>
-          <Text style={styles.recentTimeText}>{timeLabel}</Text>
+          <Text style={styles.recentTimeText}>
+            {status === 'completed' ? timeLabel : `${STATUS_LABEL[status]} · ${timeLabel}`}
+          </Text>
         </View>
 
-        {/* XP Badge */}
-        <View style={styles.recentXpBadge}>
-          <MaterialCommunityIcons
-            name="lightning-bolt"
-            size={12}
-            color="#FE5B01"
-            style={{ marginRight: 2 }}
-          />
-          <Text style={styles.recentXpText}>+{item.xp_earned} XP</Text>
-        </View>
+        {/* XP Badge — skipped quests earn nothing, so say so instead of "+0 XP" */}
+        {status === 'skipped' ? (
+          <View style={[styles.recentXpBadge, styles.recentSkippedBadge]}>
+            <Text style={styles.recentSkippedText}>Skipped</Text>
+          </View>
+        ) : (
+          <View style={styles.recentXpBadge}>
+            <MaterialCommunityIcons
+              name="lightning-bolt"
+              size={12}
+              color="#FE5B01"
+              style={{ marginRight: 2 }}
+            />
+            <Text style={styles.recentXpText}>+{item.xp_earned} XP</Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -512,6 +530,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 5,
+  },
+  recentTaskTitleSkipped: {
+    color: '#A1A1AA',
+  },
+  recentSkippedBadge: {
+    backgroundColor: 'rgba(113, 113, 122, 0.14)',
+    borderColor: 'rgba(113, 113, 122, 0.32)',
+  },
+  recentSkippedText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#A1A1AA',
   },
   recentXpText: {
     fontFamily: fontFamilies.bold,

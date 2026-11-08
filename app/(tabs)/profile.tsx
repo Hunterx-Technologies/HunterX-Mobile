@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Alert,
+  AppState,
   Linking,
   Platform,
   Pressable,
@@ -54,7 +55,6 @@ const openLegalPage = (url: string) => {
 import { RateHunterModal } from '@/components/profile/RateHunterModal';
 import { RecentActivityModal } from '@/components/profile/RecentActivityModal';
 import { SystemSettingsModal } from '@/components/profile/SystemSettingsModal';
-import { WeeklyProgressCard } from '@/components/features/streaks/WeeklyProgressCard';
 
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { createAccountDeletionLink, getCurrentUser, refreshAccessToken, updateProfile, updateUserAvatar, type UpdateProfilePayload } from '@/services/api/auth.service';
@@ -62,6 +62,15 @@ import { DeletionPendingBanner } from '@/components/common/DeletionPendingBanner
 import { showGlobalToast } from '@/store/useToastStore';
 import { getUserSettings } from '@/services/api/settings.service';
 import { useAvatarsReady } from '@/services/api/avatar.service';
+import { invalidateLeaderboardCache } from '@/hooks/useLeaderboard';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
+import { MountWhenOpened } from '@/components/common/MountWhenOpened';
+
+// HunterX's official pages, shown under Profile → Follow us.
+const SOCIAL_LINKS = {
+  instagram: 'https://www.instagram.com/hunterxtech/?utm_source=ig_web_button_share_sheet',
+  facebook: 'https://www.facebook.com/HunterxTech/',
+} as const;
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -72,6 +81,8 @@ export default function ProfileScreen() {
   const userAny = user as any;
 
   const scrollRef = useRef<ScrollView>(null);
+
+  useScrollToTopOnFocus(scrollRef);
   useScrollToTop(scrollRef);
 
   useFocusEffect(
@@ -102,23 +113,39 @@ export default function ProfileScreen() {
 
   // Confirm Dialogs
   const [isLogoutConfirmVisible, setIsLogoutConfirmVisible] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
   const [isStartingDeletion, setIsStartingDeletion] = useState(false);
 
   // Account Deletion Checker
+  // One timer for the deletion time instead of polling, plus a check when the
+  // app comes back to the foreground (timers don't run in the background).
   useEffect(() => {
-    if (userAny?.delete_at) {
-      const checkDeletion = () => {
-        const remainingMs = userAny.delete_at - Date.now();
-        if (remainingMs <= 0) {
-          logout();
-          router.replace('/(auth)/login');
-        }
-      };
-      checkDeletion();
-      const interval = setInterval(checkDeletion, 10000);
-      return () => clearInterval(interval);
-    }
+    if (!userAny?.delete_at) return;
+    const deleteAt = userAny.delete_at;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let done = false;
+    const checkDeletion = () => {
+      if (done) return;
+      const remainingMs = deleteAt - Date.now();
+      if (remainingMs <= 0) {
+        done = true;
+        logout();
+        router.replace('/(auth)/login');
+        return;
+      }
+      clearTimeout(timer);
+      // setTimeout can't wait longer than ~24.8 days; re-arm until then.
+      timer = setTimeout(checkDeletion, Math.min(remainingMs + 500, 2_000_000_000));
+    };
+    checkDeletion();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') checkDeletion();
+    });
+    return () => {
+      clearTimeout(timer);
+      sub.remove();
+    };
   }, [userAny?.delete_at, logout]);
 
   // Sync account settings from backend on mount
@@ -198,6 +225,8 @@ export default function ProfileScreen() {
       try {
         const updatedUserFromPatch = await updateProfile(payload);
         setUser(updatedUserFromPatch);
+        // Name/avatar show on the leaderboard — drop its cached rows.
+        invalidateLeaderboardCache();
 
         // Refresh access token if and only if gender changed, so new JWT claims update downstream (e.g. homepage avatar/images)
         if (isGenderChanged) {
@@ -250,6 +279,8 @@ export default function ProfileScreen() {
       try {
         const updatedUser = await updateUserAvatar(Number(avatarId) || avatarId);
         setUser(updatedUser);
+        // The leaderboard's cached rows still have the old avatar.
+        invalidateLeaderboardCache();
         try {
           const freshUser = await getCurrentUser();
           if (freshUser) {
@@ -267,9 +298,18 @@ export default function ProfileScreen() {
 
   const handleLogout = () => setIsLogoutConfirmVisible(true);
 
+  // The dialog stays open with a spinner until sign-out is done (at most a
+  // few seconds — see useAuthStore.logout), so a tap never looks ignored,
+  // and repeated taps don't start it twice.
   const confirmLogout = async () => {
-    setIsLogoutConfirmVisible(false);
-    await logout();
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setIsLoggingOut(false);
+      setIsLogoutConfirmVisible(false);
+    }
     router.replace('/(auth)/login');
   };
 
@@ -334,14 +374,13 @@ export default function ProfileScreen() {
       case 'send_feedback':
         router.push('/feedback');
         break;
+      // Opened outside HunterX: the Instagram/Facebook app when installed
+      // (both claim these https links), otherwise the phone's browser.
       case 'instagram':
-        Linking.openURL('https://instagram.com');
+        Linking.openURL(SOCIAL_LINKS.instagram).catch(() => {});
         break;
       case 'facebook':
-        Linking.openURL('https://facebook.com');
-        break;
-      case 'x':
-        Linking.openURL('https://x.com');
+        Linking.openURL(SOCIAL_LINKS.facebook).catch(() => {});
         break;
       case 'signout':
         handleLogout();
@@ -530,14 +569,6 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* WEEKLY CAMPAIGN PROGRESS CARD (Commented out)
-        <WeeklyProgressCard
-          weekStatus={user?.week_status}
-          completedDaysCount={user?.completedDaysCount}
-          avatarUrl={user?.avatarUrl}
-        />
-        */}
-
         {/* MAIN MENU OPTIONS CARD */}
         <View style={styles.menuContainer}>
           <MenuItem
@@ -605,11 +636,6 @@ export default function ProfileScreen() {
               icon="logo-facebook"
               label="Facebook"
               onPress={() => handleMenuPress('facebook')}
-            />
-            <MenuItem
-              icon="close-outline"
-              label="X"
-              onPress={() => handleMenuPress('x')}
               isLast
             />
           </View>
@@ -661,65 +687,81 @@ export default function ProfileScreen() {
       </ScrollView>
 
       {/* MODULAR SUB-MODALS */}
-      <RecentActivityModal
-        visible={isRecentActivityModalVisible}
-        onClose={() => setIsRecentActivityModalVisible(false)}
-        user={user}
-      />
+      <MountWhenOpened visible={isRecentActivityModalVisible}>
+        <RecentActivityModal
+          visible={isRecentActivityModalVisible}
+          onClose={() => setIsRecentActivityModalVisible(false)}
+          user={user}
+        />
+      </MountWhenOpened>
 
-      <SystemSettingsModal
-        visible={isSettingsModalVisible}
-        onClose={() => setIsSettingsModalVisible(false)}
-        user={user}
-        onUpdateUser={(updated) => setUser(updated)}
-        unitSystem={unitSystem}
-        onUnitSystemChange={handleUnitSystemChange}
-        soundEffectsEnabled={soundEffectsEnabled}
-        setSoundEffectsEnabled={setSoundEffectsEnabled}
-        hapticsEnabled={hapticsEnabled}
-        setHapticsEnabled={setHapticsEnabled}
-      />
+      <MountWhenOpened visible={isSettingsModalVisible}>
+        <SystemSettingsModal
+          visible={isSettingsModalVisible}
+          onClose={() => setIsSettingsModalVisible(false)}
+          user={user}
+          onUpdateUser={(updated) => setUser(updated)}
+          unitSystem={unitSystem}
+          onUnitSystemChange={handleUnitSystemChange}
+          soundEffectsEnabled={soundEffectsEnabled}
+          setSoundEffectsEnabled={setSoundEffectsEnabled}
+          hapticsEnabled={hapticsEnabled}
+          setHapticsEnabled={setHapticsEnabled}
+        />
+      </MountWhenOpened>
 
-      <RateHunterModal
-        visible={isRateModalVisible}
-        onClose={() => setIsRateModalVisible(false)}
-      />
+      <MountWhenOpened visible={isRateModalVisible}>
+        <RateHunterModal
+          visible={isRateModalVisible}
+          onClose={() => setIsRateModalVisible(false)}
+        />
+      </MountWhenOpened>
 
-      <EditProfileModal
-        visible={isEditProfileModalVisible}
-        onClose={() => setIsEditProfileModalVisible(false)}
-        user={user}
-        unitSystem={unitSystem}
-        onSave={handleSaveProfileForm}
-        onOpenAvatarPicker={() => {
-          setIsEditProfileModalVisible(false);
-          setIsAvatarModalVisible(true);
-        }}
-        onDeleteAccount={handleDeleteAccount}
-      />
+      <MountWhenOpened visible={isEditProfileModalVisible}>
+        <EditProfileModal
+          visible={isEditProfileModalVisible}
+          onClose={() => setIsEditProfileModalVisible(false)}
+          user={user}
+          unitSystem={unitSystem}
+          onSave={handleSaveProfileForm}
+          onOpenAvatarPicker={() => {
+            setIsEditProfileModalVisible(false);
+            setIsAvatarModalVisible(true);
+          }}
+          onDeleteAccount={handleDeleteAccount}
+        />
+      </MountWhenOpened>
 
-      <AvatarSelectionModal
-        visible={isAvatarModalVisible}
-        onClose={() => setIsAvatarModalVisible(false)}
-        currentAvatar={user?.avatarUrl}
-        currentAvatarId={userAny?.avatar_id}
-        onSelectAvatar={handleSelectAvatar}
-      />
+      <MountWhenOpened visible={isAvatarModalVisible}>
+        <AvatarSelectionModal
+          visible={isAvatarModalVisible}
+          onClose={() => setIsAvatarModalVisible(false)}
+          currentAvatar={user?.avatarUrl}
+          currentAvatarId={userAny?.avatar_id}
+          onSelectAvatar={handleSelectAvatar}
+        />
+      </MountWhenOpened>
 
-      <EditNameModal
-        visible={isEditNameModalVisible}
-        initialName={displayName}
-        onSave={handleSaveName}
-        onClose={() => setIsEditNameModalVisible(false)}
-      />
+      <MountWhenOpened visible={isEditNameModalVisible}>
+        <EditNameModal
+          visible={isEditNameModalVisible}
+          initialName={displayName}
+          onSave={handleSaveName}
+          onClose={() => setIsEditNameModalVisible(false)}
+        />
+      </MountWhenOpened>
 
-      <LegalDocumentModal
-        visible={activeModal === 'Disclaimer'}
-        document={DISCLAIMER}
-        onClose={() => setActiveModal(null)}
-      />
+      <MountWhenOpened visible={activeModal === 'Disclaimer'}>
+        <LegalDocumentModal
+          visible={activeModal === 'Disclaimer'}
+          document={DISCLAIMER}
+          onClose={() => setActiveModal(null)}
+        />
+      </MountWhenOpened>
 
-      <AcknowledgementsModal visible={activeModal === 'Acknowledgements'} onClose={() => setActiveModal(null)} />
+      <MountWhenOpened visible={activeModal === 'Acknowledgements'}>
+        <AcknowledgementsModal visible={activeModal === 'Acknowledgements'} onClose={() => setActiveModal(null)} />
+      </MountWhenOpened>
 
       <ConfirmDialog
         visible={isLogoutConfirmVisible}
@@ -727,6 +769,7 @@ export default function ProfileScreen() {
         message="Are you sure you want to log out?"
         confirmLabel="Log Out"
         destructive
+        loading={isLoggingOut}
         onConfirm={confirmLogout}
         onCancel={() => setIsLogoutConfirmVisible(false)}
       />

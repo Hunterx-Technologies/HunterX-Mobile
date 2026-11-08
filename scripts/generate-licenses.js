@@ -121,8 +121,21 @@ checker.init(
     const missingText = list.filter((p) => p.generated && ATTRIBUTION.test(p.license));
 
     fs.mkdirSync(path.dirname(OUT), { recursive: true });
-    const output = list.map(({ generated, ...entry }) => entry);
-    fs.writeFileSync(OUT, JSON.stringify(output, null, 0) + '\n');
+    // Most packages share a licence text word for word, so each distinct text
+    // is stored once and packages point at it by index (`t`) — the same
+    // texts in about 60% of the size.
+    const texts = [];
+    const textIndex = new Map();
+    const entries = list.map(({ generated, text, ...entry }) => {
+      let t = textIndex.get(text);
+      if (t === undefined) {
+        t = texts.length;
+        texts.push(text);
+        textIndex.set(text, t);
+      }
+      return { ...entry, t };
+    });
+    fs.writeFileSync(OUT, JSON.stringify({ texts, packages: entries }, null, 0) + '\n');
 
     const kb = Math.round(fs.statSync(OUT).size / 1024);
     console.log(`✔ licenses: ${list.length} packages → ${path.relative(ROOT, OUT)} (${kb} KB)`);

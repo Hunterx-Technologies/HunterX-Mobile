@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { fontFamilies } from '@/theme/typography';
+import { cleanName } from '@/utils/textInput';
 
 export interface EditNameModalProps {
   visible: boolean;
@@ -40,7 +41,7 @@ export function EditNameModal({
           <TextInput
             style={styles.modalInput}
             value={name}
-            onChangeText={setName}
+            onChangeText={(t) => setName(cleanName(t))}
             placeholder="Enter your hunter name"
             placeholderTextColor="#71717A"
             autoFocus

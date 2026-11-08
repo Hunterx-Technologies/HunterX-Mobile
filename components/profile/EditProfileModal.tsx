@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   Modal,
   ScrollView,
   StyleSheet,
@@ -14,7 +13,6 @@ import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
 import { GoogleIcon } from '@/components/common/GoogleIcon';
 import { HunterToast } from '@/components/common/HunterToast';
 import { Screen } from '@/components/common/Screen';
@@ -22,6 +20,7 @@ import { fontFamilies } from '@/theme/typography';
 import { AvatarSelectionModal, getAvatarSource } from './AvatarSelectionModal';
 import { useAvatarsReady } from '@/services/api/avatar.service';
 import { DEFAULT_BLURHASH } from '@/services/media/cloudinary';
+import { cleanName } from '@/utils/textInput';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -158,8 +157,6 @@ export function EditProfileModal({
 
   // Protein toast animation
   const [proteinToastVisible, setProteinToastVisible] = useState(false);
-  const proteinToastAnim = useRef(new Animated.Value(0)).current;
-  const proteinToastTimerRef = useRef<any>(null);
 
   useEffect(() => {
     if (visible && user) {
@@ -409,7 +406,7 @@ export function EditProfileModal({
               <TextInput
                 style={styles.modernRowInput}
                 value={profileForm.name}
-                onChangeText={(val) => setProfileForm({ ...profileForm, name: val })}
+                onChangeText={(val) => setProfileForm({ ...profileForm, name: cleanName(val) })}
                 placeholderTextColor="#72727D"
               />
             </View>
@@ -568,7 +565,7 @@ export function EditProfileModal({
                 <TextInput
                   style={styles.modernRowNumericInput}
                   value={profileForm.height}
-                  onChangeText={(val) => setProfileForm({ ...profileForm, height: val })}
+                  onChangeText={(val) => setProfileForm({ ...profileForm, height: val.replace(/[^0-9.]/g, '') })}
                   keyboardType="numeric"
                   placeholder={profileForm.heightUnit === 'cm' ? '181' : '5.9'}
                   placeholderTextColor="#72727D"
@@ -648,7 +645,7 @@ export function EditProfileModal({
                 <TextInput
                   style={styles.modernRowNumericInput}
                   value={profileForm.weight}
-                  onChangeText={(val) => setProfileForm({ ...profileForm, weight: val })}
+                  onChangeText={(val) => setProfileForm({ ...profileForm, weight: val.replace(/[^0-9.]/g, '') })}
                   keyboardType="numeric"
                   placeholder={profileForm.weightUnit === 'kg' ? '75' : '165'}
                   placeholderTextColor="#72727D"

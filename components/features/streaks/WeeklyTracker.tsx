@@ -1,16 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import { fontFamilies } from '@/theme/typography';
-import { getAvatarSource } from '@/components/profile/AvatarSelectionModal';
 import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
 import type { WeekStatus } from '@/types/user';
-import { WeeklyProgressCard } from './WeeklyProgressCard';
 import { STREAK_BADGES_DATA, StreakBadgesCarousel, UserBadgeData, useEarnedBadgeCount } from './StreakBadgesCarousel';
 import { StreakBadgeShowcaseModal } from './StreakBadgeShowcase';
 import { useSettingsStore } from '@/store/useSettingsStore';
@@ -253,14 +250,6 @@ export function WeeklyTracker({
     return generateWeekDaysFromWeekStatus(weekStatus, completedDaysCount);
   }, [days, weekStatus, completedDaysCount]);
 
-  const completedCount = useMemo(() => {
-    if (completedDaysCount !== undefined) return completedDaysCount;
-    return activeDays.filter((d) => d.status === 'completed' || (d.isToday && d.isDone)).length;
-  }, [completedDaysCount, activeDays]);
-
-  const imageSource =
-    typeof characterImageSource === 'string' ? { uri: characterImageSource } : characterImageSource;
-
   // Calculate active index for the timeline connecting path line
   const activeIndex = useMemo(() => {
     const todayIdx = activeDays.findIndex((d) => d.isToday || d.status === 'today');
@@ -292,12 +281,6 @@ export function WeeklyTracker({
   // Node horizontal margins for 7 items
   const nodeMarginPercent = (1 / (2 * (totalDays || 7))) * 100; // ~7.14%
 
-  // Circular Progress calculations
-  const radius = 20;
-  const strokeWidth = 4;
-  const circumference = 2 * Math.PI * radius;
-  const progressRatio = totalDaysCount > 0 ? completedCount / totalDaysCount : 0;
-  const strokeDashoffset = circumference * (1 - progressRatio);
 
   return (
     <View style={styles.container}>
@@ -446,121 +429,6 @@ export function WeeklyTracker({
           onClose={() => setViewingBadgeIndex(null)}
         />
       ) : null}
-
-
-
-      {/* 
-      BOTTOM CARD SECTION (Preserved as commented-out code)
-      <View style={styles.bottomCard}>
-        <View style={styles.characterImageWrapper} pointerEvents="none">
-          <Image source={imageSource} style={styles.characterImage} resizeMode="cover" />
-          <LinearGradient
-            colors={['#141418', 'rgba(20, 20, 24, 0.75)', 'rgba(20, 20, 24, 0.2)', 'transparent']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 0.75, y: 0.5 }}
-            style={StyleSheet.absoluteFillObject}
-          />
-          <LinearGradient
-            colors={['rgba(20, 20, 24, 0.6)', 'transparent', 'transparent', 'rgba(20, 20, 24, 0.7)']}
-            locations={[0, 0.2, 0.8, 1]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-          />
-        </View>
-
-        <View style={styles.bottomCardContent}>
-          <View style={styles.progressRingSection}>
-            <View style={styles.ringWrapper}>
-              <Svg width={48} height={48} viewBox="0 0 50 50">
-                <Circle
-                  cx="25"
-                  cy="25"
-                  r={radius}
-                  stroke="#26262E"
-                  strokeWidth={strokeWidth}
-                  fill="transparent"
-                />
-                <Circle
-                  cx="25"
-                  cy="25"
-                  r={radius}
-                  stroke="#FE5B01"
-                  strokeWidth={strokeWidth}
-                  fill="transparent"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={strokeDashoffset}
-                  strokeLinecap="round"
-                  transform="rotate(-90 25 25)"
-                />
-              </Svg>
-              <ExpoImage
-                source={getAvatarSource(avatarUrl)}
-                style={styles.avatarInsideRing}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                placeholder={{ blurhash: DEFAULT_BLURHASH }}
-                transition={150}
-              />
-            </View>
-
-            <View style={styles.progressTextColumn}>
-              <View style={styles.fractionRow}>
-                <Text style={styles.fractionCompleted}>{completedCount}</Text>
-                <Text style={styles.fractionTotal}>/{totalDaysCount}</Text>
-              </View>
-              <Text style={styles.progressLabel}>DAYS COMPLETED</Text>
-            </View>
-          </View>
-
-          <View style={styles.verticalDivider} />
-
-          <View style={styles.encouragementSection}>
-            <Text
-              style={styles.encouragementTitle}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}
-            >
-              Keep it up, hunter!
-            </Text>
-            <Text
-              style={styles.encouragementSubtext}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-            >
-              <Text style={styles.orangeHighlightNumber}>
-                {Math.max(0, totalDaysCount - completedCount)}
-              </Text>
-              {' more days to complete'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.segmentedBarRow}>
-          {activeDays.map((dayItem, index) => {
-            let segColor = '#26262E';
-            if (dayItem.status === 'completed' || (dayItem.isToday && dayItem.isDone)) {
-              segColor = '#FE5B01';
-            } else if (dayItem.status === 'missed') {
-              segColor = '#451A1A';
-            } else if (dayItem.status === 'freeze') {
-              segColor = '#0284C7';
-            }
-            return (
-              <View
-                key={index}
-                style={[
-                  styles.segmentBarItem,
-                  { backgroundColor: segColor },
-                ]}
-              />
-            );
-          })}
-        </View>
-      </View>
-      */}
     </View>
   );
 }

@@ -37,7 +37,6 @@ import { OUTER_FLAME, StreakFlame } from './StreakFlame';
 // Usually shown with showStreakBreak() (GlobalStreakBreak is mounted in
 // the root layout and the home screen watches streak_lives).
 
-const REWARD_BUTTON = '#FE5B01';
 const MAX_LIVES = 2;
 
 // Stage geometry (points).

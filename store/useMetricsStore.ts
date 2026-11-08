@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { healthService, getAdapterForProvider } from '@/services/health/healthService';
 import { healthMetricsService, BackendDailyMetricItem } from '@/services/api/healthMetrics.service';
 import { devLog, devWarn } from '@/services/health/devLog';
+import { HealthProviderError } from '@/services/health/HealthAdapter';
 
 const HEALTH_STORAGE_KEY = '@hunterx_health_sync_state';
 const LAST_SYNC_TIME_KEY = '@hunterx_last_health_sync_time';
@@ -213,6 +214,22 @@ const DEFAULT_DATASETS: Record<TimeRange, MetricsDataset> = {
   },
 };
 
+// Connecting, focusing the Metrics screen and the app becoming active (e.g.
+// returning from the permission screen) each start the same fetch/sync, so
+// they used to overlap: 30+ simultaneous Health Connect calls, or several
+// HealthKit authorization requests at once. A call that's already running is
+// shared instead of started again.
+const inFlight: Record<string, Promise<void> | undefined> = {};
+function singleFlight(key: string, run: () => Promise<void>): Promise<void> {
+  const running = inFlight[key];
+  if (running) return running;
+  const p = run().finally(() => {
+    inFlight[key] = undefined;
+  });
+  inFlight[key] = p;
+  return p;
+}
+
 export const useMetricsStore = create<MetricsState>((set, get) => {
   // Immediately read persisted connection state on store initialization
   AsyncStorage.getItem(HEALTH_STORAGE_KEY)
@@ -299,23 +316,39 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
       try {
         const adapter = getAdapterForProvider(provider);
         devLog('[useMetricsStore] Got adapter for provider:', adapter?.constructor?.name);
-        const isAvail = await adapter.isAvailable();
-        devLog('[useMetricsStore] adapter.isAvailable() returned:', isAvail);
-        if (!isAvail) {
-          set({ isSyncing: false });
-          if (provider === 'apple_health') {
-            throw new Error('Apple Health (HealthKit) is not available on this iOS device.');
-          } else {
-            throw new Error('Google Fit / Health Connect is not available on this device (Ensure Health Connect app is installed).');
-          }
+        const availability = await adapter.getAvailability();
+        devLog('[useMetricsStore] adapter.getAvailability() returned:', availability);
+        if (availability === 'update_required') {
+          throw new HealthProviderError(
+            'update_required',
+            'Health Connect needs to be installed or updated from the Play Store.'
+          );
+        }
+        if (availability !== 'available') {
+          throw new HealthProviderError(
+            'unavailable',
+            provider === 'apple_health'
+              ? 'Apple Health is not available on this device.'
+              : 'Health Connect is not available on this device.'
+          );
         }
 
         devLog('[useMetricsStore] Requesting permissions via adapter...');
-        const granted = await adapter.requestPermissions();
+        let granted: boolean;
+        try {
+          granted = await adapter.requestPermissions();
+        } catch (e) {
+          if (e instanceof HealthProviderError) throw e;
+          throw new HealthProviderError('failed', (e as Error)?.message || 'Could not request health permissions.');
+        }
         devLog('[useMetricsStore] adapter.requestPermissions() returned:', granted);
         if (!granted) {
-          set({ isSyncing: false });
-          throw new Error('Permission denied or canceled by user.');
+          throw new HealthProviderError(
+            'denied',
+            provider === 'apple_health'
+              ? 'HunterX was not given access to Apple Health.'
+              : 'HunterX needs permission to read your steps in Health Connect.'
+          );
         }
 
         const now = new Date();
@@ -334,9 +367,11 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
         // instead of silently waiting out the old hourly window.
         await AsyncStorage.removeItem(LAST_SYNC_TIME_KEY).catch(() => {});
 
-        // Fetch live metrics immediately upon connection & trigger sync
-        await get().fetchTodayLiveMetrics();
-        await get().syncHealthMetricsIfNeeded();
+        // Fetch live metrics immediately upon connection & trigger sync.
+        // Access is granted at this point, so a hiccup here must not turn a
+        // successful connection into a "Connection Failed" alert.
+        await get().fetchTodayLiveMetrics().catch(() => {});
+        await get().syncHealthMetricsIfNeeded().catch(() => {});
       } catch (e) {
         set({ isSyncing: false });
         throw e;
@@ -376,7 +411,8 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
       return true;
     },
 
-    syncNow: async () => {
+    syncNow: () =>
+      singleFlight('syncNow', async () => {
       if (!get().isHealthConnected) return;
       if (!(await get().verifyProviderAccess())) return;
 
@@ -402,9 +438,10 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
       } catch (e) {
         set({ isSyncing: false });
       }
-    },
+      }),
 
-    fetchTodayLiveMetrics: async () => {
+    fetchTodayLiveMetrics: () =>
+      singleFlight('fetchTodayLiveMetrics', async () => {
       if (!get().isHealthConnected) return;
       if (!(await get().verifyProviderAccess())) return;
 
@@ -477,9 +514,10 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
       } catch (e) {
         devWarn('[useMetricsStore] fetchTodayLiveMetrics failed:', e);
       }
-    },
+      }),
 
-    syncHealthMetricsIfNeeded: async () => {
+    syncHealthMetricsIfNeeded: () =>
+      singleFlight('syncHealthMetricsIfNeeded', async () => {
       if (!get().isHealthConnected) return;
       if (!(await get().verifyProviderAccess())) return;
 
@@ -519,7 +557,7 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
         devWarn('[useMetricsStore] syncHealthMetricsIfNeeded failed silently:', e);
         set({ isSyncing: false });
       }
-    },
+      }),
 
     fetchRangeData: async (range: TimeRange) => {
       if (range === 'Today') {

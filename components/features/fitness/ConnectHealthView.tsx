@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,10 +19,13 @@ import { useShallow } from 'zustand/react/shallow';
 import { fontFamilies } from '@/theme/typography';
 import { useMetricsStore } from '@/store/useMetricsStore';
 import { healthConnectAdapter, appleHealthAdapter } from '@/services/health/healthService';
+import { HealthProviderError } from '@/services/health/HealthAdapter';
+import { devWarn } from '@/services/health/devLog';
 import { OrbitalHealthGraphic } from './OrbitalHealthGraphic';
 import { MountainFooterGraphic } from './MountainFooterGraphic';
 import { HealthBackgroundDecor } from './HealthBackgroundDecor';
 import { GoogleIcon } from '@/components/common/GoogleIcon';
+import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 interface ConnectHealthViewProps {
   onBack?: () => void;
@@ -30,12 +34,74 @@ interface ConnectHealthViewProps {
   isModal?: boolean;
 }
 
+// Health Connect's Play Store listing; the url parameter opens its onboarding
+// once installed (Google's recommended install link).
+const HEALTH_CONNECT_STORE_URL =
+  'market://details?id=com.google.android.apps.healthdata&url=healthconnect%3A%2F%2Fonboarding';
+const HEALTH_CONNECT_STORE_WEB_URL =
+  'https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata';
+
+/** Explains why connecting failed and offers the action that fixes it. */
+function showConnectError(provider: 'apple_health' | 'health_connect', e: unknown) {
+  const reason = e instanceof HealthProviderError ? e.reason : 'failed';
+  const isApple = provider === 'apple_health';
+
+  // Health Connect (or Apple Health) isn't there to connect to.
+  if (reason === 'update_required' || reason === 'unavailable') {
+    if (isApple) {
+      Alert.alert('Apple Health not found', 'Check that Apple Health is available on your iPhone.');
+      return;
+    }
+    // Health Connect supports Android 9 (API 28) and up; on Android 8 there
+    // is nothing to install, so don't offer the Play Store.
+    const canInstall = typeof Platform.Version === 'number' && Platform.Version >= 28;
+    if (!canInstall) {
+      Alert.alert('Not supported', 'Health Connect needs Android 9 or newer.');
+      return;
+    }
+    Alert.alert('Health Connect not found', 'Install or update Health Connect, then try again.', [
+      { text: 'Not now', style: 'cancel' },
+      {
+        text: 'Install',
+        onPress: () =>
+          Linking.openURL(HEALTH_CONNECT_STORE_URL).catch(() =>
+            Linking.openURL(HEALTH_CONNECT_STORE_WEB_URL).catch(() => {})
+          ),
+      },
+    ]);
+    return;
+  }
+
+  if (reason === 'denied') {
+    Alert.alert(
+      'Permission needed',
+      isApple ? 'Allow HunterX to read Steps in the Health app.' : 'Allow HunterX to read Steps in Health Connect.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        {
+          text: 'Open settings',
+          onPress: () => {
+            (isApple ? appleHealthAdapter : healthConnectAdapter).openSettings();
+          },
+        },
+      ]
+    );
+    return;
+  }
+
+  // Unexpected: keep the user-facing text short; details go to the dev log.
+  devWarn('[ConnectHealthView] connect failed:', e);
+  Alert.alert('Connection failed', "Couldn't connect to your health data. Please try again.");
+}
+
 export function ConnectHealthView({
   onBack,
   showBackButton = false,
   onConnectedSuccess,
   isModal = false,
 }: ConnectHealthViewProps) {
+  const pageScrollRef = useRef<ScrollView>(null);
+  useScrollToTopOnFocus(pageScrollRef);
   const insets = useSafeAreaInsets();
 
   const {
@@ -51,23 +117,6 @@ export function ConnectHealthView({
       disconnectProvider: state.disconnectProvider,
     }))
   );
-
-  useEffect(() => {
-    console.log('====================================================');
-    console.log(`🔌 [ConnectHealthView] Connect Screen Mounted on ${Platform.OS}`);
-    if (Platform.OS === 'android') {
-      console.log('   Checking Android Health Connect SDK availability...');
-      healthConnectAdapter.isAvailable().then((avail) => {
-        console.log(`   Health Connect isAvailable result on mount: ${avail}`);
-      });
-    } else if (Platform.OS === 'ios') {
-      console.log('   Checking iOS Apple Health availability...');
-      appleHealthAdapter.isAvailable().then((avail) => {
-        console.log(`   Apple Health isAvailable result on mount: ${avail}`);
-      });
-    }
-    console.log('====================================================');
-  }, []);
 
   const [selectedProvider, setSelectedProvider] = useState<
     'apple_health' | 'health_connect' | null
@@ -114,19 +163,10 @@ export function ConnectHealthView({
         onConnectedSuccess();
       }
     } catch (e) {
-      Alert.alert('Connection Failed', 'Could not link health provider. Please try again.');
+      showConnectError(provider, e);
     } finally {
       setConnectingProvider(null);
     }
-  };
-
-  const handleHelpPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert(
-      'Health Integration',
-      'HunterX reads your steps, calories, active minutes, heart rate, and sleep data locally from Apple HealthKit or Android Health Connect. Your data never leaves your device unencrypted.',
-      [{ text: 'Got it' }]
-    );
   };
 
   const hasBack = showBackButton && !!onBack;
@@ -144,6 +184,7 @@ export function ConnectHealthView({
       <HealthBackgroundDecor />
 
       <ScrollView
+        ref={pageScrollRef}
         bounces={false}
         overScrollMode="never"
         contentContainerStyle={[

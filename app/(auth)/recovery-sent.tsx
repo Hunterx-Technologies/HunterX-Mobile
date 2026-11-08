@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -22,6 +22,8 @@ const easeOutCubic = Easing.out(Easing.cubic);
 
 export default function RecoverySentScreen() {
   const { height: screenHeight } = useWindowDimensions();
+  // Same spot as the other auth screens: just under the status bar / notch.
+  const insets = useSafeAreaInsets();
   // Icon starts at 28% from top of the screen, matching the reference image
   const iconTopOffset = screenHeight * 0.28;
 
@@ -134,7 +136,7 @@ export default function RecoverySentScreen() {
         type: 'success',
         text:
           msg ||
-          "If an account exists for this email, we have sent instructions to reset your Secret Key. Check your spam folder if it does not arrive within 2 minutes.",
+          "We have sent instructions to reset your Secret Key to this email. Check your spam folder if it does not arrive within 2 minutes.",
       });
       setCountdown(60);
     } catch (err: any) {
@@ -154,7 +156,7 @@ export default function RecoverySentScreen() {
     <Animated.View style={[styles.container, { opacity: bgOpacity }]}>
       <SafeAreaView style={styles.safe}>
         {/* ── Back Button ─────────────────────────────────────────────── */}
-        <Animated.View style={[styles.backButtonWrapper, { opacity: backOp }]}>
+        <Animated.View style={[styles.backButtonWrapper, { top: insets.top + 10, opacity: backOp }]}>
           <Pressable
             onPress={() => router.back()}
             hitSlop={12}
@@ -200,7 +202,7 @@ export default function RecoverySentScreen() {
             ]}
           >
             {message ||
-              "If an account exists for this email, we've sent instructions to reset your password. Check your spam folder if it doesn't arrive within 2 minutes."}
+              "We've sent instructions to reset your password to this email. Check your spam folder if it doesn't arrive within 2 minutes."}
           </Animated.Text>
         </View>
 
@@ -299,7 +301,6 @@ const styles = StyleSheet.create({
   // Back button
   backButtonWrapper: {
     position: 'absolute',
-    top: 54,
     left: 20,
     zIndex: 10,
   },
