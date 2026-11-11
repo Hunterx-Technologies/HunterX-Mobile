@@ -15,6 +15,8 @@ export interface QuestItem {
   type: 'daily' | 'weekly' | 'monthly' | 'locked';
   /** Routine task the hunter chose (shown as "Routine"); other daily tasks show as "Daily". */
   isRoutine?: boolean;
+  /** A built-in daily task (sleep, water, protein, steps). Admins can rename these, so match them by category (tag), not title. */
+  isBuiltIn?: boolean;
   image: any;
   status: 'todo' | 'done' | 'partial' | 'skipped' | 'locked';
   earnedXp?: number;
@@ -112,6 +114,7 @@ export function mapTaskToQuest(
     type,
     // Older backends don't send is_routine; built-in routine tasks are DAILY_FIXED.
     isRoutine: item.is_routine ?? item.task_type === 'DAILY_FIXED',
+    isBuiltIn: item.task_type === 'DAILY_FIXED',
     image,
     status,
     earnedXp: item.xp_earned,

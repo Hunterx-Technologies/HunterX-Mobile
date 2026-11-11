@@ -74,7 +74,9 @@ function AnimatedWrongButton({ onPress }: { onPress: () => void }) {
 
 function getQuestTargetValue(quest: QuestItem, proteinGoal?: number | null): string | undefined {
   if (quest.targetValue) return quest.targetValue;
-  if (quest.title === "Protein Goal" && proteinGoal) return `${proteinGoal}g`;
+  // The built-in protein task (tag NUTRITION); admins can rename it, so not by title.
+  const isProteinTask = quest.isBuiltIn ? quest.category?.toUpperCase() === "NUTRITION" : quest.title === "Protein Goal";
+  if (isProteinTask && proteinGoal) return `${proteinGoal}g`;
   return undefined;
 }
 
