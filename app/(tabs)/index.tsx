@@ -50,7 +50,7 @@ import { useAvatarsReady } from '@/services/api/avatar.service';
 import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
 import { setCelebrationHold, showReward, useCelebrationStore } from '@/store/useCelebrationStore';
 import { syncStreakBadges, useStreakBadgeSync } from '@/hooks/useStreakBadgeSync';
-import { DeletionPendingBanner } from '@/components/common/DeletionPendingBanner';
+import { DeletionPendingNotice } from '@/components/common/DeletionPendingNotice';
 import { API_ERROR, PENDING_DELETION_MESSAGE, getApiErrorCode } from '@/services/api/errors';
 import { showLevelUpFromApi } from '@/store/useLevelUpStore';
 import { useStreakBreakStore } from '@/store/useStreakBreakStore';
@@ -722,8 +722,8 @@ export default function MissionsHomeScreen() {
           </View>
         </View>
 
-        {/* Account deletion pending */}
-        <DeletionPendingBanner />
+        {/* Account deletion pending: links to Profile ("Keep my account") */}
+        <DeletionPendingNotice />
 
         {/* ACTIVE CAMPAIGN SECTION */}
         <View style={styles.sectionHeaderRow}>
