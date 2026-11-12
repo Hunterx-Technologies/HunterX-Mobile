@@ -29,10 +29,13 @@ import { colors } from '@/theme/colors';
 
 // 768px copy of app_logo.png — drawn at ≤ ~460px; the 1024px original cost
 // low-end phones an extra ~1.7 MB bitmap decode in the middle of the animation.
-const LOGO = require('../../assets/images/splash/logo_full.png');
-const TILE = require('../../assets/images/splash/logo_tile.jpg');
-const STROKE = require('../../assets/images/splash/logo_stroke.png');
-const SWORD = require('../../assets/images/splash/logo_sword.png');
+// 512px WebP: the logo is drawn at most ~154dp wide, so this is still ~3.3x
+// for sharp high-DPI screens. The old 768px PNGs (1.2 MB) were decoded at
+// launch, right as the animation started, and stuttered on low-end phones.
+const LOGO = require('../../assets/images/splash/logo_full.webp');
+const TILE = require('../../assets/images/splash/logo_tile.webp');
+const STROKE = require('../../assets/images/splash/logo_stroke.webp');
+const SWORD = require('../../assets/images/splash/logo_sword.webp');
 
 // The logo PNG is a rounded square on a black canvas (about 66–957 px of
 // 1024). It is drawn slightly larger than its clip so only the square shows.
