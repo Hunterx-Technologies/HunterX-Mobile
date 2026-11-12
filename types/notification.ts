@@ -14,7 +14,11 @@ export type NotificationType =
   | 'LEADERBOARD_UPDATE'
   | 'FEEDBACK_UPDATE'
   | 'HEALTH_SYNC'
-  | 'WIN_BACK';
+  | 'WIN_BACK'
+  | 'ACCOUNT_DELETION'
+  | 'ACCOUNT_DELETION_REMINDER'
+  | 'FRIEND_REQUEST'
+  | 'FRIEND_ACCEPTED';
 
 export interface AppNotification {
   id: string;

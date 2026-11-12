@@ -19,6 +19,10 @@ import { Screen } from '@/components/common/Screen';
 import { Skeleton } from '@/components/common/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchNotifications, markNotificationsRead } from '@/services/api/notifications.service';
+import { acceptFriendRequest, declineFriendRequest } from '@/services/api/friends.service';
+import { getApiErrorCode } from '@/services/api/errors';
+import { useFriendsStore } from '@/store/useFriendsStore';
+import { showGlobalToast } from '@/store/useToastStore';
 import {
   getPushPermission,
   requestPushPermission,
@@ -51,6 +55,10 @@ const TYPE_ICON: Record<string, { icon: IconName; color: string }> = {
   FEEDBACK_UPDATE: { icon: 'chatbox-ellipses-outline', color: palette.green },
   HEALTH_SYNC: { icon: 'pulse-outline', color: palette.red },
   WIN_BACK: { icon: 'hourglass-outline', color: palette.gold },
+  ACCOUNT_DELETION: { icon: 'warning-outline', color: palette.red },
+  ACCOUNT_DELETION_REMINDER: { icon: 'alarm-outline', color: palette.red },
+  FRIEND_REQUEST: { icon: 'person-add-outline', color: palette.orange },
+  FRIEND_ACCEPTED: { icon: 'people', color: palette.orange },
 };
 const DEFAULT_ICON = { icon: 'notifications-outline' as IconName, color: palette.silver };
 
@@ -126,6 +134,35 @@ export default function NotificationsScreen() {
     }
   }, [nextCursor]);
 
+  // Friend requests are answered right in the list. Remembers the answer per
+  // notification so the buttons turn into a short status line.
+  const [answered, setAnswered] = useState<Record<string, 'friends' | 'declined' | 'gone'>>({});
+  const [answering, setAnswering] = useState<string | null>(null);
+  const applyRelationship = useFriendsStore((s) => s.applyRelationship);
+  const answerRequest = useCallback(async (item: AppNotification, accept: boolean) => {
+    const fromId = String(item.data?.from_user_id ?? '');
+    if (!fromId || answering) return;
+    setAnswering(item.id);
+    Haptics.selectionAsync().catch(() => { });
+    try {
+      const { relationship } = accept ? await acceptFriendRequest(fromId) : await declineFriendRequest(fromId);
+      applyRelationship(fromId, relationship);
+      setAnswered((prev) => ({ ...prev, [item.id]: accept ? 'friends' : 'declined' }));
+      if (!item.is_read) {
+        setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n)));
+        markNotificationsRead([item.id]).then(setUnreadCount).catch(() => { });
+      }
+    } catch (err) {
+      if (getApiErrorCode(err) === 'NO_PENDING_REQUEST') {
+        setAnswered((prev) => ({ ...prev, [item.id]: 'gone' }));
+      } else {
+        showGlobalToast(err instanceof Error && err.message ? err.message : 'Something went wrong. Please try again.', 'error');
+      }
+    } finally {
+      setAnswering(null);
+    }
+  }, [answering, applyRelationship, setUnreadCount]);
+
   const handlePressItem = useCallback(async (item: AppNotification) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
     if (!item.is_read) {
@@ -182,6 +219,38 @@ export default function NotificationsScreen() {
           <Text style={styles.itemBody} numberOfLines={2}>
             {item.body}
           </Text>
+          {item.type === 'FRIEND_REQUEST' && item.data?.from_user_id ? (
+            answered[item.id] ? (
+              <Text style={styles.friendAnswer}>
+                {answered[item.id] === 'friends' ? "✓ You're now friends" : answered[item.id] === 'declined' ? 'Declined' : 'This request is no longer waiting'}
+              </Text>
+            ) : (
+              <View style={styles.friendActions}>
+                <TouchableOpacity
+                  style={styles.friendDecline}
+                  onPress={() => answerRequest(item, false)}
+                  disabled={answering !== null}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Decline friend request"
+                >
+                  <Text style={styles.friendDeclineText}>Decline</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.friendAccept}
+                  onPress={() => answerRequest(item, true)}
+                  disabled={answering !== null}
+                  activeOpacity={0.85}
+                  accessibilityLabel="Accept friend request"
+                >
+                  {answering === item.id ? (
+                    <ActivityIndicator size="small" color="#000000" />
+                  ) : (
+                    <Text style={styles.friendAcceptText}>Accept</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )
+          ) : null}
         </View>
         {!item.is_read ? <View style={styles.unreadDot} /> : null}
       </TouchableOpacity>
@@ -367,6 +436,46 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.regular,
     fontSize: 13,
     lineHeight: 18,
+    color: palette.textSecondary,
+  },
+  friendActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  friendDecline: {
+    height: 32,
+    minWidth: 84,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  friendDeclineText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+  friendAccept: {
+    height: 32,
+    minWidth: 84,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: palette.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  friendAcceptText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 13,
+    color: '#000000',
+  },
+  friendAnswer: {
+    marginTop: 6,
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 12.5,
     color: palette.textSecondary,
   },
   unreadDot: {
