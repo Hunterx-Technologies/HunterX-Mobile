@@ -489,9 +489,20 @@ export default function LeaderboardScreen() {
             }
             onScroll={handleScroll}
             scrollEventThrottle={16}
-            contentContainerStyle={[styles.scrollContent, { paddingTop: HERO_SPACER }]}
+            // At least a screen taller than the hero, so switching to a short
+            // scope (Friends) can scroll to the pinned tabs straight away.
+            // Shorter, Android held that scroll and applied it once the
+            // rows loaded — the page jumped under the user's finger.
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingTop: HERO_SPACER },
+              viewportHeight > 0 && { minHeight: viewportHeight + HERO_SPACER },
+            ]}
             // Rows above the viewer's (intro, top 3) can change height.
             onContentSizeChange={measureMeRow}
+            // Taps on Find / Accept go through while the keyboard is open
+            // (otherwise the first tap only closes the keyboard).
+            keyboardShouldPersistTaps="handled"
             onEndReached={handleEndReached}
             onEndReachedThreshold={1.5}
             onMomentumScrollBegin={() => {

@@ -140,8 +140,10 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
         const { relationship: next } = await run(card.userId);
         const updated = { ...card, relationship: next, friendsSince: next === 'friends' ? new Date().toISOString() : null };
         setCard(updated);
-        rememberCard(updated);
+        // Store first: it compares with the cached card to know whether the
+        // Friends leaderboard changed (e.g. friends → none), then cache the new one.
         applyRelationship(card.userId, next);
+        rememberCard(updated);
         if (toast) showGlobalToast(toast, 'success');
       } catch (err) {
         const message = err instanceof Error && err.message ? err.message : 'Something went wrong. Please try again.';
@@ -163,8 +165,8 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
       await addFriendByInviteLink(target.code);
       const updated = { ...card, relationship: 'friends' as const, friendsSince: new Date().toISOString() };
       setCard(updated);
-      rememberCard(updated);
       applyRelationship(card.userId, 'friends');
+      rememberCard(updated);
       showGlobalToast(`You and ${card.name} are now friends.`, 'success');
       onBecameFriends?.(updated);
     } catch (err) {

@@ -139,6 +139,18 @@ export default function NotificationsScreen() {
   const [answered, setAnswered] = useState<Record<string, 'friends' | 'declined' | 'gone'>>({});
   const [answering, setAnswering] = useState<string | null>(null);
   const applyRelationship = useFriendsStore((s) => s.applyRelationship);
+  // Buttons only on requests still waiting — one already answered elsewhere
+  // (the Friends tab, another device) shows no buttons.
+  const waitingFrom = useFriendsStore((s) => s.requests);
+  const requestsLoaded = useFriendsStore((s) => s.requestsLoaded);
+  const loadFriendRequests = useFriendsStore((s) => s.loadRequests);
+  useEffect(() => {
+    loadFriendRequests();
+  }, [loadFriendRequests]);
+  const isWaiting = useCallback(
+    (fromId: unknown) => requestsLoaded && waitingFrom.some((r) => r.userId === String(fromId)),
+    [requestsLoaded, waitingFrom]
+  );
   const answerRequest = useCallback(async (item: AppNotification, accept: boolean) => {
     const fromId = String(item.data?.from_user_id ?? '');
     if (!fromId || answering) return;
@@ -219,7 +231,7 @@ export default function NotificationsScreen() {
           <Text style={styles.itemBody} numberOfLines={2}>
             {item.body}
           </Text>
-          {item.type === 'FRIEND_REQUEST' && item.data?.from_user_id ? (
+          {item.type === 'FRIEND_REQUEST' && item.data?.from_user_id && (answered[item.id] || isWaiting(item.data.from_user_id)) ? (
             answered[item.id] ? (
               <Text style={styles.friendAnswer}>
                 {answered[item.id] === 'friends' ? "✓ You're now friends" : answered[item.id] === 'declined' ? 'Declined' : 'This request is no longer waiting'}
