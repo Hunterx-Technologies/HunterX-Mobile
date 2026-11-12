@@ -438,6 +438,10 @@ export default function RewardsScreen() {
                     key={item.id}
                     width={GRID_CARD_WIDTH}
                     height={GRID_CARD_HEIGHT}
+                    // Still in the grid: 4 endless loops per card made the
+                    // wallet stutter on low-end phones. The card being
+                    // scratched (ScratchCardReward) still animates.
+                    animateGlow={false}
                     isExpired={item.isExpired}
                     footerText={item.isExpired ? 'EXPIRED' : 'DRAG TO SCRATCH'}
                     onPress={() => openCard(item)}

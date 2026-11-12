@@ -165,7 +165,8 @@ export const HunterXCard: React.FC<HunterXCardProps> = ({
 
         {/* 5. Center 3D Faceted HunterX Emblem */}
         <View style={styles.centerContainer} pointerEvents="none">
-          <HunterXEmblem size={calculatedEmblemSize} glow={!isExpired} />
+          {/* Still emblem too when the card isn't animating (grid cards). */}
+          <HunterXEmblem size={calculatedEmblemSize} glow={!isExpired} animated={animateGlow} />
         </View>
 
         {/* 5. Bottom "DRAG TO SCRATCH" Footer */}
