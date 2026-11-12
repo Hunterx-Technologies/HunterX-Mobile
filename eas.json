@@ -6,11 +6,17 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "development"
+      }
     },
     "preview": {
       "distribution": "internal",
       "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api-uat.hunterx.co.in/api"
+      },
       "android": {
         "buildType": "apk"
       }
@@ -37,7 +43,15 @@
     }
   },
   "submit": {
-    "production": {},
-    "testflight": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6831613229"
+      }
+    },
+    "testflight": {
+      "ios": {
+        "ascAppId": "6831613229"
+      }
+    }
   }
 }
