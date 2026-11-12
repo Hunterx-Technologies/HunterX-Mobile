@@ -23,6 +23,6 @@ export const isApiError = (err: unknown, code: string) => getApiErrorCode(err) =
 
 /** Shown when a quest or reward action is refused because deletion is pending. */
 export const PENDING_DELETION_MESSAGE =
-  'Your account is scheduled for deletion. Tap “Keep my account” on the banner to continue.';
+  'Your account is scheduled for deletion. Open Profile and tap “Keep my account” to continue.';
 
 export const PENDING_RESTORE_MESSAGE = 'This account is scheduled for deletion. Log in to restore it.';
