@@ -2,7 +2,8 @@
 // spaces) and emoji can't be typed anywhere in the app. Pick the one that
 // fits the field:
 //
-//   cleanName      names: no emoji, no leading spaces, single spaces between words
+//   cleanName      names: letters and single spaces only (no digits, symbols,
+//                  emoji or leading spaces)
 //   cleanFreeText  messages/search: no emoji, no leading spaces or blank
 //                  lines; the text itself (spacing, line breaks) is kept
 //   noSpaces       emails, new passwords: no emoji, no spaces at all
@@ -28,9 +29,20 @@ export function noEmoji(text: string): string {
   return text.replace(EMOJI, '');
 }
 
-/** "  john   smith" → "john smith" (a trailing space is kept while typing). */
+// Anything that isn't a letter (any script, plus its combining marks — Tamil
+// and Hindi vowel signs are marks) or a space. No digits in names.
+const NOT_NAME_CHAR = /[^\p{L}\p{M} ]/gu;
+
+/**
+ * "  john   smith#@!99" → "john smith" (a trailing space is kept while typing).
+ * Names allow only letters and single spaces — no digits, symbols or emoji.
+ */
 export function cleanName(text: string): string {
-  return noEmoji(text).replace(/^\s+/, '').replace(/\s{2,}/g, ' ');
+  return noEmoji(text)
+    .replace(/\s/g, ' ')
+    .replace(NOT_NAME_CHAR, '')
+    .replace(/^ +/, '')
+    .replace(/ {2,}/g, ' ');
 }
 
 /** Drops emoji, leading spaces and blank lines; keeps everything after them. */

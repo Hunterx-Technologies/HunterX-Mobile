@@ -23,8 +23,10 @@ export function EditNameModal({
   }, [initialName, visible]);
 
   const handleSave = () => {
-    if (!name.trim()) return;
-    onSave(name.trim());
+    // Re-clean in case the pre-filled name predates the name rules.
+    const finalName = cleanName(name).trim();
+    if (!finalName) return;
+    onSave(finalName);
     onClose();
   };
 

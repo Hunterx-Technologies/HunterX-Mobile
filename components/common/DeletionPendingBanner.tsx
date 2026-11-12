@@ -9,8 +9,8 @@ import { deletionTimeLeft } from '@/utils/accountDeletion';
 import { fontFamilies } from '@/theme/typography';
 
 /**
- * "Your account will be deleted in N days" + "Keep my account", shown at the
- * top of Profile and Home while the account waits to be deleted (the
+ * "Your account will be deleted in N days" + "Keep my account", shown in
+ * the Profile card (under the XP bar) while the account waits to be deleted (the
  * signed-in user's deleteAt, from /me). Renders nothing otherwise.
  */
 export function DeletionPendingBanner({ style }: { style?: object }) {
@@ -56,7 +56,7 @@ export function DeletionPendingBanner({ style }: { style?: object }) {
       accessibilityLabel={`Your account will be deleted in ${timeLeft}.`}
     >
       <View style={styles.textRow}>
-        <Ionicons name="warning" size={18} color="#F97316" />
+        <Ionicons name="warning" size={18} color="#EF4444" />
         <Text style={styles.text}>
           Your account will be deleted in <Text style={styles.strong}>{timeLeft}</Text>.
         </Text>
@@ -83,8 +83,9 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(249, 115, 22, 0.45)',
-    backgroundColor: 'rgba(249, 115, 22, 0.10)',
+    borderColor: 'rgba(239, 68, 68, 0.5)',
+    // Near-opaque so the profile card's avatar artwork doesn't show through.
+    backgroundColor: 'rgba(38, 12, 12, 0.95)',
   },
   textRow: {
     flexDirection: 'row',
@@ -100,7 +101,7 @@ const styles = StyleSheet.create({
   },
   strong: {
     fontFamily: fontFamilies.bold,
-    color: '#FE5B01',
+    color: '#EF4444',
   },
   button: {
     alignSelf: 'stretch',

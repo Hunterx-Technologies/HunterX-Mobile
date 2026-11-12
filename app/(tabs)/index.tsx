@@ -605,6 +605,8 @@ export default function MissionsHomeScreen() {
   }, []);
 
   const handleDirectSkip = useCallback((questId: string) => {
+    // Paid quests can't be skipped.
+    if (questsRef.current.find((q) => q.id === questId)?.is_paid) return;
     handleCompleteTask(questId, 'SKIPPED');
   }, [handleCompleteTask]);
 

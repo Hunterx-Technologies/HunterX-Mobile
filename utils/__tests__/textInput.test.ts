@@ -28,6 +28,25 @@ describe('cleanName', () => {
     expect(cleanName('            ')).toBe('');
     expect(cleanName('🔥🔥')).toBe('');
   });
+  it('drops special characters', () => {
+    expect(cleanName('#(*&@#(!@&#(@!&*#(')).toBe('');
+    expect(cleanName("Shadow_Hunter#99! O'Brien-Lee.")).toBe('ShadowHunter OBrienLee');
+    expect(cleanName('₹€$ John © ™')).toBe('John ');
+  });
+  it('a name made only of symbols and spaces becomes empty', () => {
+    expect(cleanName('  @@  ##  ')).toBe('');
+  });
+  it('keeps letters in any script, including combining marks', () => {
+    expect(cleanName('शक्ति தமிழ் 名前 Café')).toBe('शक्ति தமிழ் 名前 Café');
+  });
+  it('drops digits, in any script', () => {
+    expect(cleanName('Hunter123')).toBe('Hunter');
+    expect(cleanName('12345')).toBe('');
+    expect(cleanName('Raj ٣٤ ४५ Kumar')).toBe('Raj Kumar');
+  });
+  it('turns tabs and newlines into single spaces', () => {
+    expect(cleanName('John\t\nSmith')).toBe('John Smith');
+  });
 });
 
 describe('cleanFreeText', () => {

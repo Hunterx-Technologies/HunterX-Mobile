@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -192,7 +193,9 @@ export function RateHunterModal({ visible, onClose }: RateHunterModalProps) {
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          // Android too: this is a Modal (its own window) and the app is
+          // edge-to-edge, so the system won't resize it for the keyboard.
+          behavior="padding"
         >
           <ScrollView
             bounces={false}
@@ -336,9 +339,14 @@ export function RateHunterModal({ visible, onClose }: RateHunterModalProps) {
                     multiline
                     numberOfLines={3}
                     onFocus={() => {
-                      setTimeout(() => {
+                      // Scroll once the keyboard is up and the view has
+                      // shrunk; a fixed delay fires too early on Android.
+                      const sub = Keyboard.addListener('keyboardDidShow', () => {
+                        sub.remove();
                         scrollRef.current?.scrollToEnd({ animated: true });
-                      }, 150);
+                      });
+                      setTimeout(() => sub.remove(), 1000);
+                      scrollRef.current?.scrollToEnd({ animated: true });
                     }}
                   />
 

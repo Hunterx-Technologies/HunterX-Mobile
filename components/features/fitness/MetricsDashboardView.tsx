@@ -95,10 +95,10 @@ export function MetricsDashboardView({
         { text: 'Sync Now', onPress: () => syncNow() },
         {
           text: 'Change Connection',
-          onPress: () => {
-            disconnectProvider();
-            if (onBack) onBack();
-          },
+          // Disconnecting flips the Metrics tab to ConnectHealthView in
+          // place, so the user picks a provider again. Don't also go back:
+          // that navigated away to Home.
+          onPress: () => disconnectProvider(),
         },
         { text: 'Close', style: 'cancel' },
       ]

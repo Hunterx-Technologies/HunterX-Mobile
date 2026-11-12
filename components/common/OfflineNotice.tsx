@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { colors } from '@/theme/colors';
@@ -28,8 +28,10 @@ export function OfflineNotice() {
       transparent
       animationType="fade"
       statusBarTranslucent
-      // Android back button: nothing to go back to while offline.
-      onRequestClose={() => {}}
+      // Android back button: there's nothing to go back to while offline,
+      // so it closes the app like back on any root screen. (A no-op here
+      // swallowed it — the Modal gets the press, not the screen behind.)
+      onRequestClose={() => BackHandler.exitApp()}
     >
       <View style={styles.overlay}>
         <View style={styles.card} accessibilityRole="alert">

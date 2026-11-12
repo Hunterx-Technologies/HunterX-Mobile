@@ -114,7 +114,6 @@ export default function ProfileScreen() {
   // Confirm Dialogs
   const [isLogoutConfirmVisible, setIsLogoutConfirmVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
   const [isStartingDeletion, setIsStartingDeletion] = useState(false);
 
   // Account Deletion Checker
@@ -313,11 +312,7 @@ export default function ProfileScreen() {
     router.replace('/(auth)/login');
   };
 
-  const handleDeleteAccount = () => {
-    setIsDeleteConfirmVisible(true);
-  };
-
-  // Delete Account → confirm → a one-time link to the website, which
+  // Delete Account (Edit Profile, which shows the confirm dialog) → a one-time link to the website, which
   // schedules the deletion (30-day grace). When the in-app browser closes,
   // /me is reloaded so the banner shows straight away if it was confirmed.
   const confirmDeleteAccount = async () => {
@@ -325,7 +320,6 @@ export default function ProfileScreen() {
     setIsStartingDeletion(true);
     try {
       const url = await createAccountDeletionLink();
-      setIsDeleteConfirmVisible(false);
       setIsEditProfileModalVisible(false);
       await WebBrowser.openBrowserAsync(url, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
@@ -464,9 +458,6 @@ export default function ProfileScreen() {
           <Text style={styles.headerTitle}>Hunter Profile</Text>
         </View>
 
-        {/* Account deletion pending */}
-        <DeletionPendingBanner />
-
         {/* TOP PROFILE SECTION */}
         <View style={styles.profileCard}>
           {/* Character Artwork Background */}
@@ -567,6 +558,9 @@ export default function ProfileScreen() {
               {xpUntilNext.toLocaleString()} XP until <Text style={styles.xpBoldText}>next rank</Text>
             </Text>
           </View>
+
+          {/* Account deletion pending */}
+          <DeletionPendingBanner style={styles.deletionBanner} />
         </View>
 
         {/* MAIN MENU OPTIONS CARD */}
@@ -728,7 +722,8 @@ export default function ProfileScreen() {
             setIsEditProfileModalVisible(false);
             setIsAvatarModalVisible(true);
           }}
-          onDeleteAccount={handleDeleteAccount}
+          onDeleteAccount={confirmDeleteAccount}
+          isDeletingAccount={isStartingDeletion}
         />
       </MountWhenOpened>
 
@@ -772,17 +767,6 @@ export default function ProfileScreen() {
         loading={isLoggingOut}
         onConfirm={confirmLogout}
         onCancel={() => setIsLogoutConfirmVisible(false)}
-      />
-
-      <ConfirmDialog
-        visible={isDeleteConfirmVisible}
-        title="Delete Account"
-        message="Your account will be deactivated now and permanently deleted after 30 days. Log in before then to cancel. XP, streaks and unused rewards will be lost."
-        confirmLabel="Continue"
-        destructive
-        loading={isStartingDeletion}
-        onConfirm={confirmDeleteAccount}
-        onCancel={() => setIsDeleteConfirmVisible(false)}
       />
     </Screen>
   );
@@ -988,6 +972,11 @@ const styles = StyleSheet.create({
     borderColor: '#3F3F46',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  deletionBanner: {
+    marginHorizontal: 0,
+    marginTop: 16,
+    marginBottom: 4,
   },
   xpSection: {
     marginTop: 18,

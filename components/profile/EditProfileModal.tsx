@@ -13,6 +13,7 @@ import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { GoogleIcon } from '@/components/common/GoogleIcon';
 import { HunterToast } from '@/components/common/HunterToast';
 import { Screen } from '@/components/common/Screen';
@@ -91,7 +92,10 @@ export interface EditProfileModalProps {
   unitSystem: 'metric' | 'imperial';
   onSave: (updatedForm: EditProfileFormData) => Promise<void> | void;
   onOpenAvatarPicker?: () => void;
-  onDeleteAccount: () => void;
+  /** Runs once the user confirms the Delete Account dialog. */
+  onDeleteAccount: () => Promise<void> | void;
+  /** Shows a spinner on the dialog's Continue button while deletion starts. */
+  isDeletingAccount?: boolean;
 }
 
 export function EditProfileModal({
@@ -102,10 +106,18 @@ export function EditProfileModal({
   onSave,
   onOpenAvatarPicker,
   onDeleteAccount,
+  isDeletingAccount = false,
 }: EditProfileModalProps) {
   // Re-renders once the avatar catalog loads so the header preview reflects
   // the user's actual avatar_id instead of the generic fallback image.
   useAvatarsReady();
+
+  // The confirm dialog lives inside this full-screen Modal so it opens on
+  // top of it — rendered from the Profile screen it appeared behind/outside.
+  const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+  useEffect(() => {
+    if (!visible) setIsDeleteConfirmVisible(false);
+  }, [visible]);
 
   const [profileForm, setProfileForm] = useState<EditProfileFormData>({
     name: 'Shadow Hunter',
@@ -286,11 +298,14 @@ export function EditProfileModal({
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!profileForm.name.trim() || isSaving) return;
+    // Re-clean in case the pre-filled name predates the name rules.
+    const finalName = cleanName(profileForm.name).trim();
+    if (!finalName || isSaving) return;
     try {
       setIsSaving(true);
       await onSave({
         ...profileForm,
+        name: finalName,
         avatar_id: selectedAvatarId !== null && selectedAvatarId !== undefined ? selectedAvatarId : undefined,
         avatar_url: selectedAvatarUrl || undefined,
       });
@@ -715,7 +730,7 @@ export function EditProfileModal({
           {/* Delete Account */}
           <TouchableOpacity
             style={styles.deleteAccountContainer}
-            onPress={onDeleteAccount}
+            onPress={() => setIsDeleteConfirmVisible(true)}
           >
             <Ionicons
               name="trash-outline"
@@ -935,6 +950,17 @@ export function EditProfileModal({
             setSelectedAvatarUrl(avatarUrl);
             setIsAvatarModalVisible(false);
           }}
+        />
+
+        <ConfirmDialog
+          visible={isDeleteConfirmVisible}
+          title="Delete Account"
+          message="Your account will be deactivated now and permanently deleted after 30 days. Log in before then to cancel. XP, streaks and unused rewards will be lost."
+          confirmLabel="Continue"
+          destructive
+          loading={isDeletingAccount}
+          onConfirm={onDeleteAccount}
+          onCancel={() => setIsDeleteConfirmVisible(false)}
         />
       </Screen>
     </Modal>

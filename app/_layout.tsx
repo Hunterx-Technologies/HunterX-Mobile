@@ -102,13 +102,14 @@ function OnboardingGate() {
   const segments = useSegments();
   const isSignedIn = useAuthStore((s) => s.user !== null);
   const isOnboarded = useAuthStore((s) => s.isOnboarded);
+  const answersSaved = useAuthStore((s) => !!s.user?.onboarding_done);
   const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   const group = segments[0];
 
   // undefined = app/index.tsx, which routes by itself.
   const selfGuarded =
     group === undefined || group === '(auth)' || group === '(onboarding)' || group === '(tabs)';
-  const target: '/(auth)/login' | '/(onboarding)/name' | null =
+  const target: '/(auth)/login' | '/(onboarding)/name' | '/(onboarding)/ascension' | null =
     isBootstrapping || selfGuarded
       ? null
       : !isSignedIn
@@ -116,7 +117,10 @@ function OnboardingGate() {
           ? null
           : '/(auth)/login'
         : !isOnboarded
-          ? '/(onboarding)/name'
+          ? // Answers saved, Ascension not shown yet → Ascension; else step 1.
+            answersSaved
+            ? '/(onboarding)/ascension'
+            : '/(onboarding)/name'
           : null;
 
   useEffect(() => {

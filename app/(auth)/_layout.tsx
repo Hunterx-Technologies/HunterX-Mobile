@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { confirmExitApp } from '@/utils/confirmExitApp';
 
 export default function AuthLayout() {
-  const { isAuthenticated, isOnboarded, isBootstrapping } = useAuth();
+  const { user, isAuthenticated, isOnboarded, isBootstrapping } = useAuth();
   const pathname = usePathname();
 
   // Hardware back button handler to prevent navigating back into authenticated screens from auth pages
@@ -39,7 +39,10 @@ export default function AuthLayout() {
   // If user is already authenticated, prevent them from accessing login/auth screens
   if (isAuthenticated) {
     if (!isOnboarded) {
-      return <Redirect href="/(onboarding)/name" />;
+      // Answers already saved (sign-up, or Google/Apple from the Signup
+      // screen) but Ascension not shown yet → Ascension. Only an account
+      // without saved answers starts the wizard from step 1.
+      return <Redirect href={user?.onboarding_done ? '/(onboarding)/ascension' : '/(onboarding)/name'} />;
     }
     return <Redirect href="/(tabs)" />;
   }

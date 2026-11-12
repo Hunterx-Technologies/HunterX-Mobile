@@ -66,7 +66,7 @@ export function PaidTaskPurchaseModal({
             </TouchableOpacity>
 
             <View style={styles.lockBadge}>
-              <Ionicons name="lock-closed" size={14} color="#F59E0B" />
+              <Ionicons name="lock-closed" size={14} color="#FE5B01" />
               <Text style={styles.lockBadgeText}>PREMIUM QUEST</Text>
             </View>
           </View>
@@ -78,7 +78,6 @@ export function PaidTaskPurchaseModal({
                 <Text style={styles.tagText}>{quest.category}</Text>
               </View>
               <View style={styles.xpPill}>
-                <Ionicons name="sparkles" size={12} color="#E5A93C" />
                 <Text style={styles.xpText}>+{quest.xpReward} XP</Text>
               </View>
             </View>
@@ -148,9 +147,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: "#121216",
     borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.25)",
+    borderColor: "rgba(254, 91, 1, 0.25)",
     overflow: "hidden",
-    shadowColor: "#F59E0B",
+    shadowColor: "#FE5B01",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.2,
     shadowRadius: 25,
@@ -199,12 +198,12 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.4)",
+    borderColor: "rgba(254, 91, 1, 0.4)",
   },
   lockBadgeText: {
     fontFamily: fontFamilies.bold,
     fontSize: 11,
-    color: "#F59E0B",
+    color: "#FE5B01",
     letterSpacing: 0.8,
   },
   body: {
@@ -232,17 +231,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(229, 169, 60, 0.12)",
+    backgroundColor: "rgba(254, 91, 1, 0.12)",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "rgba(229, 169, 60, 0.3)",
+    borderColor: "rgba(254, 91, 1, 0.3)",
   },
   xpText: {
     fontFamily: fontFamilies.bold,
     fontSize: 12,
-    color: "#E5A93C",
+    color: "#FE5B01",
   },
   title: {
     fontFamily: fontFamilies.bold,
@@ -301,7 +300,7 @@ const styles = StyleSheet.create({
   priceValue: {
     fontFamily: fontFamilies.bold,
     fontSize: 24,
-    color: "#F59E0B",
+    color: "#FE5B01",
     fontVariant: ["tabular-nums"],
   },
   buyBtn: {

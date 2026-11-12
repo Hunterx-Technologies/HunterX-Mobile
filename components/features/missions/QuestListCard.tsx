@@ -135,7 +135,8 @@ function QuestListCardComponent({
             {quest.showTickButton !== false && (
               <AnimatedTickButton onPress={() => onComplete(quest.id)} />
             )}
-            {quest.showWrongButton !== false && (
+            {/* Paid quests can't be skipped — they only have the done button. */}
+            {quest.showWrongButton !== false && !quest.is_paid && (
               <AnimatedWrongButton onPress={() => onSkip(quest.id)} />
             )}
           </View>
@@ -173,7 +174,7 @@ function QuestListCardComponent({
         {variant === "locked" && (
           <View style={styles.topRightActionsCol}>
             <View style={[styles.xpBadgeInline, styles.lockedPriceBadge]}>
-              <Ionicons name="lock-closed" size={12} color="#F59E0B" />
+              <Ionicons name="lock-closed" size={12} color="#FE5B01" />
               <Text style={styles.lockedPriceText}>₹{quest.price ?? 0}</Text>
             </View>
             <View style={styles.xpBadgeInline}>
@@ -201,32 +202,28 @@ function QuestListCardComponent({
                 {variant === "locked" ? "PREMIUM OFFER" : quest.category}
               </Text>
             </View>
-            <View style={styles.routineBadgeInline}>
-              <Ionicons
-                name={variant === "locked" ? "time-outline" : "repeat-outline"}
-                size={12}
-                color="#A1A1AA"
-              />
-              <Text style={styles.routineBadgeText}>
-                {variant === "locked"
-                  ? quest.end_date
-                    ? `Offer ends ${quest.end_date}`
-                    : "Limited offer"
-                  : quest.period_end
-                  ? `Ends ${quest.period_end}`
-                  : typeLabel}
-              </Text>
-            </View>
+            {/* A bought premium quest, now in the normal lists */}
+            {variant !== "locked" && quest.is_paid && (
+              <View style={[styles.categoryPill, styles.lockedCategoryPill]}>
+                <Text style={[styles.categoryPillText, styles.lockedCategoryPillText]}>PREMIUM</Text>
+              </View>
+            )}
+            {variant !== "locked" && (
+              <View style={styles.routineBadgeInline}>
+                <Ionicons name="repeat-outline" size={12} color="#A1A1AA" />
+                <Text style={styles.routineBadgeText}>
+                  {quest.period_end ? `Ends ${quest.period_end}` : typeLabel}
+                </Text>
+              </View>
+            )}
           </View>
           <Text style={styles.questTitle}>{quest.title}</Text>
-          {(quest.proofCount ?? 0) > 0 && variant !== "locked" && (
+          {/* No up-front "Photo proof" hint — the upload prompt appears when
+              the hunter taps done. Only show the status once proof is sent. */}
+          {(quest.proofCount ?? 0) > 0 && variant !== "locked" && quest.reviewStatus === "in_review" && (
             <View style={styles.proofRow}>
               <Ionicons name="camera-outline" size={12} color="#F66F28" />
-              <Text style={styles.proofText}>
-                {quest.reviewStatus === "in_review"
-                  ? "Proof sent · XP once approved"
-                  : `Photo proof · ${quest.proofCount} photo${quest.proofCount === 1 ? "" : "s"}`}
-              </Text>
+              <Text style={styles.proofText}>Proof sent · XP once approved</Text>
             </View>
           )}
           {(quest.reviewStatus === "resubmit" || quest.reviewStatus === "rejected") && !!quest.reviewNote && (
@@ -252,12 +249,12 @@ function QuestListCardComponent({
             onPress={() => onBuy?.(quest)}
           >
             <LinearGradient
-              colors={["#F59E0B", "#D97706"]}
+              colors={["#FF7A2E", "#FE5B01"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.buyButtonGradient}
             >
-              <Ionicons name="lock-open" size={13} color="#0A0A0A" />
+              <Ionicons name="lock-open" size={13} color="#FFFFFF" />
               <Text style={styles.buyButtonText}>BUY</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -296,7 +293,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   questCardLocked: {
-    borderColor: "rgba(245, 158, 11, 0.35)",
+    borderColor: "rgba(254, 91, 1, 0.35)",
   },
   questImageWrapper: {
     height: 115,
@@ -347,13 +344,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(245, 158, 11, 0.2)",
-    borderColor: "rgba(245, 158, 11, 0.4)",
+    backgroundColor: "rgba(254, 91, 1, 0.2)",
+    borderColor: "rgba(254, 91, 1, 0.4)",
   },
   lockedPriceText: {
     fontFamily: fontFamilies.bold,
     fontSize: 13,
-    color: "#F59E0B",
+    color: "#FE5B01",
   },
   reviewBadge: {
     flexDirection: "row",
@@ -432,11 +429,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   lockedCategoryPill: {
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
-    borderColor: "rgba(245, 158, 11, 0.35)",
+    backgroundColor: "rgba(254, 91, 1, 0.15)",
+    borderColor: "rgba(254, 91, 1, 0.35)",
   },
   lockedCategoryPillText: {
-    color: "#F59E0B",
+    color: "#FE5B01",
   },
   routineBadgeInline: {
     flexDirection: "row",
@@ -507,7 +504,7 @@ const styles = StyleSheet.create({
   buyButtonText: {
     fontFamily: fontFamilies.bold,
     fontSize: 12,
-    color: "#0A0A0A",
+    color: "#FFFFFF",
     letterSpacing: 0.5,
   },
   creamSquareTickButton: {

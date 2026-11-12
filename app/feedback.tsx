@@ -702,11 +702,15 @@ export default function FeedbackScreen() {
           destructive={true}
           onConfirm={() => {
             setShowDiscardConfirm(false);
-            resetForm();
             if (pendingTabSwitch) {
+              resetForm();
               setActiveTab(pendingTabSwitch);
               setPendingTabSwitch(null);
             } else {
+              // Leaving the screen: don't reset the form here. The screen
+              // unmounts anyway, and on Android (Fabric + react-native-screens)
+              // re-rendering the input while the screen is being popped
+              // crashes with "addViewAt: View already has a parent".
               navigateBack();
             }
           }}
