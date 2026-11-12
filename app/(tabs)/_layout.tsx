@@ -59,6 +59,10 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
+        // A tab you've left stops re-rendering (and its animations stop
+        // drawing) until you come back; timers and store updates still run,
+        // so it shows the latest state on return. Big win on low-end phones.
+        freezeOnBlur: true,
         // Bar height + bottom padding grow with the device's own inset so the
         // bar's background actually reaches the bottom edge (home indicator /
         // gesture bar area) instead of leaving a gap that falls back to the
