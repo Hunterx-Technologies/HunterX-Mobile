@@ -1,5 +1,4 @@
 import { Image as ExpoImage } from 'expo-image';
-import { Image as RNImage } from 'react-native';
 import { CLOUDINARY_ASSETS, STREAK_BADGE_ASSETS, STREAK_BADGE_WIDTH } from '@/constants/cloudinaryAssets';
 import { optimizeCloudinaryUrl } from '@/services/media/cloudinary';
 import { preloadTaskDoneSound } from '@/services/audio/taskDoneSound';
@@ -19,10 +18,9 @@ const PRIORITY_IMAGE_URLS = [
 
 async function prefetchUrl(url: string): Promise<void> {
   try {
-    await Promise.all([
-      ExpoImage.prefetch(url, 'memory-disk'),
-      RNImage.prefetch(url),
-    ]);
+    // expo-image only: every screen showing these renders them with
+    // expo-image, so a second download into RN Image's cache was never read.
+    await ExpoImage.prefetch(url, 'memory-disk');
   } catch (e) {
     // Non-blocking: individual prefetch failure will gracefully fallback to on-demand load
   }
@@ -54,11 +52,17 @@ export async function preloadRemainingAssets(): Promise<void> {
   // Pre-warm done.m4a audio buffer for ultra-snappy feedback
   preloadTaskDoneSound().catch(() => { });
 
-  const imageUrls = Object.values(CLOUDINARY_ASSETS)
-    .map((asset) => asset.uri)
-    // login_bg/screen are covered above at their actual display size —
-    // prefetching their raw, uncapped originals too would be pure waste.
-    .filter((uri) => uri !== CLOUDINARY_ASSETS.login_bg.uri && uri !== CLOUDINARY_ASSETS.screen.uri);
+  // The exact URLs the screens request (same width as each screen's
+  // optimizeCloudinaryUrl call), so the cache is actually hit. Assets no
+  // screen shows (active_campaign_bg, popupsavatar, high_fidelity) and the
+  // raw, uncapped originals are no longer downloaded. login_bg/screen are
+  // covered above. Keep in step with:
+  //   forgot-password.tsx (1200), RateHunterModal.tsx (1200), GuestPassCard.tsx (default)
+  const imageUrls = [
+    optimizeCloudinaryUrl(CLOUDINARY_ASSETS.lost_access_bg.uri, 1200),
+    optimizeCloudinaryUrl(CLOUDINARY_ASSETS.rate_hunter_knight.uri, 1200),
+    optimizeCloudinaryUrl(CLOUDINARY_ASSETS.refer_bg.uri),
+  ];
 
   // Streak badges at the exact size StreakBadgeImage requests, so the badge
   // carousel and vault popup read them straight from the disk cache.
