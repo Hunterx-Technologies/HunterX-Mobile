@@ -7,8 +7,8 @@ import {
   TouchableOpacity,
   StyleProp,
   ViewStyle,
-  Image,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { HunterXEmblem } from './HunterXEmblem';
@@ -135,7 +135,7 @@ export const HunterXCard: React.FC<HunterXCardProps> = ({
                 opacity: isExpired ? 0.45 : 1,
               },
             ]}
-            resizeMode="contain"
+            contentFit="contain"
           />
         </View>
 

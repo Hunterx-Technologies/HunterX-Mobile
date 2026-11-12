@@ -1,5 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, StyleProp, ViewStyle, Image, Animated } from 'react-native';
+import { View, StyleSheet, StyleProp, ViewStyle, Animated } from 'react-native';
+// expo-image: scaled to the drawn size and decoded once for every card in the
+// rewards grid (the source is 512px; cards draw it far smaller).
+import { Image } from 'expo-image';
 
 const HUNTER_REWARD_GEM = require('../../assets/images/hunterx_reward_emblem.webp');
 
@@ -101,7 +104,7 @@ export const HunterXEmblem: React.FC<HunterXEmblemProps> = ({
         <Image
           source={HUNTER_REWARD_GEM}
           style={{ width: '100%', height: '100%' }}
-          resizeMode="contain"
+          contentFit="contain"
         />
       </Animated.View>
     </View>
