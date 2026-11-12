@@ -103,6 +103,7 @@ function FlyingPiece({
   visible,
   lag = 0,
   ghost = 1,
+  onLoad,
 }: {
   source: ImageSourcePropType;
   size: number;
@@ -114,6 +115,7 @@ function FlyingPiece({
   visible: SharedValue<number>;
   lag?: number;
   ghost?: number;
+  onLoad?: () => void;
 }) {
   const style = useAnimatedStyle(() => {
     const p = clamp01(progress.value - lag);
@@ -133,12 +135,23 @@ function FlyingPiece({
       style={[{ position: 'absolute', width: size, height: size, left: offset, top: offset }, style]}
       pointerEvents="none"
     >
-      <Image source={source} style={{ width: size, height: size }} resizeMode="cover" />
+      <Image source={source} style={{ width: size, height: size }} resizeMode="cover" onLoad={onLoad} />
     </Animated.View>
   );
 }
 
-export function SwordSplash({ onFinish }: { onFinish: () => void }) {
+// How long the splash waits for its images before playing anyway, so a slow
+// or failed image load can never hold the app on the launch screen.
+const READY_TIMEOUT_MS = 1200;
+const IMAGE_COUNT = 4; // tile, stroke, sword, full logo
+
+/**
+ * onReady: called once, right as the animation starts — the root layout hides
+ * the native launch screen then. Hiding it earlier (as soon as fonts loaded)
+ * left a blank dark screen until the app finished setting up underneath, and
+ * the animation started late, which felt like a stall on slower phones.
+ */
+export function SwordSplash({ onFinish, onReady }: { onFinish: () => void; onReady?: () => void }) {
   const { width, height } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
 
@@ -178,11 +191,26 @@ export function SwordSplash({ onFinish }: { onFinish: () => void }) {
 
   const finished = useRef(false);
 
+  // Starts once all four images are decoded (or after READY_TIMEOUT_MS), so
+  // no piece can pop in late mid-animation.
+  const [ready, setReady] = useState(false);
+  const loaded = useRef(new Set<string>());
+  const markLoaded = (key: string) => () => {
+    loaded.current.add(key);
+    if (loaded.current.size >= IMAGE_COUNT) setReady(true);
+  };
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), READY_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     textWidth.value = textW;
   }, [textW, textWidth]);
 
   useEffect(() => {
+    if (!ready) return;
+    onReady?.();
     const timers: ReturnType<typeof setTimeout>[] = [];
     const finish = () => {
       if (finished.current) return;
@@ -227,9 +255,9 @@ export function SwordSplash({ onFinish }: { onFinish: () => void }) {
     timers.push(setTimeout(finish, EXIT_AT + EXIT_MS));
 
     return () => timers.forEach(clearTimeout);
-    // Runs once on mount.
+    // Runs once, when the images are ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   const rootStyle = useAnimatedStyle(() => ({ opacity: 1 - exit.value }));
   const stageStyle = useAnimatedStyle(() => ({
@@ -316,6 +344,7 @@ export function SwordSplash({ onFinish }: { onFinish: () => void }) {
                 source={TILE}
                 style={{ position: 'absolute', width: canvas, height: canvas, left: canvasOffset, top: canvasOffset }}
                 resizeMode="cover"
+                onLoad={markLoaded('tile')}
               />
               <Animated.View
                 style={[styles.sheen, { width: L * 0.3, height: L * 2, top: -L * 0.5 }, glintStyle]}
@@ -333,10 +362,10 @@ export function SwordSplash({ onFinish }: { onFinish: () => void }) {
 
           {/* The pieces fly in from outside the tile, so they are not clipped. */}
           <FlyingPiece {...strokeProps} lag={0.14} ghost={0.35} />
-          <FlyingPiece {...strokeProps} />
+          <FlyingPiece {...strokeProps} onLoad={markLoaded('stroke')} />
           <FlyingPiece {...swordProps} lag={0.2} ghost={0.25} />
           <FlyingPiece {...swordProps} lag={0.1} ghost={0.4} />
-          <FlyingPiece {...swordProps} />
+          <FlyingPiece {...swordProps} onLoad={markLoaded('sword')} />
 
           {/* The real logo, swapped in under the flash. */}
           <Animated.View style={[StyleSheet.absoluteFill, logoStyle]}>
@@ -345,6 +374,7 @@ export function SwordSplash({ onFinish }: { onFinish: () => void }) {
                 source={LOGO}
                 style={{ position: 'absolute', width: canvas, height: canvas, left: canvasOffset, top: canvasOffset }}
                 resizeMode="cover"
+                onLoad={markLoaded('logo')}
               />
               <Animated.View
                 style={[styles.sheen, { width: L * 0.38, height: L * 2, top: -L * 0.5 }, sheenStyle]}

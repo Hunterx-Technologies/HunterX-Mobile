@@ -211,10 +211,16 @@ export default function RootLayout() {
     return () => subscription.remove();
   }, []);
 
+  // The native launch screen stays up until the animated splash is ready to
+  // play (SwordSplash onReady), so there's no blank screen between the two.
+  // Safety net: hide it anyway a few seconds after fonts load.
   useEffect(() => {
-    if (fontsReady) {
-      SplashScreen.hideAsync();
-    }
+    if (!fontsReady) return;
+    const t = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 4000);
+    return () => clearTimeout(t);
+  }, [fontsReady]);
+
+  useEffect(() => {
 
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const styleId = 'autofill-dark-style';
@@ -270,7 +276,12 @@ export default function RootLayout() {
           <GlobalReward />
           <GlobalStreakBreak />
           <GlobalToast />
-          {showSplash && <SwordSplash onFinish={() => setShowSplash(false)} />}
+          {showSplash && (
+            <SwordSplash
+              onReady={() => SplashScreen.hideAsync().catch(() => {})}
+              onFinish={() => setShowSplash(false)}
+            />
+          )}
           {/* After the splash, so the intro animation isn't covered by it. */}
           {!showSplash && <OfflineNotice />}
         </SettingsProvider>
