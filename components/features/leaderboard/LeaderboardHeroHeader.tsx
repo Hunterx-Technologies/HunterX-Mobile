@@ -71,7 +71,8 @@ export const LeaderboardHeroBackground: React.FC<LeaderboardHeroBackgroundProps>
       />
 
       {/* Floating Red Dust Particles */}
-      <DustParticles count={30} color="#FF4500" />
+      {/* 12 is plenty for the look; 30 kept low-end phones busy. */}
+      <DustParticles count={12} color="#FF4500" />
 
       {/* Top fade from the #09090B status-bar strip into the artwork, so the
           image edge blends with the page instead of a hard line */}

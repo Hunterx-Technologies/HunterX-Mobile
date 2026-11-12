@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import Animated, {
+  cancelAnimation,
   Easing,
   interpolate,
   useAnimatedStyle,
@@ -135,6 +137,8 @@ const Top3Card: React.FC<{
 }> = ({ hunter, rank, onPress, formatScore }) => {
   const metal = METALS[rank];
   const reduceMotion = useReducedMotion();
+  // Endless loops only while the Leaderboard is on screen.
+  const isFocused = useIsFocused();
   const [cardWidth, setCardWidth] = React.useState(0);
 
   const shine = useSharedValue(0);
@@ -142,7 +146,7 @@ const Top3Card: React.FC<{
   const float = useSharedValue(0);
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || !isFocused) return;
     // 1st, 2nd and 3rd sweep one after another, then all wait for the next round.
     shine.value = withDelay(
       400 + (rank - 1) * 450,
@@ -156,9 +160,18 @@ const Top3Card: React.FC<{
         false
       )
     );
-    pulse.value = withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.sin) }), -1, true);
-    float.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.sin) }), -1, true);
-  }, [reduceMotion, rank, shine, pulse, float]);
+    // The coin pulse and crown float are for #1 only; 2nd and 3rd keep the
+    // shine sweep, so 3 always-on loops instead of 9.
+    if (rank === 1) {
+      pulse.value = withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.sin) }), -1, true);
+      float.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.sin) }), -1, true);
+    }
+    return () => {
+      cancelAnimation(shine);
+      cancelAnimation(pulse);
+      cancelAnimation(float);
+    };
+  }, [reduceMotion, isFocused, rank, shine, pulse, float]);
 
   const shineStyle = useAnimatedStyle(() => ({
     opacity: shine.value > 0 && shine.value < 1 ? 1 : 0,

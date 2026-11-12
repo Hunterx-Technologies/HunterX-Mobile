@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 
 type DustParticlesProps = {
   count?: number;
@@ -17,6 +18,9 @@ type ParticleData = {
 };
 
 function DustParticlesComponent({ count = 20, color = '#FFFFFF' }: DustParticlesProps) {
+  // Native-driver loops keep drawing even when their tab is frozen or
+  // another screen covers it, so they only run while this screen is focused.
+  const isFocused = useIsFocused();
   // Generate random configuration for continuous floating dust particles
   const particlesConfig = useRef<ParticleData[]>(
     Array.from({ length: count }, () => ({
@@ -35,6 +39,7 @@ function DustParticlesComponent({ count = 20, color = '#FFFFFF' }: DustParticles
   ).current;
 
   useEffect(() => {
+    if (!isFocused) return;
     const animations = animProgress.map((anim, index) => {
       const config = particlesConfig[index];
 
@@ -73,7 +78,7 @@ function DustParticlesComponent({ count = 20, color = '#FFFFFF' }: DustParticles
     return () => {
       animations.forEach((a) => a.stop());
     };
-  }, [animProgress, particlesConfig]);
+  }, [animProgress, particlesConfig, isFocused]);
 
   return (
     <View style={styles.container} pointerEvents="none">
