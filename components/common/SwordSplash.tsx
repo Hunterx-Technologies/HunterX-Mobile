@@ -469,10 +469,10 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 8,
   },
-  // Brand orange, glowing the way the logo's lightning does.
+  // Brighter, polished silver like the logo's X, glowing so it stands out.
   wordX: {
-    color: colors.accentOrange,
-    textShadowColor: 'rgba(254, 91, 1, 0.6)',
+    color: '#F4F7FA',
+    textShadowColor: 'rgba(255, 255, 255, 0.75)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 12,
   },
