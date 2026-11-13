@@ -216,13 +216,6 @@ export default function InviteFriendsScreen() {
           }
         />
 
-        <View style={styles.fullWidth}>
-          <FriendCodeInput
-            onFind={(c) => setCardTarget({ kind: "code", code: c })}
-            ownCode={code}
-          />
-        </View>
-
         <View style={styles.headlineGroup}>
           <Text style={styles.subheadlineText}>{INVITE_COPY.subtext}</Text>
         </View>
@@ -268,6 +261,13 @@ export default function InviteFriendsScreen() {
               {INVITE_COPY.joinedCount(joinedCount)}
             </Text>
           ) : null}
+        </View>
+
+        <View style={styles.fullWidth}>
+          <FriendCodeInput
+            onFind={(c) => setCardTarget({ kind: "code", code: c })}
+            ownCode={code}
+          />
         </View>
       </ScrollView>
 
