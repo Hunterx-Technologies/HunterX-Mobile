@@ -37,8 +37,8 @@ import { QuestActionModal } from '@/components/features/missions/QuestActionModa
 import { ProofSubmitModal } from '@/components/features/missions/ProofSubmitModal';
 import { RoutineTasksModal } from '@/components/features/routine/RoutineTasksModal';
 import { showGlobalToast } from '@/store/useToastStore';
-import { TaskCompletedToast } from '@/components/features/missions/TaskCompletedToast';
-import { TaskCompletionBottomSheet } from '@/components/features/missions/TaskCompletionBottomSheet';
+import { HomeOverlays } from '@/components/features/missions/HomeOverlays';
+import { showHomeErrorToast, useHomeOverlayStore } from '@/store/useHomeOverlayStore';
 import { WeeklyTracker } from '@/components/features/streaks/WeeklyTracker';
 import * as Haptics from 'expo-haptics';
 import { playTaskDoneSound } from '@/services/audio/taskDoneSound';
@@ -172,19 +172,12 @@ export default function MissionsHomeScreen() {
   const [selectedBuyQuest, setSelectedBuyQuest] = useState<QuestItem | null>(null);
   const [buyModalVisible, setBuyModalVisible] = useState(false);
   const [actionModalVisible, setActionModalVisible] = useState(false);
-  const [completedToastVisible, setCompletedToastVisible] = useState(false);
-  const [completedToastTitle, setCompletedToastTitle] = useState('Task Completed!');
-  const [completedToastSubtitle, setCompletedToastSubtitle] = useState('Great job, hunter!');
   const [dayCompleteModalVisible, setDayCompleteModalVisible] = useState(false);
   const [routineModalVisible, setRoutineModalVisible] = useState(false);
-  const [toastXp, setToastXp] = useState(10);
-  const [errorToastVisible, setErrorToastVisible] = useState(false);
-  const [errorToastTitle, setErrorToastTitle] = useState('Action Failed');
-  const [errorToastSubtitle, setErrorToastSubtitle] = useState('');
-  const [taskBottomSheetVisible, setTaskBottomSheetVisible] = useState(false);
-  const [taskBottomSheetTitle, setTaskBottomSheetTitle] = useState('You started your proof of health streak!');
-  const [taskBottomSheetSubtitle, setTaskBottomSheetSubtitle] = useState<string | undefined>(undefined);
-  const [taskBottomSheetXp, setTaskBottomSheetXp] = useState(10);
+  // Toasts and the first-quest sheet live in useHomeOverlayStore, drawn by
+  // <HomeOverlays>: changing them doesn't re-render this screen. Home only
+  // needs to know whether the sheet is open (celebrations wait for it).
+  const taskBottomSheetVisible = useHomeOverlayStore((s) => s.sheet.visible);
 
   // refreshUser defaults to false: useAuthStore.restoreSession() already
   // fetches the user once at app boot, so re-fetching it here too on every
@@ -429,9 +422,7 @@ export default function MissionsHomeScreen() {
   const deletionPendingRef = useRef(deletionPending);
   deletionPendingRef.current = deletionPending;
   const showDeletionPendingNotice = useCallback(() => {
-    setErrorToastTitle('Account Deletion Pending');
-    setErrorToastSubtitle(PENDING_DELETION_MESSAGE);
-    setErrorToastVisible(true);
+    showHomeErrorToast('Account Deletion Pending', PENDING_DELETION_MESSAGE);
   }, []);
 
   const handleCompleteTask = useCallback(async (
@@ -469,11 +460,6 @@ export default function MissionsHomeScreen() {
 
     if (actionStatus === 'COMPLETED' || actionStatus === 'PARTIAL') {
       const isPartial = actionStatus === 'PARTIAL';
-      setCompletedToastTitle(isPartial ? 'Partial Progress!' : 'Task Completed!');
-      setCompletedToastSubtitle(
-        isPartial ? 'Progress logged · Half XP earned!' : 'Great job, hunter!'
-      );
-      setToastXp(optimisticEarnedXp);
 
       // Check if this is the FIRST task completed of the day
       const isFirstTaskOfToday = previousQuests.filter(
@@ -482,20 +468,23 @@ export default function MissionsHomeScreen() {
 
       if (isFirstTaskOfToday) {
         // Show celebration bottom sheet ONLY on the first task of the day
-        setTaskBottomSheetTitle(`Quest Cleared: ${targetQuest.title}`);
-        setTaskBottomSheetSubtitle(
-          'One day down. The flame grows stronger with each rise.'
-        );
-        setTaskBottomSheetXp(optimisticEarnedXp);
-        setTaskBottomSheetVisible(true);
+        useHomeOverlayStore.getState().showTaskSheet({
+          title: `Quest Cleared: ${targetQuest.title}`,
+          subtitle: 'One day down. The flame grows stronger with each rise.',
+          xp: optimisticEarnedXp,
+        });
       } else {
         // Subsequent tasks completed on the same day show top toast instead
-        setCompletedToastVisible(true);
+        useHomeOverlayStore.getState().showCompletedToast({
+          title: isPartial ? 'Partial Progress!' : 'Task Completed!',
+          subtitle: isPartial ? 'Progress logged · Half XP earned!' : 'Great job, hunter!',
+          xp: optimisticEarnedXp,
+        });
       }
 
       playTaskDoneSound(isPartial ? 'partial' : 'completed');
     } else {
-      setCompletedToastVisible(false);
+      useHomeOverlayStore.getState().hideCompletedToast();
     }
 
     try {
@@ -541,7 +530,7 @@ export default function MissionsHomeScreen() {
     } catch (err: any) {
       devWarn('[CompleteTask Error]', err);
       setQuests(previousQuests);
-      setCompletedToastVisible(false);
+      useHomeOverlayStore.getState().hideCompletedToast();
 
       const status = err.response?.status;
       const message = err.response?.data?.message || err.message || 'Failed to update task';
@@ -558,16 +547,12 @@ export default function MissionsHomeScreen() {
       }
 
       if (status === 403) {
-        setErrorToastTitle('Task Stale');
-        setErrorToastSubtitle('This task is not assigned to you for the current period. Refreshing...');
-        setErrorToastVisible(true);
+        showHomeErrorToast('Task Stale', 'This task is not assigned to you for the current period. Refreshing...');
         await loadTasks();
         return;
       }
 
-      setErrorToastTitle('Action Failed');
-      setErrorToastSubtitle(message);
-      setErrorToastVisible(true);
+      showHomeErrorToast('Action Failed', message);
     }
   }, [loadTasks, showDeletionPendingNotice]);
 
@@ -602,9 +587,7 @@ export default function MissionsHomeScreen() {
 
   const handleConfirmPurchase = useCallback((quest: QuestItem) => {
     setBuyModalVisible(false);
-    setErrorToastTitle('Payment Coming Soon');
-    setErrorToastSubtitle(`Checkout for "${quest.title}" (₹${quest.price ?? 499}) will be available in the upcoming release.`);
-    setErrorToastVisible(true);
+    showHomeErrorToast('Payment Coming Soon', `Checkout for "${quest.title}" (₹${quest.price ?? 499}) will be available in the upcoming release.`);
   }, []);
 
   const handleDirectSkip = useCallback((questId: string) => {
@@ -652,9 +635,7 @@ export default function MissionsHomeScreen() {
         return;
       }
 
-      setErrorToastTitle('Reopen Failed');
-      setErrorToastSubtitle(message);
-      setErrorToastVisible(true);
+      showHomeErrorToast('Reopen Failed', message);
     }
   }, [showDeletionPendingNotice]);
 
@@ -1220,35 +1201,8 @@ export default function MissionsHomeScreen() {
       {/* Loot Drop Modal */}
       <LootDropModal visible={dropVisible} rarity={lastDrop} onDismiss={() => setDropVisible(false)} />
 
-      {/* Task Completed Toast Popup */}
-      <TaskCompletedToast
-        visible={completedToastVisible}
-        xp={toastXp}
-        title={completedToastTitle}
-        subtitle={completedToastSubtitle}
-        onDismiss={() => setCompletedToastVisible(false)}
-      />
-
-      {/* Error Toast Popup */}
-      <TaskCompletedToast
-        visible={errorToastVisible}
-        title={errorToastTitle}
-        subtitle={errorToastSubtitle}
-        isError={true}
-        onDismiss={() => setErrorToastVisible(false)}
-      />
-
-      {/* Task Completion Celebration Bottom Sheet Modal */}
-      <TaskCompletionBottomSheet
-        visible={taskBottomSheetVisible}
-        title={taskBottomSheetTitle}
-        subtitle={taskBottomSheetSubtitle}
-        streakDays={displayStreak}
-        xp={taskBottomSheetXp}
-        weekStatus={user?.week_status}
-        onClose={() => setTaskBottomSheetVisible(false)}
-        onContinue={() => setTaskBottomSheetVisible(false)}
-      />
+      {/* Task-completed toast, error toast and first-quest sheet */}
+      <HomeOverlays streakDays={displayStreak} weekStatus={user?.week_status} />
 
       {/* System Summon Push Notifications Priming Modal */}
       <PushPermissionModal
