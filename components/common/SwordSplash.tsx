@@ -466,6 +466,6 @@ const styles = StyleSheet.create({
     color: '#F4F5F6',
   },
   wordX: {
-    color: BLUE,
+    color: colors.accentOrange,
   },
 });
