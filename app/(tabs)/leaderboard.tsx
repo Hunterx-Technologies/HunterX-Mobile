@@ -36,7 +36,7 @@ import { LeaderboardTop5Modal } from '@/components/features/leaderboard/Leaderbo
 import { SystemSettingsModal } from '@/components/profile/SystemSettingsModal';
 import { InviteNudgeCard } from '@/components/features/invite/InviteNudgeCard';
 import { HunterCardModal, type HunterCardTarget } from '@/components/features/friends/HunterCardModal';
-import { FriendRequestsNudge } from '@/components/features/friends/FriendRequestsNudge';
+import { CountBadge } from '@/components/common/CountBadge';
 import { useFriendsStore } from '@/store/useFriendsStore';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -128,8 +128,8 @@ export default function LeaderboardScreen() {
   }, []);
 
   // Requests waiting for me (answered on Invite Friends): refreshed when the
-  // screen is opened and when Friends is picked, for the pill badge and the
-  // heads-up on the Friends tab.
+  // screen is opened and when Friends is picked, for the counts on the
+  // Friends pill and on the Invite buttons.
   const friendRequestCount = useFriendsStore((s) => s.requests.length);
   const loadFriendRequests = useFriendsStore((s) => s.loadRequests);
   useFocusEffect(
@@ -342,14 +342,11 @@ export default function LeaderboardScreen() {
         onPressSettings={() => setSettingsModalVisible(true)}
       />
 
-      {/* Friends tab: a heads-up when requests are waiting (answered, and
-          friends added by code, on Invite Friends). */}
-      {scope === 'friends' && !showSkeleton ? <FriendRequestsNudge /> : null}
-
       {/* Invite card: Friends tab only, always there above the list (the
-          empty state has its own button). Global has none. */}
+          empty state has its own button). Global has none. Invite carries
+          the count of friend requests waiting (answered on Invite Friends). */}
       {scope === 'friends' && !showSkeleton && !showBlockingError && entries.length > 0 ? (
-        <InviteNudgeCard onInvite={openInvite} persistent />
+        <InviteNudgeCard onInvite={openInvite} persistent badgeCount={friendRequestCount} />
       ) : null}
 
       {!showSkeleton && !showBlockingError && entries.length > 0 ? (
@@ -389,8 +386,14 @@ export default function LeaderboardScreen() {
             activeOpacity={0.85}
             onPress={openInvite}
             accessibilityRole="button"
+            accessibilityLabel={
+              friendRequestCount > 0
+                ? `Invite a friend. ${friendRequestCount} friend request${friendRequestCount === 1 ? '' : 's'} waiting.`
+                : 'Invite a friend'
+            }
           >
             <Text style={styles.inviteButtonText}>Invite a friend</Text>
+            <CountBadge count={friendRequestCount} ringColor="#09090B" />
           </TouchableOpacity>
         </View>
       ) : null}

@@ -8,6 +8,7 @@ import Animated, {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "@expo/vector-icons/Ionicons";
 
+import { CountBadge } from "@/components/common/CountBadge";
 import { colors } from "@/theme/colors";
 import { fontFamilies } from "@/theme/typography";
 import { INVITE_COPY } from "./inviteCopy";
@@ -30,13 +31,17 @@ async function claimWeeklySlot(): Promise<boolean> {
 /**
  * "Invite a friend to hunt with you" — shown at most once a week, dismissible.
  * `persistent` (Leaderboard > Friends): always shown, no ✕.
+ * `badgeCount`: friend requests waiting, as a red count on Invite (they're
+ * answered on the Invite Friends screen it opens).
  */
 export function InviteNudgeCard({
   onInvite,
   persistent = false,
+  badgeCount = 0,
 }: {
   onInvite: () => void;
   persistent?: boolean;
+  badgeCount?: number;
 }) {
   const [visible, setVisible] = useState(persistent);
   // Fade out only when the user taps ✕. Being unmounted by the parent (e.g.
@@ -81,10 +86,15 @@ export function InviteNudgeCard({
       <Pressable
         onPress={onInvite}
         accessibilityRole="button"
-        accessibilityLabel={INVITE_COPY.nudgeTitle}
+        accessibilityLabel={
+          badgeCount > 0
+            ? `${INVITE_COPY.nudgeTitle}. ${badgeCount} friend request${badgeCount === 1 ? "" : "s"} waiting.`
+            : INVITE_COPY.nudgeTitle
+        }
         style={({ pressed }) => [styles.action, pressed && styles.pressed]}
       >
         <Text style={styles.actionText}>{INVITE_COPY.nudgeAction}</Text>
+        <CountBadge count={badgeCount} ringColor={colors.surface} />
       </Pressable>
       {persistent ? null : (
         <Pressable
