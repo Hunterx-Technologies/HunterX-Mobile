@@ -258,6 +258,39 @@ function backdrop(W, H, { glowX = 0.82, glowY = 0.12, glowR = 0.75 } = {}) {
   return { defs, body: `<rect width="${W}" height="${H}" fill="${BRAND.black}"/><rect width="${W}" height="${H}" fill="url(#glow)"/>` };
 }
 
+// ------------------------------------------------------------- splash
+
+// The native launch screen must look exactly like the first frame of the
+// animated splash (components/common/SwordSplash.tsx): the empty tile, same
+// size, same place. expo-splash-screen draws splash-icon.png SPLASH_IMAGE_DP
+// wide, centred (iOS and Android). SwordSplash draws the tile's 1024 canvas
+// SPLASH_TILE_CANVAS_DP wide, centred, clipped to a rounded square. Keep
+// these in step with app.json (imageWidth) and SwordSplash (L, LOGO_*).
+const SPLASH_IMAGE_DP = 256;
+const SPLASH_TILE_CANVAS_DP = 128; // L 110 / (1 - 2 * 72/1024)
+const SPLASH_TILE_INSET = 72 / 1024; // SwordSplash LOGO_INSET
+const SPLASH_TILE_RADIUS = 0.21; // SwordSplash LOGO_RADIUS, of the tile's side
+
+async function splashTile() {
+  const S = 1024;
+  const canvas = Math.round((S * SPLASH_TILE_CANVAS_DP) / SPLASH_IMAGE_DP); // 512
+  const tile = canvas * (1 - 2 * SPLASH_TILE_INSET);
+  const inset = (canvas - tile) / 2;
+  // Clip like SwordSplash's logoClip: transparent outside the rounded tile.
+  const clip = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas}" height="${canvas}">` +
+      `<rect x="${inset}" y="${inset}" width="${tile}" height="${tile}" rx="${tile * SPLASH_TILE_RADIUS}" fill="#fff"/></svg>`
+  );
+  const art = await sharp(path.join(IMAGES_DIR, 'splash/logo_tile.webp'))
+    .resize(canvas, canvas, { kernel: 'lanczos3' })
+    .ensureAlpha()
+    .composite([{ input: clip, blend: 'dest-in' }])
+    .png()
+    .toBuffer();
+  const at = Math.round((S - canvas) / 2);
+  return blank(S, S, '#000000', 0).composite([{ input: art, left: at, top: at }]).png().toBuffer();
+}
+
 // ------------------------------------------------------------- app icons
 
 async function appIcons(mark) {
@@ -280,9 +313,10 @@ async function appIcons(mark) {
   await save(sharp(await placeMark(mark, S, S, { radius: 0.33 }, { variant: 'white', label: 'adaptive monochrome' })),
     path.join(IMAGES_DIR, 'adaptive-icon-monochrome.png'));
 
-  // Splash: Android 12+ crops the icon to a 192dp circle of a 288dp area.
-  await save(sharp(await placeMark(mark, S, S, { radius: 192 / 288 / 2 }, { label: 'splash-icon' })),
-    path.join(IMAGES_DIR, 'splash-icon.png'));
+  // Splash: the empty glass tile, exactly as the launch animation's first
+  // frame draws it, so the native launch screen hands over to the animation
+  // without a jump. See splashTile().
+  await save(sharp(await splashTile()), path.join(IMAGES_DIR, 'splash-icon.png'));
 
   // Notification small icon: white on transparent, 22dp live area of 24dp.
   await save(sharp(await placeMark(mark, 96, 96, { box: 22 / 24 }, { variant: 'white' })),

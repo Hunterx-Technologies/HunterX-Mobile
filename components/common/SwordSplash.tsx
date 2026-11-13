@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, ImageSourcePropType, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, ImageSourcePropType, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import Animated, {
@@ -11,17 +11,17 @@ import Animated, {
   useSharedValue,
   withDelay,
   withSequence,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
-import { colors, palette } from '@/theme/colors';
+import { palette } from '@/theme/colors';
 
 // The launch animation, shown once on a cold start over the app as it loads.
-// The empty glass tile appears with a glint, the X's silver stroke slashes in from the
+// It starts on the empty glass tile the native launch screen already shows: a
+// glint crosses it, the X's silver stroke slashes in from the
 // top left, then the sword plunges in from the top right and locks across it
 // with a flash and a small shake. Then the "HunterX" wordmark slides out, a
-// sheen passes over the logo and it fades into the app (about 2.9s).
+// sheen passes over the logo and it fades into the app (about 2.8s).
 //
 // The pieces are cut from app_logo.png (assets/images/splash) on the same
 // 1024 canvas, so once they land they line up exactly; the real logo then
@@ -51,23 +51,30 @@ const SWORD_DIR = { x: -0.686, y: 0.728 }; // the sword, pommel → tip (top rig
 const BLUE = '#3D9BFF';
 const BLUE_SOFT = '#BFE0FF';
 
-// Timeline (ms).
-const TILE_AT = 150;
-const GLINT_AT = 260;
+// Logo size (dp). Fixed, not scaled to the screen: the native launch screen
+// (assets/images/splash-icon.png at imageWidth 256 in app.json) draws this
+// same tile at exactly this size, so the hand-over doesn't jump. Change both
+// together: scripts/generate-assets.mjs splashTile().
+const L = 110;
+// Same as the native launch screen's background (app.json expo-splash-screen).
+const LAUNCH_BG = '#000000';
+
+// Timeline (ms). The tile is already on screen at 0 — the native launch
+// screen showed it — so the glint and the pieces start right away.
+const GLINT_AT = 110;
 const GLINT_MS = 520;
-const STROKE_AT = 420;
+const STROKE_AT = 270;
 const STROKE_MS = 320;
-const SWORD_AT = 640;
+const SWORD_AT = 490;
 const SWORD_MS = 300;
 const CLASH_AT = SWORD_AT + SWORD_MS;
-const SHIFT_AT = 1400;
+const SHIFT_AT = 1250;
 const SHIFT_MS = 560;
-const SHEEN_AT = 1900;
+const SHEEN_AT = 1750;
 const SHEEN_MS = 750;
-const EXIT_AT = 2550;
+const EXIT_AT = 2400;
 const EXIT_MS = 380;
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const clamp01 = (v: number) => {
   'worklet';
   return Math.min(1, Math.max(0, v));
@@ -153,10 +160,8 @@ const IMAGE_COUNT = 4; // tile, stroke, sword, full logo
  * the animation started late, which felt like a stall on slower phones.
  */
 export function SwordSplash({ onFinish, onReady }: { onFinish: () => void; onReady?: () => void }) {
-  const { width, height } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
 
-  const L = clamp(Math.min(width, height) * 0.24, 72, 132); // logo size
   const fontSize = Math.round(L * 0.44);
   const gap = Math.round(L * 0.2);
   const wordFont = { fontSize, letterSpacing: fontSize * 0.01 };
@@ -178,7 +183,7 @@ export function SwordSplash({ onFinish, onReady }: { onFinish: () => void; onRea
   const [textW, setTextW] = useState(0);
   const textWidth = useSharedValue(0);
 
-  const tileIn = useSharedValue(0);
+  const tileIn = useSharedValue(1); // on screen from the first frame, like the native launch screen
   const stroke = useSharedValue(0);
   const sword = useSharedValue(0);
   const pieces = useSharedValue(1); // fades the cut pieces once the real logo is in
@@ -231,7 +236,6 @@ export function SwordSplash({ onFinish, onReady }: { onFinish: () => void; onRea
     }
 
     const out = Easing.out(Easing.cubic);
-    tileIn.value = withDelay(TILE_AT, withSpring(1, { damping: 15, stiffness: 160 }));
     glint.value = withDelay(GLINT_AT, withTiming(1, { duration: GLINT_MS, easing: Easing.inOut(Easing.quad) }));
     stroke.value = withDelay(STROKE_AT, withTiming(1, { duration: STROKE_MS, easing: out }));
     sword.value = withDelay(SWORD_AT, withTiming(1, { duration: SWORD_MS, easing: Easing.in(Easing.quad) }));
@@ -424,7 +428,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 1000,
     elevation: 1000,
-    backgroundColor: colors.background,
+    backgroundColor: LAUNCH_BG,
     alignItems: 'center',
     justifyContent: 'center',
     // The pieces start off-screen; clip them so the page never scrolls.

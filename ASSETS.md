@@ -53,7 +53,7 @@ skipped with a warning.
 | `icon-tinted.png` | 1024, greyscale on black | `ios.icon.tinted` |
 | `adaptive-icon-foreground.png` | 1024, transparent, art inside the centre 66% circle | `android.adaptiveIcon.foregroundImage` |
 | `adaptive-icon-monochrome.png` | 1024, white on transparent, same safe zone | `android.adaptiveIcon.monochromeImage` (Android 13+ themed icons) |
-| `splash-icon.png` | 1024, transparent, art inside the Android 12 192/288dp circle | `expo-splash-screen` (`imageWidth` 200, background `#000000`) |
+| `splash-icon.png` | 1024, transparent, art inside the Android 12 192/288dp circle | `expo-splash-screen` (`imageWidth` 256, background `#000000`). It is the empty tile the launch animation starts from, at the animation's exact size |
 | `notification-icon.png` | 96, white on transparent | `expo-notifications` `icon`, `color` = orange |
 | `favicon.png` | 48 | `web.favicon` (Expo web) |
 
