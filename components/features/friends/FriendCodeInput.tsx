@@ -1,94 +1,91 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { fetchHunterCardByCode } from '@/services/api/friends.service';
 import { extractReferralCode } from '@/services/referral/pendingReferral';
+import { useFriendsStore } from '@/store/useFriendsStore';
+import { showGlobalToast } from '@/store/useToastStore';
 import { fontFamilies } from '@/theme/typography';
+import type { HunterCard } from '@/types/friends';
 
 type Props = {
-  /** A valid-looking code was entered: open that hunter's card. */
-  onFind: (code: string) => void;
-  /** The signed-in hunter's own code, so pasting it says so instead of looking it up. */
+  /** The code matched a hunter: open their card (already loaded and cached). */
+  onFound: (card: HunterCard) => void;
+  /** The signed-in hunter's own code, so entering it says so instead of looking it up. */
   ownCode?: string | null;
 };
 
-// Codes are 6 to 8 characters, so a 6-character prefix of an 8-character
-// code is valid too: wait for a pause in typing before looking it up.
-const TYPING_PAUSE_MS = 700;
-
 /**
  * "Add a friend by code": type or paste a friend's invite code (or their
- * whole invite link) and their card opens, where Add friend sends a request.
- * No button: a paste looks it up at once, typing after a short pause, and
- * the keyboard's search key right away.
+ * whole invite link), then tap the search icon (or the keyboard's search
+ * key). Their card opens only once it's found; anything wrong is a toast.
  */
-export function FriendCodeInput({ onFind, ownCode }: Props) {
+export function FriendCodeInput({ onFound, ownCode }: Props) {
   const [value, setValue] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  // The code last looked up, so the same text doesn't reopen the card on
-  // every keystroke or pause. The search key always looks it up again.
-  const lastFound = useRef<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [searching, setSearching] = useState(false);
+  const rememberCard = useFriendsStore((s) => s.rememberCard);
 
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
-
-  // explicit: pasted or the search key — say what's wrong. Otherwise (a pause
-  // while typing) stay quiet about text that isn't a whole code yet.
-  const find = (raw: string, { explicit, force = false }: { explicit: boolean; force?: boolean }) => {
-    if (!raw.trim()) return;
-    const code = extractReferralCode(raw);
+  const search = async () => {
+    if (searching || !value.trim()) return;
+    const code = extractReferralCode(value);
     if (!code) {
-      if (explicit) setError('Codes are 6 to 8 letters and numbers.');
+      showGlobalToast('Codes are 6 to 8 letters and numbers.', 'error');
       return;
     }
     if (ownCode && code === ownCode.toUpperCase()) {
-      setError("That's your own code. Share it with a friend instead.");
+      showGlobalToast("That's your own code. Share it with a friend instead.", 'error');
       return;
     }
-    if (!force && code === lastFound.current) return;
-    setError(null);
-    lastFound.current = code;
-    onFind(code);
-  };
-
-  const onChangeText = (text: string) => {
-    const pasted = text.length - value.length > 1;
-    setValue(text);
-    if (error) setError(null);
-    if (timer.current) clearTimeout(timer.current);
-    if (pasted) {
-      find(text, { explicit: true });
-    } else {
-      timer.current = setTimeout(() => find(text, { explicit: false }), TYPING_PAUSE_MS);
+    Keyboard.dismiss();
+    setSearching(true);
+    try {
+      const card = await fetchHunterCardByCode(code);
+      rememberCard(card);
+      onFound(card);
+    } catch (err) {
+      showGlobalToast(err instanceof Error && err.message ? err.message : 'Could not find that hunter. Please try again.', 'error');
+    } finally {
+      setSearching(false);
     }
   };
+
+  const canSearch = value.trim().length > 0 && !searching;
 
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>Add a friend by code</Text>
-      <View style={[styles.inputBox, error && styles.inputBoxError]}>
+      <View style={styles.inputBox}>
         <Ionicons name="person-add-outline" size={16} color="#8D98A3" />
         <TextInput
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={setValue}
           placeholder="Friend's code, e.g. AX7KPQ"
           placeholderTextColor="#5B6470"
           autoCapitalize="characters"
           autoCorrect={false}
           returnKeyType="search"
-          onSubmitEditing={() => {
-            if (timer.current) clearTimeout(timer.current);
-            find(value, { explicit: true, force: true });
-          }}
+          onSubmitEditing={search}
           style={styles.input}
           maxLength={64}
           accessibilityLabel="Friend's invite code"
-          accessibilityHint="Their card opens once the code is entered"
         />
+        <Pressable
+          onPress={search}
+          disabled={!canSearch}
+          hitSlop={10}
+          style={({ pressed }) => [styles.searchBtn, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Search for this hunter"
+          accessibilityState={{ disabled: !canSearch, busy: searching }}
+        >
+          {searching ? (
+            <ActivityIndicator size="small" color="#FE5B01" />
+          ) : (
+            <Ionicons name="search" size={18} color={canSearch ? '#FE5B01' : '#5B6470'} />
+          )}
+        </Pressable>
       </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
 }
@@ -107,14 +104,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 12,
+    paddingLeft: 12,
+    paddingRight: 6,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#1D2530',
     backgroundColor: '#0D1115',
-  },
-  inputBoxError: {
-    borderColor: 'rgba(239, 68, 68, 0.6)',
   },
   input: {
     flex: 1,
@@ -124,9 +119,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 1,
   },
-  error: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 12.5,
-    color: '#F4A5A5',
+  searchBtn: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.6,
   },
 });

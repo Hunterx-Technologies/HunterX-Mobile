@@ -259,7 +259,9 @@ export default function InviteFriendsScreen() {
 
         <View style={styles.fullWidth}>
           <FriendCodeInput
-            onFind={(c) => setCardTarget({ kind: "code", code: c })}
+            onFound={(card) =>
+              setCardTarget({ kind: "id", userId: card.userId, preview: card })
+            }
             ownCode={code}
           />
         </View>
