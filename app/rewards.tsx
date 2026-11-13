@@ -4,7 +4,8 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
+  FlatList,
+  Platform,
   Modal,
   Dimensions,
   BackHandler,
@@ -33,6 +34,11 @@ import { API_ERROR, PENDING_DELETION_MESSAGE } from '@/services/api/errors';
 import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Vertical gap between grid rows (the row wrapper spaces the columns).
+function GridRowGap() {
+  return <View style={styles.gridRowGap} />;
+}
+
 const GRID_CARD_WIDTH = (SCREEN_WIDTH - 32 - 14) / 2;
 const GRID_CARD_HEIGHT = GRID_CARD_WIDTH * 1.54;
 
@@ -40,9 +46,6 @@ const CENTER_CARD_WIDTH = Math.min(SCREEN_WIDTH - 48, 310);
 const CENTER_CARD_HEIGHT = CENTER_CARD_WIDTH * 1.52;
 
 const TABS: RewardTab[] = ['ACTIVE', 'USED', 'EXPIRED'];
-/** Start loading the next page this far (px) before the end of the list. */
-const LOAD_MORE_OFFSET = 400;
-
 export type WalletTab = RewardTab;
 
 export interface CouponReward {
@@ -137,7 +140,7 @@ export default function RewardsScreen() {
   const [selectedDetailsCard, setSelectedDetailsCard] = useState<CouponReward | null>(null);
   const [markingUsed, setMarkingUsed] = useState(false);
 
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<FlatList<CouponReward>>(null);
 
   useScrollToTopOnFocus(scrollRef);
   const scrollYRef = useRef(0);
@@ -328,6 +331,88 @@ export default function RewardsScreen() {
 
   const showSkeleton = !current.loaded && !current.error;
 
+  // One card in the 2-column grid.
+  const renderCard = ({ item }: { item: CouponReward }) => {
+    // 1. UNSCRATCHED CARD: Tapping moves it to the center of the screen
+    if (!item.isScratched) {
+      return (
+        <HunterXCard
+          key={item.id}
+          width={GRID_CARD_WIDTH}
+          height={GRID_CARD_HEIGHT}
+          // Still in the grid: 4 endless loops per card made the
+          // wallet stutter on low-end phones. The card being
+          // scratched (ScratchCardReward) still animates.
+          animateGlow={false}
+          isExpired={item.isExpired}
+          footerText={item.isExpired ? 'EXPIRED' : 'DRAG TO SCRATCH'}
+          onPress={() => openCard(item)}
+        />
+      );
+    }
+
+    // 2. SCRATCHED / REVEALED CARD (MATCHING GOOGLE PAY REFERENCE SCREENSHOT)
+    return (
+      <TouchableOpacity
+        key={item.id}
+        activeOpacity={item.isExpired ? 1 : 0.88}
+        disabled={item.isExpired}
+        style={[
+          styles.gridCardOuter,
+          {
+            width: GRID_CARD_WIDTH,
+            height: GRID_CARD_HEIGHT,
+          },
+          (item.isUsed || item.isExpired) && styles.dimmedCardOuter,
+        ]}
+        onPress={() => openCard(item)}
+      >
+        {/* Top Image Section */}
+        <View style={styles.gridTopImageSection}>
+          <RewardProductImage uri={item.productImageUrl} width={REWARD_IMAGE_WIDTH.grid} />
+
+          {/* Top-Right Status Tag */}
+          <View
+            style={[
+              styles.gridStatusBadge,
+              item.isUsed
+                ? styles.statusBadgeUsed
+                : item.isExpired
+                  ? styles.statusBadgeExpired
+                  : styles.statusBadgeNew,
+            ]}
+          >
+            <Text
+              style={[
+                styles.gridStatusText,
+                item.isUsed
+                  ? styles.statusTextUsed
+                  : item.isExpired
+                    ? styles.statusTextExpired
+                    : styles.statusTextNew,
+              ]}
+            >
+              {item.isUsed ? 'USED' : item.isExpired ? 'EXPIRED' : 'New'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Bottom Info Section */}
+        <View style={styles.gridBottomInfoSection}>
+          <Text style={styles.gridOfferHeading} numberOfLines={1}>
+            {item.badge}
+          </Text>
+          <Text style={styles.gridOfferSubtext} numberOfLines={1}>
+            {item.expiresIn}
+          </Text>
+          <Text style={styles.gridProductName} numberOfLines={1}>
+            {item.productName || item.title}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View style={styles.rootView}>
       <StatusBar style="light" backgroundColor="#0D0F12" />
@@ -350,13 +435,34 @@ export default function RewardsScreen() {
           <View style={styles.headerRightSpacer} />
         </View>
 
-        <ScrollView
-          overScrollMode="never"
+        {/* A virtualized 2-column grid: only the cards near the screen are
+            drawn, so a wallet with many cards stays smooth. ?focus=<id> opens
+            the card itself (no scrolling to it), so it doesn't depend on the
+            card being rendered. */}
+        <FlatList
           ref={scrollRef}
+          data={currentCards}
+          keyExtractor={(item) => item.id}
+          renderItem={renderCard}
+          numColumns={2}
+          columnWrapperStyle={styles.gridRow}
+          ItemSeparatorComponent={GridRowGap}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          overScrollMode="never"
           contentContainerStyle={styles.scrollGridContent}
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[0]}
           scrollEventThrottle={32}
+          onScroll={(e) => {
+            scrollYRef.current = e.nativeEvent.contentOffset.y;
+          }}
+          onEndReachedThreshold={0.5}
+          onEndReached={() => {
+            if (current.nextCursor && loading === null) load(activeTab, 'more', current.nextCursor);
+          }}
           refreshControl={
             <RefreshControl
               refreshing={loading === 'refresh'}
@@ -365,170 +471,83 @@ export default function RewardsScreen() {
               colors={['#FE5B01']}
             />
           }
-          onScroll={(e) => {
-            const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
-            scrollYRef.current = contentOffset.y;
-            const nearEnd = contentOffset.y + layoutMeasurement.height >= contentSize.height - LOAD_MORE_OFFSET;
-            if (nearEnd && current.nextCursor && loading === null) load(activeTab, 'more', current.nextCursor);
-          }}
-        >
-          {/* Sticky tabs: solid background so cards don't show through */}
-          <View style={styles.stickyTabsWrap}>
-            {/* SEGMENTED 3 TABS (ACTIVE, USED, EXPIRED) */}
-            <View style={styles.tabBarContainer}>
-              {TABS.map((tab) => {
-                const isActive = activeTab === tab;
-                const count = tabCount(tab);
+          ListHeaderComponent={
+            <>
+              {/* Sticky tabs: solid background so cards don't show through */}
+              <View style={styles.stickyTabsWrap}>
+                {/* SEGMENTED 3 TABS (ACTIVE, USED, EXPIRED) */}
+                <View style={styles.tabBarContainer}>
+                  {TABS.map((tab) => {
+                    const isActive = activeTab === tab;
+                    const count = tabCount(tab);
 
-                return (
-                  <TouchableOpacity
-                    key={tab}
-                    activeOpacity={0.75}
-                    style={[styles.tabItem, isActive && styles.tabItemActive]}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => { });
-                      setActiveTab(tab);
-                      if (scrollYRef.current > 0) {
-                        scrollRef.current?.scrollTo({ y: 0, animated: false });
-                      }
-                    }}
-                  >
-                    <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                      {tab}
-                    </Text>
-                    <View style={[styles.tabBadge, isActive && styles.tabBadgeActive]}>
-                      <Text style={[styles.tabBadgeText, isActive && styles.tabBadgeTextActive]}>
-                        {count}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* LOADING SKELETON */}
-          {showSkeleton && (
-            <View style={styles.gridContainer}>
-              {[0, 1, 2, 3].map((i) => (
-                <View key={i} style={[styles.skeletonCard, { width: GRID_CARD_WIDTH, height: GRID_CARD_HEIGHT }]} />
-              ))}
-            </View>
-          )}
-
-          {/* ERROR STATE */}
-          {current.error && current.items.length === 0 && (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="cloud-offline-outline" size={44} color="#777777" />
-              <Text style={styles.emptyTitle}>Couldn&apos;t load rewards</Text>
-              <Text style={styles.emptySub}>{current.error}</Text>
-              <TouchableOpacity style={styles.retryBtn} onPress={() => load(activeTab, 'initial')} activeOpacity={0.8}>
-                <Text style={styles.retryBtnText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* 2-COLUMN SCRATCH CARD GRID */}
-          <View style={styles.gridContainer}>
-            {currentCards.map((item) => {
-              // 1. UNSCRATCHED CARD: Tapping moves it to the center of the screen
-              if (!item.isScratched) {
-                return (
-                  <HunterXCard
-                    key={item.id}
-                    width={GRID_CARD_WIDTH}
-                    height={GRID_CARD_HEIGHT}
-                    // Still in the grid: 4 endless loops per card made the
-                    // wallet stutter on low-end phones. The card being
-                    // scratched (ScratchCardReward) still animates.
-                    animateGlow={false}
-                    isExpired={item.isExpired}
-                    footerText={item.isExpired ? 'EXPIRED' : 'DRAG TO SCRATCH'}
-                    onPress={() => openCard(item)}
-                  />
-                );
-              }
-
-              // 2. SCRATCHED / REVEALED CARD (MATCHING GOOGLE PAY REFERENCE SCREENSHOT)
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  activeOpacity={item.isExpired ? 1 : 0.88}
-                  disabled={item.isExpired}
-                  style={[
-                    styles.gridCardOuter,
-                    {
-                      width: GRID_CARD_WIDTH,
-                      height: GRID_CARD_HEIGHT,
-                    },
-                    (item.isUsed || item.isExpired) && styles.dimmedCardOuter,
-                  ]}
-                  onPress={() => openCard(item)}
-                >
-                  {/* Top Image Section */}
-                  <View style={styles.gridTopImageSection}>
-                    <RewardProductImage uri={item.productImageUrl} width={REWARD_IMAGE_WIDTH.grid} />
-
-                    {/* Top-Right Status Tag */}
-                    <View
-                      style={[
-                        styles.gridStatusBadge,
-                        item.isUsed
-                          ? styles.statusBadgeUsed
-                          : item.isExpired
-                            ? styles.statusBadgeExpired
-                            : styles.statusBadgeNew,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.gridStatusText,
-                          item.isUsed
-                            ? styles.statusTextUsed
-                            : item.isExpired
-                              ? styles.statusTextExpired
-                              : styles.statusTextNew,
-                        ]}
+                    return (
+                      <TouchableOpacity
+                        key={tab}
+                        activeOpacity={0.75}
+                        style={[styles.tabItem, isActive && styles.tabItemActive]}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => { });
+                          setActiveTab(tab);
+                          if (scrollYRef.current > 0) {
+                            scrollRef.current?.scrollToOffset({ offset: 0, animated: false });
+                          }
+                        }}
                       >
-                        {item.isUsed ? 'USED' : item.isExpired ? 'EXPIRED' : 'New'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Bottom Info Section */}
-                  <View style={styles.gridBottomInfoSection}>
-                    <Text style={styles.gridOfferHeading} numberOfLines={1}>
-                      {item.badge}
-                    </Text>
-                    <Text style={styles.gridOfferSubtext} numberOfLines={1}>
-                      {item.expiresIn}
-                    </Text>
-                    <Text style={styles.gridProductName} numberOfLines={1}>
-                      {item.productName || item.title}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {loading === 'more' && <ActivityIndicator style={styles.loadMoreSpinner} color="#FE5B01" />}
-
-          {/* EMPTY STATE */}
-          {current.loaded && !current.error && currentCards.length === 0 && (
-            <View style={styles.emptyContainer}>
-              <HunterXEmblem size={64} glow={false} />
-              <Text style={styles.emptyTitle}>No {activeTab.toLowerCase()} cards</Text>
-              <Text style={styles.emptySub}>
-                {activeTab === 'ACTIVE'
-                  ? 'Earn scratch cards at streak milestones, on level-ups and on your birthday!'
-                  : activeTab === 'USED'
-                    ? 'Redeemed coupons and claimed rewards will appear here.'
-                    : 'Expired scratch cards and rewards will be archived here.'}
-              </Text>
-            </View>
-          )}
-        </ScrollView>
+                        <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                          {tab}
+                        </Text>
+                        <View style={[styles.tabBadge, isActive && styles.tabBadgeActive]}>
+                          <Text style={[styles.tabBadgeText, isActive && styles.tabBadgeTextActive]}>
+                            {count}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </>
+          }
+          ListEmptyComponent={
+            <>
+              {/* LOADING SKELETON */}
+              {showSkeleton && (
+                <View style={styles.gridContainer}>
+                  {[0, 1, 2, 3].map((i) => (
+                    <View key={i} style={[styles.skeletonCard, { width: GRID_CARD_WIDTH, height: GRID_CARD_HEIGHT }]} />
+                  ))}
+                </View>
+              )}
+              {/* ERROR STATE */}
+              {current.error && current.items.length === 0 && (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="cloud-offline-outline" size={44} color="#777777" />
+                  <Text style={styles.emptyTitle}>Couldn&apos;t load rewards</Text>
+                  <Text style={styles.emptySub}>{current.error}</Text>
+                  <TouchableOpacity style={styles.retryBtn} onPress={() => load(activeTab, 'initial')} activeOpacity={0.8}>
+                    <Text style={styles.retryBtnText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {/* EMPTY STATE */}
+              {current.loaded && !current.error && currentCards.length === 0 && (
+                <View style={styles.emptyContainer}>
+                  <HunterXEmblem size={64} glow={false} />
+                  <Text style={styles.emptyTitle}>No {activeTab.toLowerCase()} cards</Text>
+                  <Text style={styles.emptySub}>
+                    {activeTab === 'ACTIVE'
+                      ? 'Earn scratch cards at streak milestones, on level-ups and on your birthday!'
+                      : activeTab === 'USED'
+                        ? 'Redeemed coupons and claimed rewards will appear here.'
+                        : 'Expired scratch cards and rewards will be archived here.'}
+                  </Text>
+                </View>
+              )}
+            </>
+          }
+          ListFooterComponent={loading === 'more' ? <ActivityIndicator style={styles.loadMoreSpinner} color="#FE5B01" /> : null}
+        />
 
         {/* ============================================================== */}
         {/* CENTERED SCRATCH CARD LAYER (Card moves to center of screen)   */}
@@ -770,6 +789,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 14,
+  },
+  gridRow: {
+    paddingHorizontal: 16,
+    gap: 14,
+  },
+  gridRowGap: {
+    height: 14,
   },
 
   /* SCRATCHED / REVEALED GRID CARD (MATCHING GOOGLE PAY REFERENCE) */
