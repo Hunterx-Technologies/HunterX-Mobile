@@ -1,4 +1,5 @@
 import { resetCelebrations } from '@/store/useCelebrationStore';
+import { useFriendsStore } from '@/store/useFriendsStore';
 import { useLevelUpStore } from '@/store/useLevelUpStore';
 import { useMetricsStore } from '@/store/useMetricsStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
@@ -20,6 +21,7 @@ export function resetUserState() {
   useStreakBadgeStore.setState({ visible: false, options: null, earnedIds: [], landing: null });
   useStreakBreakStore.setState({ visible: false, options: null, pillLandedAt: null });
   useNotificationStore.getState().setUnreadCount(0);
+  useFriendsStore.getState().reset();
   useOnboardingStore.getState().resetOnboarding();
   clearTasksTodayCache();
   if (useMetricsStore.getState().isHealthConnected) {

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 
 import { Button } from '@/components/common/Button';
 import { Screen } from '@/components/common/Screen';
 import { INVITE_COPY } from '@/components/features/invite/inviteCopy';
+import { HunterCardModal, type HunterCardTarget } from '@/components/features/friends/HunterCardModal';
 import { useAuth } from '@/hooks/useAuth';
 import { normalizeReferralCode, savePendingReferral } from '@/services/referral/pendingReferral';
 import { showGlobalToast } from '@/store/useToastStore';
@@ -15,14 +16,22 @@ import { fontFamilies } from '@/theme/typography';
 // (Universal/App Link) or hunterx://invite/<code>. Signed out: keep the code
 // (7 days) and start the new-hunter flow, which ends on the Register screen
 // with the code prefilled — Register needs the onboarding answers first.
-// Signed in: the code is ignored; invites only apply to new accounts (and
-// opening your own code says so).
+// Signed in: the sharer's hunter card opens; Add friend makes the two of
+// you friends straight away (sharing the link was the invitation) and lands
+// on Leaderboard → Friends. Your own link says so instead.
 // The code also arrives on Android through the Play install referrer
 // (services/referral/pendingReferral captureInstallReferrer).
 export default function InviteLink() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const { user, isAuthenticated, isBootstrapping } = useAuth();
   const [isSaved, setIsSaved] = useState(false);
+  const normalized = normalizeReferralCode(code);
+  const isOwnCode = !!user?.referral_code && normalized === user.referral_code;
+  const cardTarget = useMemo<HunterCardTarget | null>(
+    () => (isAuthenticated && normalized && !isOwnCode ? { kind: 'link', code: normalized } : null),
+    [isAuthenticated, normalized, isOwnCode]
+  );
+  const [cardOpen, setCardOpen] = useState(true);
 
   useEffect(() => {
     if (isBootstrapping || isAuthenticated) return;
@@ -43,8 +52,25 @@ export default function InviteLink() {
     );
   }
 
+  if (isAuthenticated && cardTarget) {
+    return (
+      <Screen style={styles.container}>
+        <HunterCardModal
+          target={cardOpen ? cardTarget : null}
+          onClose={() => {
+            setCardOpen(false);
+            router.replace('/(tabs)');
+          }}
+          onBecameFriends={() => {
+            setCardOpen(false);
+            router.replace('/(tabs)/leaderboard?tab=friends');
+          }}
+        />
+      </Screen>
+    );
+  }
+
   if (isAuthenticated) {
-    const isOwnCode = !!user?.referral_code && normalizeReferralCode(code) === user.referral_code;
     return (
       <Screen style={styles.container}>
         <View style={styles.body}>

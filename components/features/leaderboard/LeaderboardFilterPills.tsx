@@ -9,6 +9,8 @@ export type MainCategoryTab = 'Global' | 'Friends';
 interface TopCategoryFilterBarProps {
   category: MainCategoryTab;
   onSelectCategory: (category: MainCategoryTab) => void;
+  /** A small count on a pill, e.g. friend requests waiting on Friends. */
+  badges?: Partial<Record<MainCategoryTab, number>>;
 }
 
 const CATEGORIES: MainCategoryTab[] = ['Global', 'Friends'];
@@ -16,12 +18,19 @@ const CATEGORIES: MainCategoryTab[] = ['Global', 'Friends'];
 export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
   category,
   onSelectCategory,
+  badges,
 }) => {
   return (
     <View style={styles.topBarContainer}>
       <View style={styles.filterRow}>
         {CATEGORIES.map((tab) => {
           const isActive = category === tab;
+          const badge = badges?.[tab] ?? 0;
+          const badgeEl = badge > 0 ? (
+            <View style={styles.badge} accessibilityLabel={`${badge} waiting`}>
+              <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
+            </View>
+          ) : null;
 
           return (
             <TouchableOpacity
@@ -38,10 +47,12 @@ export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
                   style={styles.activePillGradient}
                 >
                   <Text style={styles.activePillText}>{tab}</Text>
+                  {badgeEl}
                 </LinearGradient>
               ) : (
                 <View style={styles.inactivePill}>
                   <Text style={styles.inactivePillText}>{tab}</Text>
+                  {badgeEl}
                 </View>
               )}
             </TouchableOpacity>
@@ -53,6 +64,25 @@ export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
 };
 
 const styles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: '#EF4444',
+    borderWidth: 1.5,
+    borderColor: '#09090B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 10,
+    color: '#FFFFFF',
+  },
   topBarContainer: {
     width: '100%',
     flexDirection: 'row',

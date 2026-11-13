@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   ActivityIndicator,
   Animated,
@@ -35,6 +35,11 @@ import {
 import { LeaderboardTop5Modal } from '@/components/features/leaderboard/LeaderboardTop5Modal';
 import { SystemSettingsModal } from '@/components/profile/SystemSettingsModal';
 import { InviteNudgeCard } from '@/components/features/invite/InviteNudgeCard';
+import { HunterCardModal, type HunterCardTarget } from '@/components/features/friends/HunterCardModal';
+import { FriendRequestsStrip } from '@/components/features/friends/FriendRequestsStrip';
+import { FriendCodeInput } from '@/components/features/friends/FriendCodeInput';
+import { useFriendsStore } from '@/store/useFriendsStore';
+import type { FriendRequest } from '@/types/friends';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -103,6 +108,43 @@ export default function LeaderboardScreen() {
     loadMore,
     refresh,
   } = useLeaderboardScope(scope, user?.id != null ? String(user.id) : null);
+
+  // One hunter card for the whole screen; tapping a row only sets which
+  // hunter it shows, so the list itself never re-renders for it.
+  const [cardTarget, setCardTarget] = useState<HunterCardTarget | null>(null);
+  const openHunter = useCallback((hunter: LeaderboardHunter) => {
+    if (hunter.isCurrentUser) return;
+    setCardTarget({
+      kind: 'id',
+      userId: hunter.id,
+      preview: {
+        userId: hunter.id,
+        name: hunter.displayName,
+        avatarThumbUrl: hunter.avatarUrl,
+        level: hunter.level,
+        totalXp: hunter.score,
+        streak: hunter.streak,
+        rank: hunter.rank,
+      },
+    });
+  }, []);
+  const openRequest = useCallback((r: FriendRequest) => {
+    setCardTarget({ kind: 'id', userId: r.userId, preview: r });
+  }, []);
+  const openByCode = useCallback((code: string) => setCardTarget({ kind: 'code', code }), []);
+
+  // Requests waiting for me: refreshed when the screen is opened and when
+  // Friends is picked (the strip shows the last list meanwhile).
+  const friendRequestCount = useFriendsStore((s) => s.requests.length);
+  const loadFriendRequests = useFriendsStore((s) => s.loadRequests);
+  useFocusEffect(
+    useCallback(() => {
+      loadFriendRequests();
+    }, [loadFriendRequests])
+  );
+  useEffect(() => {
+    if (scope === 'friends') loadFriendRequests();
+  }, [scope, loadFriendRequests]);
 
   const [top5ModalVisible, setTop5ModalVisible] = useState(false);
   const openInvite = useCallback(() => router.push('/invite-friends'), []);
@@ -213,6 +255,14 @@ export default function LeaderboardScreen() {
     [category]
   );
 
+  // Pushes and notifications open /(tabs)/leaderboard?tab=friends.
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
+  useEffect(() => {
+    if (tabParam !== 'friends') return;
+    handleSelectCategory('Friends');
+    router.setParams({ tab: undefined });
+  }, [tabParam, handleSelectCategory]);
+
   const floatingMeOpacity = useMemo(() => {
     // Not in the loaded rows, or in them but not rendered: pin the copy.
     if (!meInList || meRowLayout === 'missing') return 1;
@@ -278,7 +328,11 @@ export default function LeaderboardScreen() {
     <View onLayout={(e: LayoutChangeEvent) => setStickyHeaderHeight(e.nativeEvent.layout.height)}>
       <LeaderboardHeroHeader scrollY={scrollY} />
       <View style={styles.solidSection}>
-        <TopCategoryFilterBar category={category} onSelectCategory={handleSelectCategory} />
+        <TopCategoryFilterBar
+          category={category}
+          onSelectCategory={handleSelectCategory}
+          badges={{ Friends: friendRequestCount }}
+        />
       </View>
     </View>
   );
@@ -292,6 +346,14 @@ export default function LeaderboardScreen() {
         onPressRanked={me?.rank != null ? () => setTop5ModalVisible(true) : undefined}
         onPressSettings={() => setSettingsModalVisible(true)}
       />
+
+      {/* Friends tab: requests waiting for me, and adding someone by code. */}
+      {scope === 'friends' && !showSkeleton ? (
+        <>
+          <FriendRequestsStrip onOpen={openRequest} />
+          <FriendCodeInput compact onFind={openByCode} ownCode={user?.referral_code ?? null} />
+        </>
+      ) : null}
 
       {/* Invite card: Friends tab only, always there above the list (the
           empty state has its own button). Global has none. */}
@@ -320,7 +382,7 @@ export default function LeaderboardScreen() {
                 </Animated.View>
               </View>
             ) : (
-              <LeaderboardHunterRow key={entry.userId} hunter={toHunter(entry)} />
+              <LeaderboardHunterRow key={entry.userId} hunter={toHunter(entry)} onPress={openHunter} />
             )
           )}
         </View>
@@ -365,13 +427,13 @@ export default function LeaderboardScreen() {
               <LeaderboardHunterRow hunter={toHunter(item.entry)} />
             </Animated.View>
           ) : (
-            <LeaderboardHunterRow hunter={toHunter(item.entry)} />
+            <LeaderboardHunterRow hunter={toHunter(item.entry)} onPress={openHunter} />
           )}
         </View>
       ),
     // listIntro is rebuilt each render; only the single intro cell depends on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [listIntro, measureMeRow, realMeOpacity]
+    [listIntro, measureMeRow, realMeOpacity, openHunter]
   );
 
   return (
@@ -427,9 +489,20 @@ export default function LeaderboardScreen() {
             }
             onScroll={handleScroll}
             scrollEventThrottle={16}
-            contentContainerStyle={[styles.scrollContent, { paddingTop: HERO_SPACER }]}
+            // At least a screen taller than the hero, so switching to a short
+            // scope (Friends) can scroll to the pinned tabs straight away.
+            // Shorter, Android held that scroll and applied it once the
+            // rows loaded — the page jumped under the user's finger.
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingTop: HERO_SPACER },
+              viewportHeight > 0 && { minHeight: viewportHeight + HERO_SPACER },
+            ]}
             // Rows above the viewer's (intro, top 3) can change height.
             onContentSizeChange={measureMeRow}
+            // Taps on Find / Accept go through while the keyboard is open
+            // (otherwise the first tap only closes the keyboard).
+            keyboardShouldPersistTaps="handled"
             onEndReached={handleEndReached}
             onEndReachedThreshold={1.5}
             onMomentumScrollBegin={() => {
@@ -463,6 +536,8 @@ export default function LeaderboardScreen() {
         onClose={() => setTop5ModalVisible(false)}
         me={me}
       />
+
+      <HunterCardModal target={cardTarget} onClose={() => setCardTarget(null)} />
 
       <SystemSettingsModal
         visible={settingsModalVisible}
