@@ -15,7 +15,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { colors } from '@/theme/colors';
+import { colors, palette } from '@/theme/colors';
 
 // The launch animation, shown once on a cold start over the app as it loads.
 // The empty glass tile appears with a glint, the X's silver stroke slashes in from the
@@ -461,11 +461,19 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
   },
+  // Silver like the logo's blade and X, with a soft white sheen.
   word: {
     fontFamily: 'Inter_700Bold',
-    color: '#F4F5F6',
+    color: palette.silver,
+    textShadowColor: 'rgba(255, 255, 255, 0.35)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
+  // Brand orange, glowing the way the logo's lightning does.
   wordX: {
     color: colors.accentOrange,
+    textShadowColor: 'rgba(254, 91, 1, 0.6)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
   },
 });
