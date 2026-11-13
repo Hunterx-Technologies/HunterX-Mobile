@@ -12,6 +12,8 @@ import type {
 } from '@/types/leaderboard';
 
 const STALE_TIME_MS = 45_000; // 30-60s window
+// Coming back to the app refetches the visible tab only if it's older than this.
+const RESUME_FRESH_MS = 60_000;
 const PAGE_SIZE = 20;
 const SCOPES: LeaderboardScope[] = ['global', 'friends'];
 
@@ -94,12 +96,14 @@ export function invalidateLeaderboardCache() {
 }
 
 // XP can also change while the app is in the background (a quest-proof photo
-// approved by the team, other hunters climbing), so coming back to the app
-// marks the loaded pages stale (the tab on screen refetches).
+// approved by the team, other hunters climbing). Coming back refetches the
+// tab on screen if it's more than RESUME_FRESH_MS old; any other tab is
+// refreshed when opened (STALE_TIME_MS).
 let lastAppState: AppStateStatus = AppState.currentState;
 AppState.addEventListener('change', (next) => {
-  if (lastAppState.match(/inactive|background/) && next === 'active') {
-    invalidateLeaderboardCache();
+  if (lastAppState.match(/inactive|background/) && next === 'active' && focusedScope) {
+    const data = dataCache.get(focusedScope);
+    if (!data || Date.now() - data.fetchedAt > RESUME_FRESH_MS) refreshScope(focusedScope, { force: true });
   }
   lastAppState = next;
 });

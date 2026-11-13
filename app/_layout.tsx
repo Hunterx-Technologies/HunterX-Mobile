@@ -36,6 +36,9 @@ import { SettingsProvider } from '@/context/SettingsContext';
 
 SplashScreen.preventAutoHideAsync();
 
+// Least time between Health refreshes when the app comes back to the foreground.
+const HEALTH_RESUME_REFRESH_MS = 60_000;
+
 // Lets the popup window opened for web Google sign-in (services/auth/googleAuthWeb)
 // signal completion back to the tab that opened it. No-op on native.
 WebBrowser.maybeCompleteAuthSession();
@@ -192,10 +195,15 @@ export default function RootLayout() {
   // screen — so a cold launch or returning from the background always syncs
   // before the user even taps the Metrics tab, instead of only refreshing
   // once they happen to already be looking at it.
+  // Coming back to the app refreshes at most once a minute: 'active' also
+  // fires after a system dialog or a glance at Notification Centre, and each
+  // refresh is several Health queries. The Metrics screen still pulls fresh.
   useEffect(() => {
+    let lastRefreshAt = 0;
     const refreshHealthMetrics = () => {
       const { isHealthConnected, timeRange } = useMetricsStore.getState();
       if (!isHealthConnected) return;
+      lastRefreshAt = Date.now();
       useMetricsStore.getState().fetchRangeData(timeRange);
       useMetricsStore.getState().syncHealthMetricsIfNeeded();
     };
@@ -208,7 +216,7 @@ export default function RootLayout() {
     );
 
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
-      if (nextState === 'active') {
+      if (nextState === 'active' && Date.now() - lastRefreshAt >= HEALTH_RESUME_REFRESH_MS) {
         refreshHealthMetrics();
       }
     });
