@@ -71,6 +71,14 @@ function formatJoined(iso: string | null | undefined): string | null {
   return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 }
 
+/** "Nov" and "2026", for the Joined stat, which shows them on two lines. */
+function joinedParts(iso: string | null | undefined): { month: string; year: string } | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return { month: d.toLocaleDateString('en-IN', { month: 'short' }), year: String(d.getFullYear()) };
+}
+
 const fmt = (n: number) => n.toLocaleString('en-US');
 
 /**
@@ -126,7 +134,7 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
   const level = card?.level ?? preview?.level ?? 1;
   const totalXp = card?.totalXp ?? preview?.totalXp ?? 0;
   const streak = card?.streak ?? preview?.streak ?? 0;
-  const joined = formatJoined(card?.joinedAt);
+  const joined = joinedParts(card?.joinedAt);
   const friendsSince = formatJoined(card?.friendsSince);
   const relationship: FriendRelationship | null = card?.relationship ?? null;
   const hasSomething = Boolean(card || preview);
@@ -344,7 +352,7 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
                       <View style={styles.statDivider} />
                       <Stat icon={<Ionicons name="trophy" size={14} color="#F6B23C" />} value={card ? `${card.longestStreak}` : '–'} label="Best streak" />
                       <View style={styles.statDivider} />
-                      <Stat icon={<Ionicons name="calendar" size={14} color="#8D98A3" />} value={joined ?? '–'} label="Joined" />
+                      <Stat icon={<Ionicons name="calendar" size={14} color="#8D98A3" />} value={joined?.month ?? '–'} subValue={joined?.year} label="Joined" />
                     </View>
                   </>
                 ) : null}
@@ -387,13 +395,15 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
   );
 }
 
-function Stat({ icon, value, label }: { icon: React.ReactNode; value: string; label: string }) {
+/** subValue: an optional second line under the value (Joined: "Nov" / "2026"). */
+function Stat({ icon, value, subValue, label }: { icon: React.ReactNode; value: string; subValue?: string; label: string }) {
   return (
     <View style={styles.stat}>
       <View style={styles.statValueRow}>
         {icon}
         <Text style={styles.statValue} numberOfLines={1}>{value}</Text>
       </View>
+      {subValue ? <Text style={styles.statValue} numberOfLines={1}>{subValue}</Text> : null}
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
