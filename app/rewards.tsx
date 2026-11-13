@@ -805,10 +805,6 @@ const styles = StyleSheet.create({
     borderColor: '#26282E',
     overflow: 'hidden',
     backgroundColor: '#121316',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    elevation: 6,
   },
   dimmedCardOuter: {
     opacity: 0.55,

@@ -20,12 +20,7 @@ function QuestHeaderImage({ quest }: { quest: QuestItem }) {
       />
     );
   }
-  return (
-    <LinearGradient
-      colors={["#1F1F24", "#0E0E11"]}
-      style={styles.questImagePlaceholder}
-    />
-  );
+  return <View style={[styles.questImagePlaceholder, styles.questImagePlaceholderFill]} />;
 }
 
 function AnimatedTickButton({ onPress }: { onPress: () => void }) {
@@ -310,6 +305,9 @@ const styles = StyleSheet.create({
   questImagePlaceholder: {
     width: "100%",
     height: "100%",
+  },
+  questImagePlaceholderFill: {
+    backgroundColor: "#16161A",
   },
   topRightActionsCol: {
     position: "absolute",

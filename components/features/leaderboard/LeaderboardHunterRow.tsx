@@ -64,15 +64,15 @@ interface LeaderboardHunterRowProps {
 }
 
 // ── Top 3: gold, silver and bronze ───────────────────────────
-// A polished metal frame, a metal-tinted card, a light sweep that runs
-// across every few seconds (1st, 2nd, 3rd in turn) and the rank icon in a
-// metal coin that glows. The crown also floats and sparkles. Motion is
+// A metal-coloured edge, a metal-tinted card (the row's one gradient), a
+// light sweep that runs across every few seconds (1st, 2nd, 3rd in turn)
+// and the rank icon in a metal coin that glows. The crown also floats and sparkles. Motion is
 // skipped when the device asks for reduced motion.
 
 type Metal = {
   /** Metal text/icon color. */
   accent: string;
-  /** Frame: light catching the edge of polished metal. */
+  /** Frame colours; the edge uses frame[1]. */
   frame: readonly [string, string, ...string[]];
   /** Card body, metal-tinted on the left fading to dark. */
   body: readonly [string, string, ...string[]];
@@ -193,85 +193,78 @@ const Top3Card: React.FC<{
   }));
 
   const content = (
-    <View style={[styles.top3Shadow, { shadowColor: metal.glow }]}>
-      <LinearGradient colors={metal.frame} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.top3Frame}>
-        <LinearGradient
-          colors={metal.body}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={styles.top3Card}
-          onLayout={(e) => setCardWidth(e.nativeEvent.layout.width)}
-        >
-          {/* Top-edge sheen, like light on polished metal */}
-          <LinearGradient
-            colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0)']}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 0.6 }}
-            style={StyleSheet.absoluteFillObject}
-            pointerEvents="none"
-          />
+    // One gradient per row (the metal body); frame, coin and avatar ring are
+    // solid metal colours, and no shadow — rows scroll, and stacked
+    // gradients + Android elevation made the list heavy on low-end phones.
+    <View style={[styles.top3Frame, { borderColor: metal.frame[1] }]}>
+      <LinearGradient
+        colors={metal.body}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.top3Card}
+        onLayout={(e) => setCardWidth(e.nativeEvent.layout.width)}
+      >
 
-          {/* Rank coin + number */}
-          <View style={styles.rankCol}>
-            <View style={styles.coinWrap}>
-              <Animated.View style={[styles.coinGlow, { backgroundColor: metal.glow }, coinGlowStyle]} />
-              <Animated.View style={crownStyle}>
-                <LinearGradient colors={metal.coin} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={styles.coin}>
-                  <FontAwesome5 name={metal.icon} size={12} color={metal.coinIcon} />
-                </LinearGradient>
-              </Animated.View>
-              {rank === 1 && (
-                <Animated.Text style={[styles.sparkle, sparkleStyle]} pointerEvents="none">
-                  ✦
-                </Animated.Text>
-              )}
-            </View>
-            <Text style={[styles.topRankText, { color: metal.accent, textShadowColor: metal.glow }]}>{rank}</Text>
-          </View>
-
-          {/* Avatar in a metal ring + name */}
-          <View style={styles.userCol}>
-            <LinearGradient colors={metal.coin} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarRing}>
-              <ExpoImage
-                source={{ uri: hunter.avatarUrl || FALLBACK_AVATAR }}
-                style={styles.top3Avatar}
-                contentFit="cover"
-                placeholder={{ blurhash: BLURHASH }}
-                cachePolicy="disk"
-              />
-            </LinearGradient>
-            <NameWithStreak name={hunter.displayName} streak={hunter.streak} nameStyle={styles.displayNameText} />
-          </View>
-
-          <View style={styles.levelCol}>
-            <View style={[styles.levelPill, { backgroundColor: metal.levelBg, borderColor: metal.levelBorder }]}>
-              <Text style={[styles.top3LevelText, { color: metal.accent }]}>Lv. {hunter.level}</Text>
-            </View>
-          </View>
-
-          <View style={styles.xpCol}>
-            <Text style={[styles.lightningIcon, { color: metal.accent }]}>⚡</Text>
-            <Text style={styles.xpScoreText}>{formatScore(hunter.score)}</Text>
-          </View>
-
-          {onPress ? (
-            <View style={styles.chevronCol}>
-              <Ionicons name="chevron-forward" size={16} color={metal.accent} />
-            </View>
-          ) : null}
-
-          {/* Light sweep */}
-          {cardWidth > 0 && (
-            <Animated.View style={[styles.shine, shineStyle]} pointerEvents="none">
-              <LinearGradient
-                colors={['rgba(255,255,255,0)', metal.shine, 'rgba(255,255,255,0)']}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={StyleSheet.absoluteFillObject}
-              />
+        {/* Rank coin + number */}
+        <View style={styles.rankCol}>
+          <View style={styles.coinWrap}>
+            <Animated.View style={[styles.coinGlow, { backgroundColor: metal.glow }, coinGlowStyle]} />
+            <Animated.View style={crownStyle}>
+              <View style={[styles.coin, { backgroundColor: metal.coin[1] }]}>
+                <FontAwesome5 name={metal.icon} size={12} color={metal.coinIcon} />
+              </View>
             </Animated.View>
-          )}
-        </LinearGradient>
+            {rank === 1 && (
+              <Animated.Text style={[styles.sparkle, sparkleStyle]} pointerEvents="none">
+                ✦
+              </Animated.Text>
+            )}
+          </View>
+          <Text style={[styles.topRankText, { color: metal.accent, textShadowColor: metal.glow }]}>{rank}</Text>
+        </View>
+
+        {/* Avatar in a metal ring + name */}
+        <View style={styles.userCol}>
+          <View style={[styles.avatarRing, { backgroundColor: metal.coin[1] }]}>
+            <ExpoImage
+              source={{ uri: hunter.avatarUrl || FALLBACK_AVATAR }}
+              style={styles.top3Avatar}
+              contentFit="cover"
+              placeholder={{ blurhash: BLURHASH }}
+              cachePolicy="disk"
+            />
+          </View>
+          <NameWithStreak name={hunter.displayName} streak={hunter.streak} nameStyle={styles.displayNameText} />
+        </View>
+
+        <View style={styles.levelCol}>
+          <View style={[styles.levelPill, { backgroundColor: metal.levelBg, borderColor: metal.levelBorder }]}>
+            <Text style={[styles.top3LevelText, { color: metal.accent }]}>Lv. {hunter.level}</Text>
+          </View>
+        </View>
+
+        <View style={styles.xpCol}>
+          <Text style={[styles.lightningIcon, { color: metal.accent }]}>⚡</Text>
+          <Text style={styles.xpScoreText}>{formatScore(hunter.score)}</Text>
+        </View>
+
+        {onPress ? (
+          <View style={styles.chevronCol}>
+            <Ionicons name="chevron-forward" size={16} color={metal.accent} />
+          </View>
+        ) : null}
+
+        {/* Light sweep */}
+        {cardWidth > 0 && (
+          <Animated.View style={[styles.shine, shineStyle]} pointerEvents="none">
+            <LinearGradient
+              colors={['rgba(255,255,255,0)', metal.shine, 'rgba(255,255,255,0)']}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+          </Animated.View>
+        )}
       </LinearGradient>
     </View>
   );
@@ -471,16 +464,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 10,
   },
-  top3Shadow: {
-    borderRadius: 18,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 12,
-    elevation: 6,
-  },
   top3Frame: {
     borderRadius: 18,
-    padding: 1.6,
+    borderWidth: 1.6,
   },
   top3Card: {
     flexDirection: 'row',
@@ -550,11 +536,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#FE5B01',
     backgroundColor: '#161822',
-    shadowColor: '#FE5B01',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 6,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -576,11 +557,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#161822',
     borderColor: '#FE5B01',
     borderWidth: 1.5,
-    shadowColor: '#FE5B01',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 4,
   },
 
   /* RANK COLUMN (#) */
