@@ -23,7 +23,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { usePushPermissionPrompt } from '@/hooks/usePushPermissionPrompt';
 import { PushPermissionModal } from '@/components/features/notifications/PushPermissionModal';
-import { getCurrentUser, msSinceCurrentUserFetched } from '@/services/api/auth.service';
+import { getCurrentUser, msSinceCurrentUserFetched, userFromApi } from '@/services/api/auth.service';
 import { DEFAULT_BLURHASH } from '@/services/media/cloudinary';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -512,7 +512,8 @@ export default function MissionsHomeScreen() {
 
       // XP changed — the backend has already moved this hunter on the
       // leaderboard (a first completed task is what puts a new hunter on it
-      // at all), so drop the cached page instead of showing the old one.
+      // at all). Marks it stale; it refetches when the Leaderboard opens,
+      // not now, in the middle of the celebration.
       invalidateLeaderboardCache();
 
       const serverStatus = data.status === 'COMPLETED' ? 'done' : data.status === 'PARTIAL' ? 'partial' : data.status === 'SKIPPED' ? 'skipped' : 'todo';
@@ -529,8 +530,10 @@ export default function MissionsHomeScreen() {
         )
       );
 
+      // New XP / level / streak: from the response (no /auth/me call), or
+      // from /auth/me on a backend that doesn't send it yet.
       try {
-        const refreshedUser = await getCurrentUser();
+        const refreshedUser = data.user ? userFromApi(data.user) : await getCurrentUser();
         useAuthStore.getState().setUser(refreshedUser);
       } catch (userErr) {
         devWarn('[RefreshUser Error]', userErr);
@@ -626,11 +629,11 @@ export default function MissionsHomeScreen() {
     const wasSkipped = previousQuests.find((q) => q.id === questId)?.status === 'skipped';
     if (wasSkipped) setActiveTab('todo');
     try {
-      await reopenTask(questId);
+      const data = await reopenTask(questId);
       // XP taken back can change rank, or remove the hunter from the board.
       invalidateLeaderboardCache();
       try {
-        const refreshedUser = await getCurrentUser();
+        const refreshedUser = data.user ? userFromApi(data.user) : await getCurrentUser();
         useAuthStore.getState().setUser(refreshedUser);
       } catch (userErr) {
         devWarn('[RefreshUser Error]', userErr);

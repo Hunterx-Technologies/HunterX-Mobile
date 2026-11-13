@@ -73,22 +73,29 @@ export function resetLeaderboardCache() {
   notify();
 }
 
+// The tab the Leaderboard screen is showing while it's the focused screen;
+// null when another screen is in front.
+let focusedScope: LeaderboardScope | null = null;
+
 /**
- * The signed-in user's own name or avatar changed (Profile). The cached rows
- * still carry the old ones and would keep showing them for up to
- * STALE_TIME_MS, so refetch every scope that's been loaded, in the
- * background — the backend has already updated its copy by the time the
- * profile request returns. Rows stay on screen until the new page arrives.
+ * Something changed what the leaderboard shows (XP from a quest, a friend
+ * added or removed, the user's own name or avatar). Marks every loaded page
+ * stale so it's refetched when next shown, rather than refetching both tabs
+ * right away (a quest completed on Home used to fire two requests during its
+ * celebration). Only the tab on screen right now refetches immediately.
+ * Rows stay on screen until the new page arrives.
  */
 export function invalidateLeaderboardCache() {
   for (const scope of SCOPES) {
-    if (dataCache.has(scope)) refreshScope(scope, { force: true });
+    const data = dataCache.get(scope);
+    if (data) dataCache.set(scope, { ...data, fetchedAt: 0 });
   }
+  if (focusedScope) refreshScope(focusedScope, { force: true });
 }
 
 // XP can also change while the app is in the background (a quest-proof photo
 // approved by the team, other hunters climbing), so coming back to the app
-// refetches whatever leaderboard pages are already loaded.
+// marks the loaded pages stale (the tab on screen refetches).
 let lastAppState: AppStateStatus = AppState.currentState;
 AppState.addEventListener('change', (next) => {
   if (lastAppState.match(/inactive|background/) && next === 'active') {
@@ -190,20 +197,22 @@ export function useLeaderboardScope(scope: LeaderboardScope, userId?: string | n
   const refresh = useCallback((opts: { force?: boolean } = {}) => refreshScope(scope, opts), [scope]);
   const loadMore = useCallback(() => loadMoreScope(scope), [scope]);
 
-  // First-ever view of this scope (no cache yet) — load immediately.
+  // Showing a scope (first view, or switching Global ⇄ Friends): load it if
+  // there's nothing yet or it's stale. Cached rows stay on screen meanwhile.
   useEffect(() => {
-    if (!dataCache.get(scope)) {
-      refreshScope(scope);
-    }
+    refreshScope(scope);
   }, [scope]);
 
   // Revalidate in the background on screen focus, honoring staleTime —
-  // cached data (if any) stays on screen the whole time. Only fires on
-  // this screen gaining focus (e.g. switching back from another tab),
-  // not on the internal Global/Friends pill switch.
+  // cached data (if any) stays on screen the whole time. Also records which
+  // tab is on screen, for invalidation and app resume above.
   useFocusEffect(
     useCallback(() => {
+      focusedScope = scope;
       refreshScope(scope);
+      return () => {
+        if (focusedScope === scope) focusedScope = null;
+      };
     }, [scope])
   );
 

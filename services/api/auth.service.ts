@@ -263,6 +263,16 @@ export function msSinceCurrentUserFetched(): number {
   return lastCurrentUserFetchAt ? Date.now() - lastCurrentUserFetchAt : Infinity;
 }
 
+/**
+ * The user that comes back with a task change (PUT /tasks/:id/complete or
+ * /reopen send it in the GET /auth/me shape), so the app needn't call
+ * /auth/me again. Counts as a fresh fetch for msSinceCurrentUserFetched.
+ */
+export function userFromApi(raw: unknown): User {
+  lastCurrentUserFetchAt = Date.now();
+  return toUser(raw);
+}
+
 export async function getCurrentUser(): Promise<User> {
   if (inFlightCurrentUser) {
     return inFlightCurrentUser;

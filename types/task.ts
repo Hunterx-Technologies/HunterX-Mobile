@@ -89,6 +89,8 @@ export interface CompleteTaskData {
   streak_milestone?: StreakMilestoneUnlock | null;
   /** Set when this completion raised the level (the final level only). Missing on older backends. */
   level_up?: LevelUpInfo | null;
+  /** The hunter after this change, in the GET /auth/me shape (raw; see userFromApi). Missing on older backends. */
+  user?: unknown;
 }
 
 /** The level-up screen's content. Every text is shown as-is. */
@@ -122,6 +124,8 @@ export interface ReopenTaskData {
   title: string;
   task_type: TaskType;
   status: 'PENDING';
+  /** The hunter after this change, in the GET /auth/me shape (raw; see userFromApi). Missing on older backends. */
+  user?: unknown;
 }
 
 /** POST /tasks/:id/proof — XP comes later, on approval; only streak unlocks can come now. */

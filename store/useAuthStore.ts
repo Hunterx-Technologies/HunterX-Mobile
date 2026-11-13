@@ -32,6 +32,20 @@ async function readCachedUser(): Promise<User | null> {
 }
 
 /**
+ * Same profile data? Users are plain JSON built by toUser (same keys, same
+ * order), so comparing their JSON is exact and cheap at this size.
+ */
+function sameUser(a: User | null, b: User | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Did the server actually refuse this session (expired/revoked token, deleted
  * account)? Only then is the stored session thrown away. No response at all
  * (offline, timeout) or a 5xx is not a refusal — the tokens are kept.
@@ -189,7 +203,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: null });
   },
 
-  setUser: (user) => set({ user }),
+  // Same data as now (e.g. /auth/me after a change that didn't touch the
+  // profile): keep the current object, so the many screens reading the user
+  // don't all re-render for nothing.
+  setUser: (user) => set((s) => (sameUser(s.user, user) ? s : { user })),
   // Ascension calls this to let the hunter into Home. Only the server's
   // record counts: reaching Ascension without saved answers (deep link,
   // OTP fallback) must not open the app.
