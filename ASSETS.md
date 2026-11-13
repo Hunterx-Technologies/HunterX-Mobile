@@ -38,7 +38,7 @@ the single-colour silhouettes (Android monochrome, notification, Safari
 pinned tab) are white or black. They are cut from the logo's own pixels, not
 redrawn.
 
-The website repo is expected at `../HunterX-Web/hunterx-web`. Set
+The website repo is expected at `../HunterX-web`. Set
 `WEB_PUBLIC_DIR=/path/to/public` to override. If it's missing, web files are
 skipped with a warning.
 
@@ -97,7 +97,7 @@ There is no iPad or tablet set, because `ios.supportsTablet` is `false` and
 the app is phone-only. Screenshot folders stay empty until raws are added to
 `assets/store/raw/`.
 
-### Website (`../HunterX-Web/hunterx-web/public/`)
+### Website (`../HunterX-web/public/`)
 
 `favicon.ico` (16/32/48), `icon.svg`, `favicon-16x16.png`,
 `favicon-32x32.png`, `apple-touch-icon.png` (180, no alpha),

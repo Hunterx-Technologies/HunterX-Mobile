@@ -19,7 +19,7 @@ export const PREVIEW = r('assets/preview.html');
 // The website lives in its own repo next to this one. Override with
 // WEB_PUBLIC_DIR=/path/to/hunterx-web/public when the layout differs.
 export const WEB_PUBLIC_DIR = path.resolve(
-  process.env.WEB_PUBLIC_DIR || r('../HunterX-Web/hunterx-web/public'),
+  process.env.WEB_PUBLIC_DIR || r('../HunterX-web/public'),
 );
 
 export const FONTS = {
