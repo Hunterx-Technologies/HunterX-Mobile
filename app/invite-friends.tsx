@@ -210,12 +210,6 @@ export default function InviteFriendsScreen() {
           </View>
         ) : null}
 
-        <FriendRequestsStrip
-          onOpen={(r) =>
-            setCardTarget({ kind: "id", userId: r.userId, preview: r })
-          }
-        />
-
         <View style={styles.headlineGroup}>
           <Text style={styles.subheadlineText}>{INVITE_COPY.subtext}</Text>
         </View>
@@ -269,6 +263,12 @@ export default function InviteFriendsScreen() {
             ownCode={code}
           />
         </View>
+
+        <FriendRequestsStrip
+          onOpen={(r) =>
+            setCardTarget({ kind: "id", userId: r.userId, preview: r })
+          }
+        />
       </ScrollView>
 
       <View style={[styles.bottomBtnWrapper, { bottom: insets.bottom + 16 }]}>
