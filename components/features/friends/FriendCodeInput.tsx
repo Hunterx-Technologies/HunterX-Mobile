@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { extractReferralCode } from '@/services/referral/pendingReferral';
@@ -35,19 +34,6 @@ export function FriendCodeInput({ onFind, ownCode }: Props) {
     onFind(code);
   };
 
-  const paste = async () => {
-    try {
-      const text = await Clipboard.getStringAsync();
-      if (!text) return;
-      const code = extractReferralCode(text);
-      setValue(code ?? text.trim().slice(0, 64));
-      if (code) submit(code);
-      else setError('The copied text has no invite code in it.');
-    } catch {
-      // Clipboard unavailable: they can still type it.
-    }
-  };
-
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>Add a friend by code</Text>
@@ -70,9 +56,6 @@ export function FriendCodeInput({ onFind, ownCode }: Props) {
             maxLength={64}
             accessibilityLabel="Friend's invite code"
           />
-          <Pressable onPress={paste} hitSlop={8} accessibilityRole="button" accessibilityLabel="Paste code">
-            <Text style={styles.paste}>Paste</Text>
-          </Pressable>
         </View>
         <Pressable
           onPress={() => submit()}
@@ -124,11 +107,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semiBold,
     fontSize: 14,
     letterSpacing: 1,
-  },
-  paste: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 13,
-    color: '#FE5B01',
   },
   findBtn: {
     height: 46,
