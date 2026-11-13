@@ -18,7 +18,7 @@ import Animated, {
 import { colors } from '@/theme/colors';
 
 // The launch animation, shown once on a cold start over the app as it loads.
-// The empty glass tile appears with a glint, the X's blue-and-gold stroke slashes in from the
+// The empty glass tile appears with a glint, the X's silver stroke slashes in from the
 // top left, then the sword plunges in from the top right and locks across it
 // with a flash and a small shake. Then the "HunterX" wordmark slides out, a
 // sheen passes over the logo and it fades into the app (about 2.9s).
@@ -47,8 +47,9 @@ const LOGO_RADIUS = 0.21;
 const STROKE_DIR = { x: 0.569, y: 0.822 }; // the X stroke, top left → bottom right
 const SWORD_DIR = { x: -0.686, y: 0.728 }; // the sword, pommel → tip (top right → bottom left)
 
-const GOLD = '#F6B23C';
-const GOLD_SOFT = '#FFD98A';
+// Matches the silver logo's blue lightning glow.
+const BLUE = '#3D9BFF';
+const BLUE_SOFT = '#BFE0FF';
 
 // Timeline (ms).
 const TILE_AT = 150;
@@ -334,7 +335,7 @@ export function SwordSplash({ onFinish, onReady }: { onFinish: () => void; onRea
       <Animated.View style={[styles.row, stageStyle]}>
         <Animated.View style={[{ width: L, height: L }, logoBoxStyle]}>
           <Animated.View style={[onLogo(L * 2.6), haloStyle]} pointerEvents="none">
-            <Glow size={L * 2.6} color={GOLD} id="sw-halo" />
+            <Glow size={L * 2.6} color={BLUE} id="sw-halo" />
           </Animated.View>
 
           {/* The empty tile the pieces land in. */}
@@ -392,7 +393,7 @@ export function SwordSplash({ onFinish, onReady }: { onFinish: () => void; onRea
 
           {/* Clash: flash where the sword crosses the X. */}
           <Animated.View style={[onLogo(L * 1.7), flashStyle]} pointerEvents="none">
-            <Glow size={L * 1.7} color={GOLD_SOFT} id="sw-flash" />
+            <Glow size={L * 1.7} color={BLUE_SOFT} id="sw-flash" />
           </Animated.View>
         </Animated.View>
 
@@ -465,6 +466,6 @@ const styles = StyleSheet.create({
     color: '#F4F5F6',
   },
   wordX: {
-    color: GOLD,
+    color: BLUE,
   },
 });
