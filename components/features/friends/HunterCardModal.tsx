@@ -271,7 +271,7 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
           ) : (
             <View style={styles.row}>
               <Ionicons name="time-outline" size={16} color="#C9D1D9" />
-              <Text style={styles.secondaryBtnText}>Requested · Tap to cancel</Text>
+              <Text style={styles.secondaryBtnText}>Requested</Text>
             </View>
           )}
         </TouchableOpacity>
