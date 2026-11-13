@@ -7,13 +7,19 @@ import {
   Text,
   View,
 } from "react-native";
-import { Redirect, router } from "expo-router";
+import { Redirect, router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { Screen } from "@/components/common/Screen";
+import { FriendCodeInput } from "@/components/features/friends/FriendCodeInput";
+import { FriendRequestsStrip } from "@/components/features/friends/FriendRequestsStrip";
+import {
+  HunterCardModal,
+  type HunterCardTarget,
+} from "@/components/features/friends/HunterCardModal";
 import {
   GuestPassCard,
   type GuestPassCardHandle,
@@ -34,6 +40,7 @@ import {
   writeInviteCache,
 } from "@/services/referral/inviteCache";
 import RNShare from "@/services/share/RNShare";
+import { useFriendsStore } from "@/store/useFriendsStore";
 import { showGlobalToast } from "@/store/useToastStore";
 import { colors } from "@/theme/colors";
 import { fontFamilies } from "@/theme/typography";
@@ -54,6 +61,17 @@ export default function InviteFriendsScreen() {
   const [isCopied, setIsCopied] = useState(false);
   const [sharing, setSharing] = useState<"pass" | "qr" | null>(null);
   const cardRef = useRef<GuestPassCardHandle>(null);
+
+  // Friends between existing hunters live here: requests waiting for me
+  // (Accept / Decline, the only place they're answered) and adding someone
+  // by their code. Both open the hunter's card.
+  const [cardTarget, setCardTarget] = useState<HunterCardTarget | null>(null);
+  const loadFriendRequests = useFriendsStore((s) => s.loadRequests);
+  useFocusEffect(
+    useCallback(() => {
+      if (isAuthenticated) loadFriendRequests();
+    }, [isAuthenticated, loadFriendRequests]),
+  );
 
   const code = profileCode ?? cachedCode;
 
@@ -192,6 +210,19 @@ export default function InviteFriendsScreen() {
           </View>
         ) : null}
 
+        <FriendRequestsStrip
+          onOpen={(r) =>
+            setCardTarget({ kind: "id", userId: r.userId, preview: r })
+          }
+        />
+
+        <View style={styles.fullWidth}>
+          <FriendCodeInput
+            onFind={(c) => setCardTarget({ kind: "code", code: c })}
+            ownCode={code}
+          />
+        </View>
+
         <View style={styles.headlineGroup}>
           <Text style={styles.subheadlineText}>{INVITE_COPY.subtext}</Text>
         </View>
@@ -256,6 +287,8 @@ export default function InviteFriendsScreen() {
           <Text style={styles.inviteBtnText}>{INVITE_COPY.inviteFriends}</Text>
         </Pressable>
       </View>
+
+      <HunterCardModal target={cardTarget} onClose={() => setCardTarget(null)} />
     </Screen>
   );
 }
@@ -309,6 +342,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: colors.textPrimary,
+  },
+  fullWidth: {
+    alignSelf: "stretch",
   },
   headlineGroup: {
     alignItems: "center",

@@ -11,14 +11,13 @@ type Props = {
   onFind: (code: string) => void;
   /** The signed-in hunter's own code, so pasting it says so instead of looking it up. */
   ownCode?: string | null;
-  compact?: boolean;
 };
 
 /**
  * "Add a friend by code": type or paste a friend's invite code (or their
  * whole invite link) and open their card, where Add friend sends a request.
  */
-export function FriendCodeInput({ onFind, ownCode, compact = false }: Props) {
+export function FriendCodeInput({ onFind, ownCode }: Props) {
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -50,8 +49,8 @@ export function FriendCodeInput({ onFind, ownCode, compact = false }: Props) {
   };
 
   return (
-    <View style={[styles.wrap, compact && styles.wrapCompact]}>
-      {!compact ? <Text style={styles.label}>Add a friend by code</Text> : null}
+    <View style={styles.wrap}>
+      <Text style={styles.label}>Add a friend by code</Text>
       <View style={styles.row}>
         <View style={[styles.inputBox, error && styles.inputBoxError]}>
           <Ionicons name="person-add-outline" size={16} color="#8D98A3" />
@@ -93,10 +92,6 @@ export function FriendCodeInput({ onFind, ownCode, compact = false }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     gap: 8,
-  },
-  wrapCompact: {
-    marginHorizontal: 16,
-    marginTop: 10,
   },
   label: {
     fontFamily: fontFamilies.semiBold,

@@ -36,10 +36,8 @@ import { LeaderboardTop5Modal } from '@/components/features/leaderboard/Leaderbo
 import { SystemSettingsModal } from '@/components/profile/SystemSettingsModal';
 import { InviteNudgeCard } from '@/components/features/invite/InviteNudgeCard';
 import { HunterCardModal, type HunterCardTarget } from '@/components/features/friends/HunterCardModal';
-import { FriendRequestsStrip } from '@/components/features/friends/FriendRequestsStrip';
-import { FriendCodeInput } from '@/components/features/friends/FriendCodeInput';
+import { FriendRequestsNudge } from '@/components/features/friends/FriendRequestsNudge';
 import { useFriendsStore } from '@/store/useFriendsStore';
-import type { FriendRequest } from '@/types/friends';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -128,13 +126,10 @@ export default function LeaderboardScreen() {
       },
     });
   }, []);
-  const openRequest = useCallback((r: FriendRequest) => {
-    setCardTarget({ kind: 'id', userId: r.userId, preview: r });
-  }, []);
-  const openByCode = useCallback((code: string) => setCardTarget({ kind: 'code', code }), []);
 
-  // Requests waiting for me: refreshed when the screen is opened and when
-  // Friends is picked (the strip shows the last list meanwhile).
+  // Requests waiting for me (answered on Invite Friends): refreshed when the
+  // screen is opened and when Friends is picked, for the pill badge and the
+  // heads-up on the Friends tab.
   const friendRequestCount = useFriendsStore((s) => s.requests.length);
   const loadFriendRequests = useFriendsStore((s) => s.loadRequests);
   useFocusEffect(
@@ -347,13 +342,9 @@ export default function LeaderboardScreen() {
         onPressSettings={() => setSettingsModalVisible(true)}
       />
 
-      {/* Friends tab: requests waiting for me, and adding someone by code. */}
-      {scope === 'friends' && !showSkeleton ? (
-        <>
-          <FriendRequestsStrip onOpen={openRequest} />
-          <FriendCodeInput compact onFind={openByCode} ownCode={user?.referral_code ?? null} />
-        </>
-      ) : null}
+      {/* Friends tab: a heads-up when requests are waiting (answered, and
+          friends added by code, on Invite Friends). */}
+      {scope === 'friends' && !showSkeleton ? <FriendRequestsNudge /> : null}
 
       {/* Invite card: Friends tab only, always there above the list (the
           empty state has its own button). Global has none. */}

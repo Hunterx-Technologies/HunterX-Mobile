@@ -13,9 +13,9 @@ import type { FriendRequest } from '@/types/friends';
 const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
 
 /**
- * Friend requests waiting for me, at the top of the Friends tab. Accept /
- * Decline right here; tapping the hunter opens their card. Renders nothing
- * when there are none.
+ * Friend requests waiting for me, on the Invite Friends screen (the only
+ * place they're answered). Accept / Decline right here; tapping the hunter
+ * opens their card. Renders nothing when there are none.
  */
 export function FriendRequestsStrip({ onOpen }: { onOpen: (request: FriendRequest) => void }) {
   const requests = useFriendsStore((s) => s.requests);
@@ -87,8 +87,7 @@ function RequestRow({ request, onOpen }: { request: FriendRequest; onOpen: (r: F
 
 const styles = StyleSheet.create({
   wrap: {
-    marginHorizontal: 16,
-    marginTop: 12,
+    alignSelf: 'stretch',
     padding: 12,
     gap: 10,
     borderRadius: 16,
