@@ -49,7 +49,7 @@ import { getAvatarSource } from '@/components/profile/AvatarSelectionModal';
 import { useAvatarsReady } from '@/services/api/avatar.service';
 import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
 import { setCelebrationHold, showReward, useCelebrationStore } from '@/store/useCelebrationStore';
-import { syncStreakBadges, useStreakBadgeSync } from '@/hooks/useStreakBadgeSync';
+import { syncStreakBadgesThen, useStreakBadgeSync } from '@/hooks/useStreakBadgeSync';
 import { DeletionPendingNotice } from '@/components/common/DeletionPendingNotice';
 import { API_ERROR, PENDING_DELETION_MESSAGE, getApiErrorCode } from '@/services/api/errors';
 import { showLevelUpFromApi } from '@/store/useLevelUpStore';
@@ -174,10 +174,8 @@ export default function MissionsHomeScreen() {
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [dayCompleteModalVisible, setDayCompleteModalVisible] = useState(false);
   const [routineModalVisible, setRoutineModalVisible] = useState(false);
-  // Toasts and the first-quest sheet live in useHomeOverlayStore, drawn by
-  // <HomeOverlays>: changing them doesn't re-render this screen. Home only
-  // needs to know whether the sheet is open (celebrations wait for it).
-  const taskBottomSheetVisible = useHomeOverlayStore((s) => s.sheet.visible);
+  // Toasts live in useHomeOverlayStore, drawn by <HomeOverlays>: changing
+  // them doesn't re-render this screen.
 
   // refreshUser defaults to false: useAuthStore.restoreSession() already
   // fetches the user once at app boot, so re-fetching it here too on every
@@ -304,7 +302,7 @@ export default function MissionsHomeScreen() {
     setDayCompleteKey((k) => k + 1);
     setDayCompleteModalVisible(true);
   }, []);
-  const holdCelebrations = taskBottomSheetVisible || showDayComplete || showBlackIntroOverlay || pushPrompt.visible;
+  const holdCelebrations = showDayComplete || showBlackIntroOverlay || pushPrompt.visible;
   useEffect(() => {
     setCelebrationHold('home', holdCelebrations);
   }, [holdCelebrations]);
@@ -315,7 +313,7 @@ export default function MissionsHomeScreen() {
   // (the first XP is exactly when level-up / reward screens play).
   const maybeOfferPush = pushPrompt.maybeOffer;
   const isHomeModalOpen =
-    dropVisible || actionModalVisible || dayCompleteModalVisible || taskBottomSheetVisible || showBlackIntroOverlay || !!proofQuest || celebrating;
+    dropVisible || actionModalVisible || dayCompleteModalVisible || showBlackIntroOverlay || !!proofQuest || celebrating;
   useEffect(() => {
     if (isHomeModalOpen) return;
     const timer = setTimeout(() => maybeOfferPush((user?.xp ?? 0) > 0), 1500);
@@ -357,8 +355,8 @@ export default function MissionsHomeScreen() {
   const dayCleared = dailyQuests.length > 0 && dailyTodoQuests.length === 0 && dailyDoneQuests.length > 0;
 
   // Automatically pop up the MissionResultsScreen celebration ONCE per day when the day is cleared.
-  // It waits until home's other popups (the quest's action sheet, "Quest
-  // Cleared", proof upload…) have closed, so it never opens on top of one
+  // It waits until home's other popups (the quest's action sheet, proof
+  // upload…) have closed, so it never opens on top of one
   // still animating away — on iOS that open is silently dropped.
   const [dayCompletePending, setDayCompletePending] = useState(false);
   useEffect(() => {
@@ -384,7 +382,7 @@ export default function MissionsHomeScreen() {
   }, [loading, tasksFresh, dayCleared, user?.id]);
 
   const otherHomeModalOpen =
-    dropVisible || actionModalVisible || taskBottomSheetVisible || showBlackIntroOverlay || !!proofQuest;
+    dropVisible || actionModalVisible || showBlackIntroOverlay || !!proofQuest;
   useEffect(() => {
     if (!dayCompletePending || otherHomeModalOpen) return;
     const timer = setTimeout(() => {
@@ -461,26 +459,11 @@ export default function MissionsHomeScreen() {
     if (actionStatus === 'COMPLETED' || actionStatus === 'PARTIAL') {
       const isPartial = actionStatus === 'PARTIAL';
 
-      // Check if this is the FIRST task completed of the day
-      const isFirstTaskOfToday = previousQuests.filter(
-        (q) => q.status === 'done' || q.status === 'partial'
-      ).length === 0;
-
-      if (isFirstTaskOfToday) {
-        // Show celebration bottom sheet ONLY on the first task of the day
-        useHomeOverlayStore.getState().showTaskSheet({
-          title: `Quest Cleared: ${targetQuest.title}`,
-          subtitle: 'One day down. The flame grows stronger with each rise.',
-          xp: optimisticEarnedXp,
-        });
-      } else {
-        // Subsequent tasks completed on the same day show top toast instead
-        useHomeOverlayStore.getState().showCompletedToast({
-          title: isPartial ? 'Partial Progress!' : 'Task Completed!',
-          subtitle: isPartial ? 'Progress logged · Half XP earned!' : 'Great job, hunter!',
-          xp: optimisticEarnedXp,
-        });
-      }
+      useHomeOverlayStore.getState().showCompletedToast({
+        title: isPartial ? 'Partial Progress!' : 'Task Completed!',
+        subtitle: isPartial ? 'Progress logged · Half XP earned!' : 'Great job, hunter!',
+        xp: optimisticEarnedXp,
+      });
 
       playTaskDoneSound(isPartial ? 'partial' : 'completed');
     } else {
@@ -495,9 +478,12 @@ export default function MissionsHomeScreen() {
       // scratched in the wallet.
       // A new streak badge is fetched from the unseen list (so it's shown,
       // and marked seen, the same way however it was earned).
-      if (data.streak_milestone) syncStreakBadges();
-      showLevelUpFromApi(data.level_up);
-      (data.rewards_earned ?? []).forEach(showReward);
+      const queueRest = () => {
+        showLevelUpFromApi(data.level_up);
+        (data.rewards_earned ?? []).forEach(showReward);
+      };
+      if (data.streak_milestone) syncStreakBadgesThen(queueRest);
+      else queueRest();
 
       // XP changed — the backend has already moved this hunter on the
       // leaderboard (a first completed task is what puts a new hunter on it
@@ -1159,8 +1145,9 @@ export default function MissionsHomeScreen() {
             prev.map((q) => (q.id === questId ? { ...q, status: 'done', reviewStatus: 'in_review', reviewNote: null } : q))
           );
           // Only streak unlocks can come now; XP and other rewards follow approval.
-          if (data.streak_milestone) syncStreakBadges();
-          (data.rewards_earned ?? []).forEach(showReward);
+          const queueRewards = () => (data.rewards_earned ?? []).forEach(showReward);
+          if (data.streak_milestone) syncStreakBadgesThen(queueRewards);
+          else queueRewards();
           showGlobalToast(`Proof sent! You'll get +${proofQuest?.xpReward ?? 0} XP once it's approved.`, 'success');
           loadTasks();
         }}
@@ -1201,8 +1188,8 @@ export default function MissionsHomeScreen() {
       {/* Loot Drop Modal */}
       <LootDropModal visible={dropVisible} rarity={lastDrop} onDismiss={() => setDropVisible(false)} />
 
-      {/* Task-completed toast, error toast and first-quest sheet */}
-      <HomeOverlays streakDays={displayStreak} weekStatus={user?.week_status} />
+      {/* Task-completed and error toasts */}
+      <HomeOverlays />
 
       {/* System Summon Push Notifications Priming Modal */}
       <PushPermissionModal
