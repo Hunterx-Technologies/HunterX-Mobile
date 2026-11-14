@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -44,7 +46,7 @@ import { useFriendsStore } from "@/store/useFriendsStore";
 import { showGlobalToast } from "@/store/useToastStore";
 import { colors } from "@/theme/colors";
 import { fontFamilies } from "@/theme/typography";
-import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
+import { useScrollToTopOnFocus } from "@/hooks/useScrollToTopOnFocus";
 
 export default function InviteFriendsScreen() {
   const pageScrollRef = useRef<ScrollView>(null);
@@ -61,6 +63,40 @@ export default function InviteFriendsScreen() {
   const [isCopied, setIsCopied] = useState(false);
   const [sharing, setSharing] = useState<"pass" | "qr" | null>(null);
   const cardRef = useRef<GuestPassCardHandle>(null);
+
+  // Keyboard: Android is edge-to-edge (adjustResize does nothing) and iOS
+  // never resizes, so the keyboard covers the bottom of the page. Its height
+  // becomes extra scroll room, the code field is scrolled above it, and the
+  // floating Invite button steps aside while typing.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const viewportHeight = useRef(0);
+  const codeFieldFrame = useRef({ y: 0, height: 0 });
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvent, (e) =>
+      setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  useEffect(() => {
+    if (!keyboardHeight) return;
+    // Wait a frame so the extra bottom padding is laid out before scrolling.
+    const frame = requestAnimationFrame(() => {
+      const { y, height } = codeFieldFrame.current;
+      const visible = viewportHeight.current - keyboardHeight;
+      const target = y + height + 24 - visible;
+      if (target > 0)
+        pageScrollRef.current?.scrollTo({ y: target, animated: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [keyboardHeight]);
 
   // Friends between existing hunters live here: requests waiting for me
   // (Accept / Decline, the only place they're answered) and adding someone
@@ -110,8 +146,7 @@ export default function InviteFriendsScreen() {
   }, [userId, load]);
 
   useEffect(() => {
-    if (userId && profileCode)
-      writeInviteCache(userId, { code: profileCode });
+    if (userId && profileCode) writeInviteCache(userId, { code: profileCode });
   }, [userId, profileCode]);
 
   useEffect(() => {
@@ -193,9 +228,18 @@ export default function InviteFriendsScreen() {
         ref={pageScrollRef}
         bounces={false}
         overScrollMode="never"
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        onLayout={(e) => {
+          viewportHeight.current = e.nativeEvent.layout.height;
+        }}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + 110 },
+          {
+            paddingBottom: keyboardHeight
+              ? keyboardHeight + 24
+              : insets.bottom + 110,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -257,7 +301,13 @@ export default function InviteFriendsScreen() {
           ) : null}
         </View>
 
-        <View style={styles.fullWidth}>
+        <View
+          style={styles.fullWidth}
+          onLayout={(e) => {
+            const { y, height } = e.nativeEvent.layout;
+            codeFieldFrame.current = { y, height };
+          }}
+        >
           <FriendCodeInput
             onFound={(card) =>
               setCardTarget({ kind: "id", userId: card.userId, preview: card })
@@ -273,24 +323,31 @@ export default function InviteFriendsScreen() {
         />
       </ScrollView>
 
-      <View style={[styles.bottomBtnWrapper, { bottom: insets.bottom + 16 }]}>
-        <Pressable
-          onPress={() => shareCard("pass")}
-          disabled={!code || sharing !== null}
-          accessibilityRole="button"
-          accessibilityLabel={INVITE_COPY.inviteFriends}
-          style={({ pressed }) => [
-            styles.invitePillBtn,
-            (!code || sharing !== null) && styles.disabled,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons name="paper-plane" size={18} color="#000000" />
-          <Text style={styles.inviteBtnText}>{INVITE_COPY.inviteFriends}</Text>
-        </Pressable>
-      </View>
+      {keyboardHeight ? null : (
+        <View style={[styles.bottomBtnWrapper, { bottom: insets.bottom + 16 }]}>
+          <Pressable
+            onPress={() => shareCard("pass")}
+            disabled={!code || sharing !== null}
+            accessibilityRole="button"
+            accessibilityLabel={INVITE_COPY.inviteFriends}
+            style={({ pressed }) => [
+              styles.invitePillBtn,
+              (!code || sharing !== null) && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons name="paper-plane" size={18} color="#000000" />
+            <Text style={styles.inviteBtnText}>
+              {INVITE_COPY.inviteFriends}
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
-      <HunterCardModal target={cardTarget} onClose={() => setCardTarget(null)} />
+      <HunterCardModal
+        target={cardTarget}
+        onClose={() => setCardTarget(null)}
+      />
     </Screen>
   );
 }
