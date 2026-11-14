@@ -31,6 +31,12 @@ export function GlobalLevelUp() {
     []
   );
 
+  // Each level-up starts on its own screen, never on a dragon step left over
+  // from an earlier one (e.g. cleared by sign-out mid-way).
+  useEffect(() => {
+    setShowingDragon(false);
+  }, [options]);
+
   if (!options) return null;
   const { dragonStage, onDone: _onDone, ...screen } = options;
 

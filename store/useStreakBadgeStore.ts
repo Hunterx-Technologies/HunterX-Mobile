@@ -37,6 +37,8 @@ export const useStreakBadgeStore = create<StreakBadgeState>((set, get) => ({
   options: null,
   showStreakBadge: (options) => set({ visible: true, options }),
   hideStreakBadge: () => {
+    // Once only: a double tap must not finish it twice.
+    if (!get().visible) return;
     const done = get().options?.onDone;
     set({ visible: false });
     done?.();

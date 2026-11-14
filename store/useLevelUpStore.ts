@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { enqueueCelebration } from '@/store/useCelebrationStore';
 import type { LevelUpRewardProps } from '@/components/features/levelUp/LevelUpReward';
 import type { LevelUpInfo } from '@/types/task';
-import { markLevelUpsSeen } from '@/services/api/user.service';
+import { markCelebrationSeen } from '@/services/celebrations/seenOutbox';
 
 export interface DragonStageStep {
   imageUrl: string;
@@ -30,6 +30,9 @@ export const useLevelUpStore = create<LevelUpState>((set, get) => ({
   options: null,
   showLevelUp: (options) => set({ visible: true, options }),
   hideLevelUp: () => {
+    // Once only: a double tap, or ✕ and the button together, must not
+    // finish it twice.
+    if (!get().visible) return;
     const done = get().options?.onDone;
     set({ visible: false });
     done?.();
@@ -75,13 +78,7 @@ export const showLevelUpFromApi = (info: LevelUpInfo | null | undefined) => {
     dragonStage: stage?.image_url
       ? { imageUrl: stage.image_url, name: stage.name, message: stage.message, buttonLabel: info.button_label }
       : undefined,
-    onDone: () => {
-      // A failed call just means it's offered again on a later launch.
-      if (ids.length > 0) {
-        markLevelUpsSeen(ids).catch((err: unknown) =>
-          console.warn('[levelUp] mark seen failed:', err instanceof Error ? err.message : err)
-        );
-      }
-    },
+    // Kept on the device until the server confirms, so it never replays.
+    onDone: () => markCelebrationSeen('levelUp', ids),
   });
 };

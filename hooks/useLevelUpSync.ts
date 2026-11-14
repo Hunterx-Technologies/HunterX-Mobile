@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { useAuthStore } from '@/store/useAuthStore';
 import { showLevelUpFromApi } from '@/store/useLevelUpStore';
 import { fetchPendingLevelUp } from '@/services/api/user.service';
+import { withoutClaimed } from '@/services/celebrations/seenOutbox';
 
 // Foreground refreshes are throttled to one a minute.
 const FOREGROUND_THROTTLE_MS = 60 * 1000;
@@ -13,7 +14,12 @@ let inFlight: Promise<void> | null = null;
 /** Queues the level-up screen for any level-up the user hasn't seen yet. */
 export function syncLevelUp(): Promise<void> {
   inFlight ??= fetchPendingLevelUp()
-    .then(showLevelUpFromApi)
+    .then(async (info) => {
+      // Already claimed on this device, and the server hasn't heard yet.
+      const ids = info?.event_ids ?? [];
+      if (ids.length > 0 && (await withoutClaimed('levelUp', ids, (id) => id)).length === 0) return;
+      showLevelUpFromApi(info);
+    })
     .catch((err: unknown) => console.warn('[levelUp] sync failed:', err instanceof Error ? err.message : err))
     .finally(() => {
       lastSyncAt = Date.now();

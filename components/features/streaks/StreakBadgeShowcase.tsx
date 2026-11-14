@@ -82,11 +82,24 @@ const INTRO_SEAL_MS = 520;
 const INTRO_REVEAL_MS = 480;
 /** How long to wait for the home slot before opening without the flight. */
 const INTRO_SOURCE_TIMEOUT_MS = 1500;
+// The vault is always on screen by this long after the popup opens, even if
+// the opening flight never gets going — it starts invisible, and an
+// invisible popup still catches every tap (the app looks frozen).
+const INTRO_MAX_MS = 5000;
 const INTRO_ARC = 90;
 
 // Continue → fly to the home badge slot (ms).
 const FLY_MS = 760;
 const LAND_MS = 560;
+// Badges this many places either side of the one in view stay mounted. A
+// slot is fully transparent from 1.8 places away (BadgeSlot), and a finger
+// drag moves the row at most a screen width (~1.75 places at the slot
+// spacing) before the one in view changes, so badges 4+ away are never seen.
+const MOUNTED_SLOT_RANGE = 3;
+// Continue always closes the popup within this long, even if the flight home
+// is cut short (an interrupted animation never reports finishing) — the
+// popup must never be left on screen invisible, swallowing every tap.
+const CONTINUE_MAX_MS = 2000 + FLY_MS + LAND_MS + 1200;
 /** How high the badge arcs above the straight line while flying. */
 const FLY_ARC = 140;
 
@@ -211,18 +224,25 @@ const BadgeSlot: React.FC<SlotProps> = ({ badge, pos, offset, state, size, stage
 
   return (
     <Animated.View style={[styles.slot, { width: size, height: size }, slotStyle]} pointerEvents="none">
-      <Animated.View style={[styles.slotGlow, { width: size * 1.7, height: size * 1.7, left: -size * 0.35, top: -size * 0.35 }, glowStyle]}>
-        <Svg width="100%" height="100%" viewBox="0 0 100 100">
-          <Defs>
-            <RadialGradient id={`sbGlow${badge.id}`} cx="50%" cy="50%" r="50%">
-              <Stop offset="0" stopColor={accent} stopOpacity={0.7} />
-              <Stop offset="0.45" stopColor={accent} stopOpacity={0.22} />
-              <Stop offset="1" stopColor={accent} stopOpacity={0} />
-            </RadialGradient>
-          </Defs>
-          <Circle cx={50} cy={50} r={50} fill={`url(#sbGlow${badge.id})`} />
-        </Svg>
-      </Animated.View>
+      {/* Never shown behind a locked badge (its opacity is 0), so not mounted
+          there: on Android each SVG is drawn into its own full-size bitmap,
+          and seven of these at ~1100px square pushed the GPU's texture cache
+          over its limit — every frame then re-uploaded them (~8 fps on a
+          Snapdragon 680). */}
+      {state !== 'locked' && (
+        <Animated.View style={[styles.slotGlow, { width: size * 1.7, height: size * 1.7, left: -size * 0.35, top: -size * 0.35 }, glowStyle]}>
+          <Svg width="100%" height="100%" viewBox="0 0 100 100">
+            <Defs>
+              <RadialGradient id={`sbGlow${badge.id}`} cx="50%" cy="50%" r="50%">
+                <Stop offset="0" stopColor={accent} stopOpacity={0.7} />
+                <Stop offset="0.45" stopColor={accent} stopOpacity={0.22} />
+                <Stop offset="1" stopColor={accent} stopOpacity={0} />
+              </RadialGradient>
+            </Defs>
+            <Circle cx={50} cy={50} r={50} fill={`url(#sbGlow${badge.id})`} />
+          </Svg>
+        </Animated.View>
+      )}
 
       {state !== 'locked' && (
         <Animated.View style={[StyleSheet.absoluteFill, colorStyle]}>
@@ -676,7 +696,10 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
 
   // A new current badge (e.g. the test page moving on): bring it into focus
   // and reset the seal.
+  /** Bumped whenever the seal resets, so a reveal from before is ignored. */
+  const sealEpoch = useRef(0);
   useEffect(() => {
+    sealEpoch.current++;
     setViewIndex(focusIndex);
     crack.value = 0;
     shatter.value = 0;
@@ -714,12 +737,27 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   const land = useSharedValue(0);
   const sceneStyle = useAnimatedStyle(() => ({ opacity: sceneFade.value }));
 
-  const finishFlight = () => onContinue?.(badge);
+  // Once only, however it's reached (landing, no target, the time limit).
+  const continuedRef = useRef(false);
+  const continueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (continueTimerRef.current) clearTimeout(continueTimerRef.current);
+  }, []);
+  const finishFlight = () => {
+    if (continuedRef.current) return;
+    continuedRef.current = true;
+    if (continueTimerRef.current) clearTimeout(continueTimerRef.current);
+    onContinue?.(badge);
+  };
+  const landedRef = useRef(false);
   const impact = () => {
+    if (landedRef.current) return;
+    landedRef.current = true;
     buzz('success');
     onLanded?.(badge);
-    land.value = withTiming(1, { duration: LAND_MS, easing: Easing.out(Easing.quad) }, (done) => {
-      if (done) runOnJS(finishFlight)();
+    // Finishes even if the landing is interrupted.
+    land.value = withTiming(1, { duration: LAND_MS, easing: Easing.out(Easing.quad) }, () => {
+      runOnJS(finishFlight)();
     });
   };
 
@@ -728,7 +766,9 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
       onContinue?.(badge);
       return;
     }
-    if (leaving) return;
+    // A ref, not state: two taps in the same frame both see stale state.
+    if (leaving || continuedRef.current || continueTimerRef.current) return;
+    continueTimerRef.current = setTimeout(finishFlight, CONTINUE_MAX_MS);
     setLeaving(true);
     const origin = await measureInWindow(rootRef.current);
     const ox = origin?.x ?? 0;
@@ -747,12 +787,13 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
       return;
     }
     setFlight({ from, to });
-    fly.value = withTiming(1, { duration: FLY_MS, easing: Easing.inOut(Easing.cubic) }, (done) => {
-      if (done) runOnJS(impact)();
+    fly.value = withTiming(1, { duration: FLY_MS, easing: Easing.inOut(Easing.cubic) }, () => {
+      runOnJS(impact)();
     });
   };
 
-  const finishReveal = () => {
+  const finishReveal = (epoch: number) => {
+    if (epoch !== sealEpoch.current) return;
     const now = new Date();
     setUnlockedAt(now);
     onUnlocked?.(badge);
@@ -771,8 +812,11 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
       play(crackSound);
       buzz(next === 1 ? 'medium' : 'heavy');
     } else {
-      shatter.value = withTiming(1, { duration: 1400, easing: Easing.linear }, (done) => {
-        if (done) runOnJS(finishReveal)();
+        // Reveals even if interrupted, so Continue always appears — unless
+      // the seal was reset meanwhile (a new current badge).
+      const epoch = sealEpoch.current;
+      shatter.value = withTiming(1, { duration: 1400, easing: Easing.linear }, () => {
+        runOnJS(finishReveal)(epoch);
       });
       play(revealSound);
       buzz('success');
@@ -874,49 +918,75 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
   };
   const introSealed = () => {
     showScene();
-    introReveal.value = withTiming(1, { duration: INTRO_REVEAL_MS, easing: Easing.out(Easing.quad) }, (done) => {
-      if (done) runOnJS(finishIntro)();
+    // Each intro step moves on even if interrupted, so the seal can always be tapped.
+    introReveal.value = withTiming(1, { duration: INTRO_REVEAL_MS, easing: Easing.out(Easing.quad) }, () => {
+      runOnJS(finishIntro)();
     });
   };
   const introArrived = () => {
     buzz('heavy');
     play(crackSound);
-    introSeal.value = withTiming(1, { duration: INTRO_SEAL_MS, easing: Easing.out(Easing.quad) }, (done) => {
-      if (done) runOnJS(introSealed)();
+    introSeal.value = withTiming(1, { duration: INTRO_SEAL_MS, easing: Easing.out(Easing.quad) }, () => {
+      runOnJS(introSealed)();
     });
   };
+
+  // Latest layout, read once the home slot is found: on Android the popup is
+  // laid out again (status bar area added) while that's being looked up.
+  const layoutRef = useRef({ width, size, stageTop });
+  layoutRef.current = { width, size, stageTop };
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!getIntroSource) return;
+    const timer = setTimeout(() => {
+      if (introFinishedRef.current) return;
+      showScene();
+      finishIntro();
+    }, INTRO_MAX_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on open
+  }, []);
 
   useEffect(() => {
     if (intro !== 'pending' || !getIntroSource || stageHeight === 0 || !headerMeasured || introStarted.current) return;
     introStarted.current = true;
-    let cancelled = false;
+    // Runs to the end once started. It used to be cancelled by the effect's
+    // cleanup — which also runs when the stage height changes, as it does
+    // on Android right after opening — and never restarted, leaving the
+    // popup invisible over the screen. Only unmounting stops it now.
     (async () => {
-      const origin = await measureInWindow(rootRef.current);
-      const to = { x: (origin?.x ?? 0) + width / 2 - size / 2, y: (origin?.y ?? 0) + stageTop, width: size, height: size };
       const from = await Promise.race([
         getIntroSource(STREAK_BADGES_DATA[currentIndex]).catch(() => null),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), INTRO_SOURCE_TIMEOUT_MS)),
       ]);
-      if (cancelled) return;
+      if (!mountedRef.current || introFinishedRef.current) return;
       if (!from) {
         // Home slot not found: open the vault without the flight.
         showScene();
         finishIntro();
         return;
       }
+      const origin = await measureInWindow(rootRef.current);
+      if (!mountedRef.current || introFinishedRef.current) return;
+      const l = layoutRef.current;
+      const to = { x: (origin?.x ?? 0) + l.width / 2 - l.size / 2, y: (origin?.y ?? 0) + l.stageTop, width: l.size, height: l.size };
       setIntroRects({ from, to });
       setIntro('playing');
       introDim.value = withTiming(1, { duration: 280 });
       introFly.value = withDelay(
         140,
-        withTiming(1, { duration: INTRO_FLY_MS, easing: Easing.inOut(Easing.cubic) }, (done) => {
-          if (done) runOnJS(introArrived)();
+        withTiming(1, { duration: INTRO_FLY_MS, easing: Easing.inOut(Easing.cubic) }, () => {
+          runOnJS(introArrived)();
         })
       );
     })();
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, when the layout is ready
   }, [intro, stageHeight, headerMeasured]);
 
@@ -960,7 +1030,10 @@ export const StreakBadgeShowcase: React.FC<StreakBadgeShowcaseProps> = ({
               ))}
 
               <View style={[styles.row, { top: stageTop, height: size }]}>
-                {slots.map(({ idx, state }) => (
+                {/* Badges more than MOUNTED_SLOT_RANGE away are fully transparent and
+                    off-stage (see BadgeSlot's opacity), so they're mounted only as
+                    browsing brings them near — same look, far less GPU memory. */}
+                {slots.filter(({ idx }) => Math.abs(idx - viewIndex) <= MOUNTED_SLOT_RANGE).map(({ idx, state }) => (
                   <BadgeSlot
                     key={STREAK_BADGES_DATA[idx].id}
                     badge={STREAK_BADGES_DATA[idx]}

@@ -28,14 +28,19 @@ export interface ScenePaint {
 export interface DrawCmd {
   m: Mat;
   path: PathCmds;
+  /** Set when `path` (with its fill rule) is the same on every frame: renderers may build it once and reuse it. */
+  pathKey: string | null;
   evenOdd: boolean;
   paint: ScenePaint;
   alpha: number;
+  /** Set when the paint (including `alpha`) is the same on every frame. */
+  paintKey: string | null;
   blend: number;
   stroke: number; // 0 = fill
   cap: number;
   join: number;
-  clips: { path: PathCmds; evenOdd: boolean }[];
+  /** `key` is set when that clip is the same on every frame. */
+  clips: { path: PathCmds; evenOdd: boolean; key: string | null }[];
 }
 
 type AnyNode = {
@@ -96,6 +101,55 @@ const S = DIAMOND_SCENE as unknown as {
   cubics: readonly (readonly number[])[];
 };
 
+// What the timelines animate, worked out once. Everything not listed here is
+// the same on every frame, so its geometry and paint are built once and
+// reused instead of being rebuilt 60 times a second (see buildFrame).
+/** "n:<node>:<prop>" / "v:<path>:<vertex>:<prop>" key of each track, per animation. */
+const TRACK_KEYS: string[][] = [];
+/** Nodes whose position, rotation or scale is animated. */
+const MOVING_NODES: Record<number, true> = {};
+/** Nodes whose opacity is animated. */
+const FADING_NODES: Record<number, true> = {};
+/** Paths whose vertices are animated. */
+const MORPHING_PATHS: Record<number, true> = {};
+for (let a = 0; a < S.anims.length; a++) {
+  const keys: string[] = [];
+  for (const tr of S.anims[a].tracks) {
+    keys.push(tr.t.join(':'));
+    const id = Number(tr.t[1]);
+    if (tr.t[0] === 'v') MORPHING_PATHS[id] = true;
+    else if (tr.t[tr.t.length - 1] === 'op') FADING_NODES[id] = true;
+    else MOVING_NODES[id] = true;
+  }
+  TRACK_KEYS.push(keys);
+}
+/** Shapes whose own geometry (path vertices or a via-node transform) is animated. */
+const MORPHING_SHAPES: Record<number, true> = {};
+for (const id of Object.keys(S.nodes)) {
+  for (const ref of S.nodes[id].paths || []) {
+    if (MORPHING_PATHS[ref.p] || ref.via.some((v) => MOVING_NODES[v])) MORPHING_SHAPES[Number(id)] = true;
+  }
+}
+
+// Static paths, built once per runtime (the UI runtime on native). Bounded:
+// keys are per shape, so this only grows if the close-button shift changes.
+const MEMO_LIMIT = 400;
+function staticPathMemo(): Record<string, PathCmds> {
+  'worklet';
+  const g = globalThis as unknown as { __hxDiamondPathMemo?: Record<string, PathCmds>; __hxDiamondPathMemoSize?: number };
+  if (!g.__hxDiamondPathMemo || (g.__hxDiamondPathMemoSize ?? 0) > MEMO_LIMIT) {
+    g.__hxDiamondPathMemo = {};
+    g.__hxDiamondPathMemoSize = 0;
+  }
+  return g.__hxDiamondPathMemo;
+}
+function rememberPath(memo: Record<string, PathCmds>, key: string, path: PathCmds) {
+  'worklet';
+  memo[key] = path;
+  const g = globalThis as unknown as { __hxDiamondPathMemoSize?: number };
+  g.__hxDiamondPathMemoSize = (g.__hxDiamondPathMemoSize ?? 0) + 1;
+}
+
 export const ARTBOARD_WIDTH = S.ui.w;
 export const ARTBOARD_HEIGHT = S.ui.h;
 
@@ -145,9 +199,9 @@ export function evaluate(t: number): Record<string, number> {
     const an = S.anims[a];
     let frame = t * an.fps;
     frame = an.loop === 1 ? frame % an.dur : Math.min(frame, an.dur);
+    const keys = TRACK_KEYS[a];
     for (let i = 0; i < an.tracks.length; i++) {
-      const tr = an.tracks[i];
-      ov[tr.t.join(':')] = sampleTrack(tr.kf, frame);
+      ov[keys[i]] = sampleTrack(an.tracks[i].kf, frame);
     }
   }
   return ov;
@@ -438,25 +492,30 @@ export function buildFrame(t: number, hideDiamond = false, closeShift = 0): Draw
   'worklet';
   const ov = evaluate(t);
   const world: Record<number, Mat> = {};
-  const list: { id: number; m: Mat; alpha: number; clips: number[] }[] = [];
+  /** World transform changes over time (it or an ancestor moves). */
+  const worldMoves: Record<number, boolean> = {};
+  const list: { id: number; m: Mat; alpha: number; fades: boolean; clips: number[] }[] = [];
 
-  const walk = (id: number, parentM: Mat, parentOp: number, clips: number[]) => {
+  const walk = (id: number, parentM: Mat, parentOp: number, clips: number[], parentMoves: boolean, parentFades: boolean) => {
     const n = S.nodes[id];
     if (!n || (hideDiamond && id === DIAMOND_NODE)) return;
     let m = mul(parentM, localOf(ov, id));
     if (closeShift && CLOSE_NODES[id]) m = mul([1, 0, 0, 1, 0, -closeShift], m);
     world[id] = m;
+    const moves = parentMoves || MOVING_NODES[id] === true;
+    const fades = parentFades || FADING_NODES[id] === true;
+    worldMoves[id] = moves;
     const op = parentOp * Math.min(1, Math.max(0, nv(ov, id, n, 'op')));
     let cl = clips;
     if (n.clips.length) {
       cl = clips.slice();
       for (let i = 0; i < n.clips.length; i++) cl.push(n.clips[i].src);
     }
-    if (n.shape) list.push({ id, m, alpha: op, clips: cl });
+    if (n.shape) list.push({ id, m, alpha: op, fades, clips: cl });
     const kids = n.nested === 'mf' ? S.mf.roots : n.kids;
-    for (let i = kids.length - 1; i >= 0; i--) walk(kids[i], m, op, cl);
+    for (let i = kids.length - 1; i >= 0; i--) walk(kids[i], m, op, cl, moves, fades);
   };
-  for (let i = S.ui.roots.length - 1; i >= 0; i--) walk(S.ui.roots[i], IDENTITY, 1, []);
+  for (let i = S.ui.roots.length - 1; i >= 0; i--) walk(S.ui.roots[i], IDENTITY, 1, [], false, false);
 
   // Draw rules: place a drawable directly behind ("after") or in front of its target.
   const ordered: typeof list = [];
@@ -471,31 +530,51 @@ export function buildFrame(t: number, hideDiamond = false, closeShift = 0): Draw
   }
 
   const cmds: DrawCmd[] = [];
+  const memo = staticPathMemo();
   const clipCache: Record<number, PathCmds> = {};
+  const clipKeys: Record<number, string | null> = {};
   for (let i = 0; i < ordered.length; i++) {
     const it = ordered[i];
     const n = S.nodes[it.id];
     const fills = n.fills || [];
     if (!fills.length || it.alpha <= 0) continue;
-    const local = shapePath(ov, n, IDENTITY);
-    const clips: { path: PathCmds; evenOdd: boolean }[] = [];
+    // The shape in its own space: the same every frame unless it morphs.
+    const shapeKey = MORPHING_SHAPES[it.id] ? null : 's' + it.id;
+    let local = shapeKey ? memo[shapeKey] : undefined;
+    if (!local) {
+      local = shapePath(ov, n, IDENTITY);
+      if (shapeKey) rememberPath(memo, shapeKey, local);
+    }
+    const clips: { path: PathCmds; evenOdd: boolean; key: string | null }[] = [];
     for (let c = 0; c < it.clips.length; c++) {
       const src = it.clips[c];
       if (!clipCache[src]) {
-        const sm = world[src] || IDENTITY;
-        clipCache[src] = shapePath(ov, S.nodes[src], sm);
+        // A clip is drawn in world space, so it also has to stay put.
+        const walked = world[src] !== undefined;
+        const fixed = !MORPHING_SHAPES[src] && !(walked && worldMoves[src]);
+        const key = fixed ? 'c' + src + (walked ? '' : '!') + '@' + closeShift : null;
+        let path = key ? memo[key] : undefined;
+        if (!path) {
+          path = shapePath(ov, S.nodes[src], world[src] || IDENTITY);
+          if (key) rememberPath(memo, key, path);
+        }
+        clipCache[src] = path;
+        clipKeys[src] = key;
       }
-      clips.push({ path: clipCache[src], evenOdd: false });
+      clips.push({ path: clipCache[src], evenOdd: false, key: clipKeys[src] });
     }
     for (let f = 0; f < fills.length; f++) {
       const fl = fills[f];
       if (!fl.paint) continue;
+      const evenOdd = fl.rule === 1;
       cmds.push({
         m: it.m,
         path: local,
-        evenOdd: fl.rule === 1,
+        pathKey: shapeKey ? shapeKey + (evenOdd ? 'e' : 'w') : null,
+        evenOdd,
         paint: it.id === BUTTON_NODE ? BUTTON_PAINT : fl.paint,
         alpha: it.alpha,
+        paintKey: it.fades ? null : 'f' + it.id + ':' + f,
         blend: n.blend === undefined ? 3 : n.blend,
         stroke: fl.stroke || 0,
         cap: fl.cap || 0,

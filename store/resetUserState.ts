@@ -8,6 +8,7 @@ import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
 import { useStreakBreakStore } from '@/store/useStreakBreakStore';
 import { clearTasksTodayCache } from '@/services/cache/tasksTodayCache';
+import { resetSeenOutbox } from '@/services/celebrations/seenOutbox';
 
 /**
  * Clears everything that belongs to the signed-in account, on sign-out or
@@ -18,6 +19,7 @@ import { clearTasksTodayCache } from '@/services/cache/tasksTodayCache';
  */
 export function resetUserState() {
   resetCelebrations();
+  resetSeenOutbox();
   useLevelUpStore.setState({ visible: false, options: null });
   useStreakBadgeStore.setState({ visible: false, options: null, earnedIds: [], landing: null });
   useStreakBreakStore.setState({ visible: false, options: null, pillLandedAt: null });

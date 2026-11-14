@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { router, type Href } from 'expo-router';
-import { registerCelebrationPresenter } from '@/store/useCelebrationStore';
+import { registerCelebrationPresenter, whenCelebrationsIdle } from '@/store/useCelebrationStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { markRewardSeen } from '@/services/api/rewards.service';
+import { markCelebrationSeen } from '@/services/celebrations/seenOutbox';
 import { rewardCelebrationCopy, rewardOccasion, type UserReward } from '@/types/reward';
 import { SCRATCH_CARD_REWARD_DEFAULTS, ScratchCardRewardModal } from './ScratchCardReward';
 
@@ -31,15 +31,20 @@ export function GlobalReward() {
   const copy = rewardCelebrationCopy(reward);
 
   const close = (openWallet: boolean) => {
-    setVisible(false);
-    // Fire and forget: a failed call just means it's offered again from the
-    // unseen list on a later launch.
-    markRewardSeen(reward.id).catch((err: unknown) =>
-      console.warn('[GlobalReward] markRewardSeen failed:', err instanceof Error ? err.message : err)
-    );
-    if (openWallet) router.push(`/rewards?focus=${reward.id}` as Href);
-    doneRef.current?.();
+    // Once only: a double tap, or ✕ and the button together, must not
+    // claim it twice or open the wallet twice.
+    const done = doneRef.current;
+    if (!done) return;
     doneRef.current = null;
+    setVisible(false);
+    // Kept on the device until the server confirms, so it never replays.
+    markCelebrationSeen('reward', [reward.id]);
+    done();
+    // After whatever comes next (e.g. the level-up), not underneath it.
+    if (openWallet) {
+      const href = `/rewards?focus=${reward.id}` as Href;
+      whenCelebrationsIdle(() => router.push(href));
+    }
   };
 
   return (

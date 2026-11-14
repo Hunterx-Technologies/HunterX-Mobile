@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { useAuthStore } from '@/store/useAuthStore';
 import { showReward } from '@/store/useCelebrationStore';
 import { fetchUnseenRewards } from '@/services/api/rewards.service';
+import { flushSeenOutbox, withoutClaimed } from '@/services/celebrations/seenOutbox';
 
 // Foreground refreshes are throttled to one a minute.
 const FOREGROUND_THROTTLE_MS = 60 * 1000;
@@ -15,7 +16,10 @@ let inFlight: Promise<void> | null = null;
  * a card also in the quest-completion response) are dropped by the queue.
  */
 export function syncUnseenRewards(): Promise<void> {
+  if (!inFlight) flushSeenOutbox();
   inFlight ??= fetchUnseenRewards()
+    // Cards claimed on this device whose "seen" call hasn't reached the server yet.
+    .then((rewards) => withoutClaimed('reward', rewards, (r) => r.id))
     .then((rewards) => rewards.forEach(showReward))
     .catch((err: unknown) => console.warn('[rewards] unseen sync failed:', err instanceof Error ? err.message : err))
     .finally(() => {

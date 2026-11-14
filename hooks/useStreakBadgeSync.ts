@@ -3,7 +3,8 @@ import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
 import { showStreakBadge } from '@/store/useStreakBadgeStore';
-import { fetchUnseenStreakBadges, markStreakBadgesSeen, type UnseenStreakBadge } from '@/services/api/user.service';
+import { fetchUnseenStreakBadges, type UnseenStreakBadge } from '@/services/api/user.service';
+import { flushSeenOutbox, markCelebrationSeen, withoutClaimed } from '@/services/celebrations/seenOutbox';
 import { STREAK_BADGES_DATA } from '@/components/features/streaks/StreakBadgesCarousel';
 
 // Foreground refreshes are throttled to one a minute.
@@ -14,11 +15,8 @@ let syncAgain = false;
 /** Badges already queued this session — each popup shows once. */
 const queuedIds = new Set<string>();
 
-const markSeen = (ids: string[]) =>
-  markStreakBadgesSeen(ids).catch((err: unknown) =>
-    // A failed call just means the popup is offered again later.
-    console.warn('[streakBadge] mark seen failed:', err instanceof Error ? err.message : err)
-  );
+// Kept on the device until the server confirms, so a claimed badge never replays.
+const markSeen = (ids: string[]) => markCelebrationSeen('streakBadge', ids);
 
 function showBadges(badges: UnseenStreakBadge[]) {
   for (const b of badges) {
@@ -37,25 +35,50 @@ function showBadges(badges: UnseenStreakBadge[]) {
 /**
  * Fetches streak badges earned but not shown yet and queues their unlock
  * popup (crack the seal, then Continue). A call made while one is running
- * runs again after it, so a badge earned just now is never missed.
+ * runs again after it, so a badge earned just now is never missed; the
+ * returned promise settles once that re-run is done too (never rejects).
  */
 export function syncStreakBadges(): Promise<void> {
   if (inFlight) {
     syncAgain = true;
     return inFlight;
   }
-  inFlight = fetchUnseenStreakBadges()
-    .then(showBadges)
-    .catch((err: unknown) => console.warn('[streakBadge] sync failed:', err instanceof Error ? err.message : err))
-    .finally(() => {
-      lastSyncAt = Date.now();
-      inFlight = null;
-      if (syncAgain) {
-        syncAgain = false;
-        syncStreakBadges();
+  inFlight = (async () => {
+    do {
+      syncAgain = false;
+      flushSeenOutbox();
+      try {
+        const badges = await fetchUnseenStreakBadges();
+        showBadges(await withoutClaimed('streakBadge', badges, (b) => b.id));
+      } catch (err) {
+        console.warn('[streakBadge] sync failed:', err instanceof Error ? err.message : err);
       }
-    });
+    } while (syncAgain);
+  })().finally(() => {
+    lastSyncAt = Date.now();
+    inFlight = null;
+  });
   return inFlight;
+}
+
+// Longest a quest completion waits for its new badge before queueing the rest.
+const BADGE_WAIT_MS = 4000;
+
+/**
+ * After a completion that reached a streak milestone: fetches the new badge
+ * first, then runs `queueRest` (its reward cards, level-up), so they play
+ * badge → reward → level-up. A slow or failed fetch only delays the rest by
+ * BADGE_WAIT_MS; the badge then comes in behind them.
+ */
+export function syncStreakBadgesThen(queueRest: () => void) {
+  let ran = false;
+  const run = () => {
+    if (ran) return;
+    ran = true;
+    queueRest();
+  };
+  setTimeout(run, BADGE_WAIT_MS);
+  syncStreakBadges().then(run);
 }
 
 /**

@@ -8,7 +8,8 @@ import type { UserReward } from '@/types/reward';
 // showStreakBadge() and showReward() all queue here; each is shown once the
 // one before it has closed. Items queued in the same tick (one batch, e.g. a
 // single quest completion) play in a fixed order: streak life lost →
-// level-up → streak badge → reward.
+// streak badge → reward → level-up (a 7-day streak: badge, its reward card,
+// then the level-up it pushed the hunter to).
 //
 // The screens themselves are the Global* components in the root layout.
 // Each registers a presenter for its kind on mount, so a queued item waits
@@ -35,7 +36,7 @@ export type Celebration = {
 /** Shows one celebration; must call `done` once it has closed. */
 export type CelebrationPresenter<K extends CelebrationKind> = (options: CelebrationOptions[K], done: () => void) => void;
 
-const ORDER: Record<CelebrationKind, number> = { streakBreak: 0, levelUp: 1, streakBadge: 2, reward: 3 };
+const ORDER: Record<CelebrationKind, number> = { streakBreak: 0, streakBadge: 1, reward: 2, levelUp: 3 };
 
 // Lets a closing modal finish animating before the next one opens (iOS
 // can't present a modal while another is still dismissing).
@@ -52,9 +53,11 @@ export const useCelebrationStore = create<CelebrationState>(() => ({
 }));
 
 const presenters: { [K in CelebrationKind]?: CelebrationPresenter<K> } = {};
-/** Screens that mustn't be covered right now (e.g. Home's "Quest Cleared" sheet). */
+/** Screens that mustn't be covered right now (e.g. Home's popups). */
 const holds = new Set<string>();
 let batch: Celebration[] = [];
+/** Waiting for the queue to empty (see whenCelebrationsIdle). */
+let idleCallbacks: (() => void)[] = [];
 let batchScheduled = false;
 /** Rewards queued this session — the same card is never celebrated twice. */
 const queuedRewardIds = new Set<string>();
@@ -90,7 +93,11 @@ function present(item: Celebration, done: () => void): boolean {
 
 function advance() {
   const { current, queue } = useCelebrationStore.getState();
-  if (current || queue.length === 0 || holds.size > 0) return;
+  if (current || holds.size > 0) return;
+  if (queue.length === 0) {
+    if (!batchScheduled) runIdleCallbacks();
+    return;
+  }
 
   const [next, ...rest] = queue;
   let finished = false;
@@ -144,6 +151,22 @@ export function enqueueCelebration(item: Celebration) {
   }
 }
 
+function runIdleCallbacks() {
+  const callbacks = idleCallbacks;
+  idleCallbacks = [];
+  callbacks.forEach((cb) => cb());
+}
+
+/**
+ * Runs `cb` once nothing is showing or queued, a moment after the last
+ * screen closed — e.g. opening the wallet from a reward card without
+ * pushing a screen under the level-up that comes next.
+ */
+export function whenCelebrationsIdle(cb: () => void) {
+  idleCallbacks.push(cb);
+  setTimeout(advance, GAP_MS);
+}
+
 /** Called by each Global* screen on mount. Returns the unregister function. */
 export function registerCelebrationPresenter<K extends CelebrationKind>(kind: K, presenter: CelebrationPresenter<K>) {
   (presenters as Record<K, CelebrationPresenter<K> | undefined>)[kind] = presenter;
@@ -162,6 +185,7 @@ export const showReward = (reward: UserReward) => {
 export function resetCelebrations() {
   batch = [];
   batchScheduled = false;
+  idleCallbacks = [];
   queuedRewardIds.clear();
   useCelebrationStore.setState({ queue: [], current: null });
 }
