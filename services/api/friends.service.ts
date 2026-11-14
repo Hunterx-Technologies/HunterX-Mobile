@@ -1,5 +1,5 @@
 import type { ApiResponse } from '@/types/api';
-import type { FriendRelationship, FriendRequest, HunterCard } from '@/types/friends';
+import type { BlockedHunter, FriendRelationship, FriendRequest, HunterCard } from '@/types/friends';
 
 import { apiClient } from './client';
 
@@ -50,6 +50,11 @@ export function cancelFriendRequest(userId: string): Promise<RelationshipResult>
 
 export function removeFriend(userId: string): Promise<RelationshipResult> {
   return unwrap(apiClient.delete(`/friends/${id(userId)}`));
+}
+
+/** Hunters I blocked, newest first — hidden from my Global leaderboard until unblocked. */
+export function fetchBlockedHunters(): Promise<{ blocked: BlockedHunter[]; count: number }> {
+  return unwrap(apiClient.get('/friends/blocks'));
 }
 
 export function blockHunter(userId: string): Promise<RelationshipResult> {

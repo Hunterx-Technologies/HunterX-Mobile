@@ -24,6 +24,9 @@ export type HunterCard = {
   relationship: FriendRelationship;
 };
 
+/** Someone I blocked (GET /friends/blocks): their card plus when I blocked them. */
+export type BlockedHunter = HunterCard & { blockedAt: string };
+
 /** A request waiting for me: the sender's card plus when they asked. */
 export type FriendRequest = HunterCard & { requestedAt: string };
 

@@ -28,6 +28,7 @@ import { useSettingsContext } from '@/context/SettingsContext';
 import { HunterSwitch } from './HunterSwitch';
 import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter';
 import { HunterToast, type HunterToastType } from '@/components/common/HunterToast';
+import { BlockedHuntersModal } from '@/components/features/friends/BlockedHuntersModal';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { emailError } from '@/utils/validation';
 import { showGlobalToast } from '@/store/useToastStore';
@@ -144,6 +145,7 @@ export function SystemSettingsModal({
   const [isExportingData, setIsExportingData] = useState(false);
   const [exportStatus, setExportStatus] = useState<DataExportStatus | null>(null);
   const [isExportConfirmVisible, setIsExportConfirmVisible] = useState(false);
+  const [isBlockedHuntersVisible, setIsBlockedHuntersVisible] = useState(false);
   const [toast, setToast] = useState<{ visible: boolean; message: string; type: HunterToastType }>({
     visible: false,
     message: '',
@@ -651,9 +653,11 @@ export function SystemSettingsModal({
                 </TouchableOpacity>
               </View>
             </View>
+          </View>
 
-            <View style={styles.settingItemDivider} />
-
+          {/* SECTION: VISIBILITY & SAFETY */}
+          <Text style={styles.sectionHeader}>VISIBILITY & SAFETY</Text>
+          <View style={styles.settingsGroupCard}>
             {/* Leaderboard Visibility */}
             <View style={styles.settingRow}>
               <View style={styles.settingLeftGroup}>
@@ -672,6 +676,28 @@ export function SystemSettingsModal({
                 onValueChange={(val) => handleToggleAccountSetting('leaderboard_visible', val)}
               />
             </View>
+
+            <View style={styles.settingItemDivider} />
+
+            {/* Blocked Hunters */}
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={() => setIsBlockedHuntersVisible(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingLeftGroup}>
+                <View style={styles.settingIconBox}>
+                  <Ionicons name="ban-outline" size={18} color="#FE5B01" />
+                </View>
+                <View style={styles.settingTextGroup}>
+                  <Text style={styles.settingTitle}>Blocked hunters</Text>
+                  <Text style={styles.settingSubtitle}>
+                    Hidden from your leaderboard · Unblock them here
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#71717A" />
+            </TouchableOpacity>
           </View>
 
           {/* SECTION 4: AUDIO & HAPTICS (LOCAL ASYNCSTORAGE LAYER) */}
@@ -1075,6 +1101,11 @@ export function SystemSettingsModal({
           loading={isExportingData}
           onConfirm={sendDataExport}
           onCancel={() => setIsExportConfirmVisible(false)}
+        />
+
+        <BlockedHuntersModal
+          visible={isBlockedHuntersVisible}
+          onClose={() => setIsBlockedHuntersVisible(false)}
         />
 
         {/* Change Password Modal */}

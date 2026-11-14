@@ -42,6 +42,7 @@ const VIGNETTE_COLORS = ['rgba(2, 2, 3, 0.78)', 'rgba(2, 2, 3, 0.4)', 'rgba(2, 2
 const VIGNETTE_LOCATIONS = [0, 0.25, 0.65, 1] as const;
 const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
 const ORANGE = '#FE5B01';
+const DANGER = '#EF4444';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /**
@@ -69,14 +70,6 @@ function formatJoined(iso: string | null | undefined): string | null {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
-}
-
-/** "Nov" and "2026", for the Joined stat, which shows them on two lines. */
-function joinedParts(iso: string | null | undefined): { month: string; year: string } | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return { month: d.toLocaleDateString('en-IN', { month: 'short' }), year: String(d.getFullYear()) };
 }
 
 const fmt = (n: number) => n.toLocaleString('en-US');
@@ -134,7 +127,7 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
   const level = card?.level ?? preview?.level ?? 1;
   const totalXp = card?.totalXp ?? preview?.totalXp ?? 0;
   const streak = card?.streak ?? preview?.streak ?? 0;
-  const joined = joinedParts(card?.joinedAt);
+  const joined = formatJoined(card?.joinedAt);
   const friendsSince = formatJoined(card?.friendsSince);
   const relationship: FriendRelationship | null = card?.relationship ?? null;
   const hasSomething = Boolean(card || preview);
@@ -191,6 +184,21 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
     if (which === 'block') await act(blockHunter, `${name} is blocked.`);
   }, [pending, act, name]);
 
+  const blockButton = (
+    <TouchableOpacity
+      style={[styles.dangerBtn, styles.flex1]}
+      onPress={() => setPending('block')}
+      disabled={busy}
+      activeOpacity={0.8}
+      accessibilityLabel={`Block ${name}`}
+    >
+      <View style={styles.row}>
+        <Ionicons name="ban-outline" size={19} color={DANGER} />
+        <Text style={styles.dangerBtnText} numberOfLines={1}>Block User</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
   const renderActions = () => {
     if (loadError) {
       return (
@@ -226,7 +234,7 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
       return (
         <>
           <Text style={styles.noteText}>{name} wants to be your friend.</Text>
-          <View style={styles.row}>
+          <View style={styles.buttonRow}>
             <TouchableOpacity
               style={[styles.secondaryBtn, styles.flex1]}
               onPress={() => act(declineFriendRequest)}
@@ -243,24 +251,28 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
               activeOpacity={0.85}
               accessibilityLabel={`Accept ${name}'s friend request`}
             >
-              {busy ? <ActivityIndicator color="#000000" /> : <Text style={styles.primaryBtnText}>Accept</Text>}
+              {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryBtnText}>Accept</Text>}
             </TouchableOpacity>
           </View>
+          <TouchableOpacity style={styles.linkBtn} onPress={() => setPending('block')} disabled={busy} hitSlop={8}>
+            <Text style={[styles.linkText, styles.linkDanger]}>Block User</Text>
+          </TouchableOpacity>
         </>
       );
     }
+
+    let primary: React.ReactNode;
     if (relationship === 'friends') {
-      return (
-        <View style={styles.friendsBadge}>
-          <Ionicons name="people" size={16} color={ORANGE} />
-          <Text style={styles.friendsBadgeText}>Friends{friendsSince ? ` since ${friendsSince}` : ''}</Text>
+      primary = (
+        <View style={[styles.friendsBadge, styles.flex1]}>
+          <Ionicons name="people" size={18} color={ORANGE} />
+          <Text style={styles.friendsBadgeText} numberOfLines={1}>Friends</Text>
         </View>
       );
-    }
-    if (relationship === 'requested') {
-      return (
+    } else if (relationship === 'requested') {
+      primary = (
         <TouchableOpacity
-          style={styles.secondaryBtn}
+          style={[styles.secondaryBtn, styles.flex1]}
           onPress={() => act(cancelFriendRequest)}
           disabled={busy}
           activeOpacity={0.8}
@@ -270,35 +282,51 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <View style={styles.row}>
-              <Ionicons name="time-outline" size={16} color="#C9D1D9" />
+              <Ionicons name="time-outline" size={18} color="#C9D1D9" />
               <Text style={styles.secondaryBtnText}>Requested</Text>
             </View>
           )}
         </TouchableOpacity>
       );
+    } else {
+      // none
+      primary = (
+        <TouchableOpacity
+          style={[styles.primaryBtn, styles.flex1]}
+          onPress={target?.kind === 'link' ? addViaLink : () => act(sendFriendRequest, 'Friend request sent.')}
+          disabled={busy}
+          activeOpacity={0.85}
+          accessibilityLabel={`Add ${name} as a friend`}
+        >
+          {busy ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <View style={styles.row}>
+              <Ionicons name="person-add" size={18} color="#FFFFFF" />
+              <Text style={styles.primaryBtnText} numberOfLines={1}>Add Friend</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      );
     }
-    // none
+
     return (
-      <TouchableOpacity
-        style={styles.primaryBtn}
-        onPress={target?.kind === 'link' ? addViaLink : () => act(sendFriendRequest, 'Friend request sent.')}
-        disabled={busy}
-        activeOpacity={0.85}
-        accessibilityLabel={`Add ${name} as a friend`}
-      >
-        {busy ? (
-          <ActivityIndicator color="#000000" />
-        ) : (
-          <View style={styles.row}>
-            <Ionicons name="person-add" size={16} color="#000000" />
-            <Text style={styles.primaryBtnText}>Add friend</Text>
+      <>
+        <View style={styles.buttonRow}>
+          {primary}
+          {blockButton}
+        </View>
+        {relationship === 'friends' ? (
+          <View style={styles.friendsFooter}>
+            {friendsSince ? <Text style={styles.footerText}>Friends since {friendsSince}</Text> : null}
+            <TouchableOpacity onPress={() => setPending('remove')} disabled={busy} hitSlop={8}>
+              <Text style={styles.linkText}>Remove friend</Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </TouchableOpacity>
+        ) : null}
+      </>
     );
   };
-
-  const showMore = relationship === 'friends' || relationship === 'none' || relationship === 'requested' || relationship === 'incoming';
 
   return (
     <Modal visible={target !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
@@ -312,9 +340,9 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
 
           <View style={styles.headerBar}>
             <View style={styles.headerSide} />
-            <Text style={styles.headerTitle}>Hunter</Text>
+            <Text style={styles.headerTitle}>Hunter Profile</Text>
             <TouchableOpacity style={styles.headerSide} onPress={onClose} hitSlop={12} activeOpacity={0.7} accessibilityLabel="Close">
-              <Ionicons name="close" size={22} color="#FFFFFF" />
+              <Ionicons name="close" size={26} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
@@ -324,55 +352,55 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
                 <ActivityIndicator color={ORANGE} />
               </View>
             ) : (
-              <View style={styles.mainCard}>
+              <>
                 {hasSomething ? (
                   <>
-                    <View style={styles.avatarRing}>
-                      <Image source={{ uri: avatar || FALLBACK_AVATAR }} style={styles.avatar} contentFit="cover" />
-                      {preview?.rank != null ? (
-                        <View style={styles.rankPill}>
-                          <Text style={styles.rankPillText}>#{preview.rank}</Text>
+                    {/* Avatar on the left; name, rank, XP and level beside it. */}
+                    <View style={styles.identityRow}>
+                      <View style={styles.avatarRing}>
+                        <Image source={{ uri: avatar || FALLBACK_AVATAR }} style={styles.avatar} contentFit="cover" />
+                        {preview?.rank != null ? (
+                          <View style={styles.rankPill}>
+                            <Text style={styles.rankPillText} numberOfLines={1}>#{preview.rank}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View style={styles.identityRight}>
+                        <View style={styles.nameBlock}>
+                          <Text style={styles.name} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{name}</Text>
+                          {card?.rankName ? <Text style={styles.rankName} numberOfLines={1}>{card.rankName}</Text> : null}
                         </View>
-                      ) : null}
-                    </View>
-                    <Text style={styles.name} numberOfLines={1}>{name}</Text>
-                    {card?.rankName ? <Text style={styles.rankName}>{card.rankName}</Text> : null}
 
-                    <View style={styles.scoreRow}>
-                      <Text style={styles.scoreNumber}>{fmt(totalXp)} </Text>
-                      <Text style={styles.scoreXp}>XP</Text>
-                    </View>
-                    <View style={styles.levelPill}>
-                      <Text style={styles.levelPrefix}>Level </Text>
-                      <Text style={styles.levelNumber}>{level}</Text>
+                        <View style={styles.xpCard}>
+                          <View style={styles.xpGroup}>
+                            <Ionicons name="flash" size={18} color={ORANGE} />
+                            <Text style={styles.xpNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                              {fmt(totalXp)}<Text style={styles.xpUnit}> XP</Text>
+                            </Text>
+                          </View>
+                          <View style={styles.xpDivider} />
+                          <View style={styles.levelPill}>
+                            <Text style={styles.levelPrefix}>Level </Text>
+                            <Text style={styles.levelNumber}>{level}</Text>
+                          </View>
+                        </View>
+                      </View>
                     </View>
 
-                    <View style={styles.statsRow}>
-                      <Stat icon={<FontAwesome5 name="fire" size={14} color={streak > 0 ? ORANGE : '#5B6470'} />} value={`${streak}`} label="Streak" />
+                    <View style={styles.statsBox}>
+                      <Stat icon={<FontAwesome5 name="fire" size={20} color={streak > 0 ? ORANGE : '#5B6470'} />} value={`${streak}`} label="Streak" />
                       <View style={styles.statDivider} />
-                      <Stat icon={<Ionicons name="trophy" size={14} color="#F6B23C" />} value={card ? `${card.longestStreak}` : '–'} label="Best streak" />
+                      <Stat icon={<Ionicons name="trophy" size={22} color="#F6B23C" />} value={card ? `${card.longestStreak}` : '–'} label="Best Streak" />
                       <View style={styles.statDivider} />
-                      <Stat icon={<Ionicons name="calendar" size={14} color="#8D98A3" />} value={joined?.month ?? '–'} subValue={joined?.year} label="Joined" />
+                      <Stat icon={<Ionicons name="calendar" size={20} color="#8D98A3" />} value={joined ?? '–'} label="Joined" />
                     </View>
                   </>
                 ) : null}
 
                 <View style={styles.actions}>{renderActions()}</View>
-              </View>
+              </>
             )}
-
-            {showMore && card ? (
-              <View style={styles.moreRow}>
-                {relationship === 'friends' ? (
-                  <TouchableOpacity onPress={() => setPending('remove')} disabled={busy} hitSlop={8}>
-                    <Text style={styles.moreText}>Remove friend</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity onPress={() => setPending('block')} disabled={busy} hitSlop={8}>
-                  <Text style={[styles.moreText, styles.moreDanger]}>Block</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
           </View>
         </Pressable>
       </Pressable>
@@ -383,7 +411,7 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
         title={pending === 'block' ? `Block ${name}?` : `Remove ${name}?`}
         message={
           pending === 'block'
-            ? 'You won\'t be friends, and neither of you can send the other a request. They aren\'t told. You can unblock them from their card.'
+            ? 'You won\'t be friends, and neither of you can send the other a request. They aren\'t told, and they\'re hidden from your leaderboard. You can unblock them in Settings → Blocked hunters.'
             : 'They\'ll leave your Friends leaderboard. They aren\'t told.'
         }
         confirmLabel={pending === 'block' ? 'Block' : 'Remove'}
@@ -395,16 +423,12 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
   );
 }
 
-/** subValue: an optional second line under the value (Joined: "Nov" / "2026"). */
-function Stat({ icon, value, subValue, label }: { icon: React.ReactNode; value: string; subValue?: string; label: string }) {
+function Stat({ icon, value, label }: { icon: React.ReactNode; value: string; label: string }) {
   return (
     <View style={styles.stat}>
-      <View style={styles.statValueRow}>
-        {icon}
-        <Text style={styles.statValue} numberOfLines={1}>{value}</Text>
-      </View>
-      {subValue ? <Text style={styles.statValue} numberOfLines={1}>{subValue}</Text> : null}
-      <Text style={styles.statLabel}>{label}</Text>
+      <View style={styles.statIcon}>{icon}</View>
+      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{value}</Text>
+      <Text style={styles.statLabel} numberOfLines={1}>{label}</Text>
     </View>
   );
 }
@@ -415,16 +439,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.82)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
   },
   card: {
     width: '100%',
-    maxWidth: 355,
+    maxWidth: 380,
     maxHeight: SCREEN_HEIGHT * 0.9,
-    backgroundColor: '#020203',
-    borderRadius: 24,
-    borderWidth: 1.2,
-    borderColor: 'rgba(254, 91, 1, 0.50)',
+    backgroundColor: '#0B0B0D',
+    borderRadius: 28,
+    borderWidth: 1.5,
+    borderColor: ORANGE,
     overflow: 'hidden',
   },
   bgImage: {
@@ -433,11 +457,12 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   headerBar: {
-    height: 50,
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
+    marginTop: 4,
   },
   headerSide: {
     width: 38,
@@ -447,156 +472,194 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontFamily: fontFamilies.bold,
-    fontSize: 16.5,
+    fontSize: 19,
     color: '#FFFFFF',
     letterSpacing: 0.2,
   },
   body: {
-    paddingHorizontal: 22,
-    paddingBottom: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 22,
   },
   loadingBlock: {
-    height: 260,
+    height: 280,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  mainCard: {
-    backgroundColor: 'rgba(13, 17, 20, 0.85)',
-    borderRadius: 18,
-    borderWidth: 1.1,
-    borderColor: 'rgba(254, 91, 1, 0.45)',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+
+  // Identity: avatar + name/rank + XP/level
+  identityRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 14,
+    marginTop: 10,
   },
   avatarRing: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
-    borderWidth: 1.8,
+    width: 98,
+    height: 98,
+    borderRadius: 49,
+    borderWidth: 2.5,
     borderColor: ORANGE,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0D1114',
+    shadowColor: ORANGE,
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
   },
   avatar: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
   },
   rankPill: {
     position: 'absolute',
-    top: -2,
+    top: -6,
     right: -10,
-    minWidth: 30,
-    height: 26,
-    paddingHorizontal: 6,
-    borderRadius: 13,
-    backgroundColor: '#180A04',
-    borderWidth: 1.2,
+    minWidth: 38,
+    height: 30,
+    paddingHorizontal: 7,
+    borderRadius: 15,
+    backgroundColor: '#140804',
+    borderWidth: 1.5,
     borderColor: ORANGE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rankPillText: {
     fontFamily: fontFamilies.bold,
-    fontSize: 11,
+    fontSize: 12.5,
     color: '#FFFFFF',
   },
+  identityRight: {
+    flex: 1,
+    minWidth: 0,
+    gap: 12,
+  },
+  nameBlock: {
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255, 255, 255, 0.18)',
+    paddingLeft: 12,
+  },
   name: {
-    marginTop: 10,
     fontFamily: fontFamilies.bold,
-    fontSize: 19,
+    fontSize: 22,
     color: '#FFFFFF',
-    maxWidth: '100%',
   },
   rankName: {
     marginTop: 2,
     fontFamily: fontFamilies.semiBold,
-    fontSize: 11,
-    letterSpacing: 1.2,
+    fontSize: 11.5,
+    letterSpacing: 2.2,
     color: '#8D98A3',
     textTransform: 'uppercase',
   },
-  scoreRow: {
+  xpCard: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 10,
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(28, 20, 16, 0.85)',
   },
-  scoreNumber: {
+  xpGroup: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  xpNumber: {
+    flexShrink: 1,
     fontFamily: fontFamilies.bold,
-    fontSize: 21,
+    fontSize: 20,
     color: '#FFFFFF',
   },
-  scoreXp: {
+  xpUnit: {
     fontFamily: fontFamilies.bold,
-    fontSize: 14.5,
+    fontSize: 13,
     color: ORANGE,
+  },
+  xpDivider: {
+    width: 1,
+    height: 22,
+    marginHorizontal: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
   },
   levelPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(24, 10, 4, 0.75)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(254, 91, 1, 0.55)',
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: ORANGE,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
   },
   levelPrefix: {
     fontFamily: fontFamilies.medium,
-    fontSize: 11.5,
-    color: '#8D98A3',
+    fontSize: 12,
+    color: '#C9D1D9',
   },
   levelNumber: {
     fontFamily: fontFamilies.bold,
-    fontSize: 12,
+    fontSize: 13,
     color: '#FFFFFF',
   },
-  statsRow: {
+
+  // Stats
+  statsBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    alignSelf: 'stretch',
+    marginTop: 20,
+    paddingVertical: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+    backgroundColor: 'rgba(22, 22, 25, 0.9)',
   },
   stat: {
     flex: 1,
     alignItems: 'center',
+    paddingHorizontal: 4,
   },
-  statValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+  statIcon: {
+    height: 24,
+    justifyContent: 'center',
+    marginBottom: 6,
   },
   statValue: {
     fontFamily: fontFamilies.bold,
-    fontSize: 14,
+    fontSize: 17,
     color: '#FFFFFF',
   },
   statLabel: {
     marginTop: 3,
     fontFamily: fontFamilies.medium,
-    fontSize: 10.5,
-    color: '#8D98A3',
+    fontSize: 12,
+    color: '#A1A1AA',
   },
   statDivider: {
     width: 1,
-    height: 26,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    height: 44,
+    backgroundColor: 'rgba(255, 255, 255, 0.09)',
   },
+
+  // Actions
   actions: {
     alignSelf: 'stretch',
-    marginTop: 16,
-    gap: 10,
+    marginTop: 20,
+    gap: 12,
   },
   actionsLoading: {
-    height: 46,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
   row: {
     flexDirection: 'row',
@@ -608,20 +671,36 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   primaryBtn: {
-    height: 46,
-    borderRadius: 23,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: ORANGE,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
   },
   primaryBtnText: {
     fontFamily: fontFamilies.bold,
-    fontSize: 15,
-    color: '#000000',
+    fontSize: 15.5,
+    color: '#FFFFFF',
+  },
+  dangerBtn: {
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.3,
+    borderColor: DANGER,
+    backgroundColor: 'rgba(239, 68, 68, 0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  dangerBtnText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 15.5,
+    color: DANGER,
   },
   secondaryBtn: {
-    height: 46,
-    borderRadius: 23,
+    height: 52,
+    borderRadius: 26,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.18)',
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
@@ -631,12 +710,12 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: {
     fontFamily: fontFamilies.semiBold,
-    fontSize: 14,
+    fontSize: 15,
     color: '#FFFFFF',
   },
   friendsBadge: {
-    height: 46,
-    borderRadius: 23,
+    height: 52,
+    borderRadius: 26,
     borderWidth: 1,
     borderColor: 'rgba(254, 91, 1, 0.55)',
     backgroundColor: 'rgba(24, 10, 4, 0.75)',
@@ -647,8 +726,32 @@ const styles = StyleSheet.create({
   },
   friendsBadgeText: {
     fontFamily: fontFamilies.bold,
-    fontSize: 14,
+    fontSize: 15.5,
     color: '#FFFFFF',
+  },
+  friendsFooter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  footerText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12.5,
+    color: '#8D98A3',
+  },
+  linkBtn: {
+    alignSelf: 'center',
+  },
+  linkText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 13,
+    color: '#8D98A3',
+    textDecorationLine: 'underline',
+  },
+  linkDanger: {
+    color: DANGER,
+    textDecorationLine: 'none',
   },
   noteText: {
     fontFamily: fontFamilies.medium,
@@ -665,19 +768,5 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: '#F4A5A5',
     textAlign: 'center',
-  },
-  moreRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 28,
-    marginTop: 14,
-  },
-  moreText: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 13,
-    color: '#8D98A3',
-  },
-  moreDanger: {
-    color: '#EF4444',
   },
 });

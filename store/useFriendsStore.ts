@@ -48,8 +48,12 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       // Any answer to their request takes it off the list.
       requests: relationship === 'incoming' ? s.requests : s.requests.filter((r) => r.userId !== userId),
     }));
-    // The Friends leaderboard changes when someone joins or leaves it.
-    if (relationship === 'friends' || wasFriends) invalidateLeaderboardCache();
+    // The Friends leaderboard changes when someone joins or leaves it; the
+    // Global one hides whoever I've blocked, and shows them again on unblock.
+    const wasBlocked = card?.relationship === 'blocked';
+    if (relationship === 'friends' || wasFriends || relationship === 'blocked' || wasBlocked) {
+      invalidateLeaderboardCache();
+    }
   },
 
   reset: () => set({ requests: [], requestsLoaded: false, cards: {} }),
