@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
-import { HealthProviderError } from './HealthAdapter';
-import type { HealthAdapter, HealthAvailability, DailyHealthSummary, DayBarSample } from './HealthAdapter';
+import { HealthProviderError, WEEKDAY_SHORT, currentWeekDays, emptyRangeSummary, estimateActiveMinutes, localDateKey, localDaysBetween, rangeStart } from './HealthAdapter';
+import type { HealthAdapter, HealthAvailability, DailyHealthSummary, DayBarSample, HealthRange, RangeHealthSummary } from './HealthAdapter';
 import { devLog, devWarn } from './devLog';
 
 // Android health data via Health Connect. Google Fit, Samsung Health, the
@@ -18,6 +18,12 @@ import { devLog, devWarn } from './devLog';
 //
 // The manifest must declare each android.permission.health.READ_* permission
 // (app.json → android.permissions); Health Connect refuses anything undeclared.
+//
+// By default Health Connect only lets an app read data from up to 30 days
+// before it was first granted access. READ_HEALTH_DATA_HISTORY lifts that, so
+// the Year view has the user's earlier months too. It's asked for alongside
+// the rest but is optional: older Health Connect versions don't offer it, and
+// without it the Year view simply starts ~30 days before connecting.
 
 let HealthConnect: any = null;
 
@@ -38,6 +44,8 @@ const REQUESTED_PERMISSIONS: Array<{ accessType: 'read'; recordType: string }> =
   { accessType: 'read', recordType: 'ExerciseSession' },
 ];
 
+const HISTORY_PERMISSION = { accessType: 'read' as const, recordType: 'ReadHealthDataHistory' };
+
 // Connected = Steps can be read. The rest are optional: a user may allow
 // steps but not heart rate or sleep, and that's still a working connection
 // (those cards just stay empty). Requiring all six bounced such users back
@@ -50,12 +58,7 @@ const hasEssential = (granted: unknown) =>
   Array.isArray(granted) &&
   (granted as Granted).some((g) => g.accessType === 'read' && g.recordType === ESSENTIAL_RECORD_TYPE);
 
-/** YYYY-MM-DD of a Date in the device's local time. */
-function localDateStr(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
+const localDateStr = localDateKey;
 
 const startOfLocalDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
@@ -169,6 +172,85 @@ async function summarizeDay(dayStart: Date, dayEnd: Date): Promise<DailyHealthSu
   return summary;
 }
 
+/** Every record of a type in [start, end), following Health Connect's pages. */
+async function readAllRecords(recordType: string, start: Date, end: Date): Promise<any[]> {
+  const all: any[] = [];
+  let pageToken: string | undefined;
+  do {
+    const res = await HealthConnect.readRecords(recordType, {
+      timeRangeFilter: between(start, end),
+      pageSize: 1000,
+      ...(pageToken ? { pageToken } : {}),
+    });
+    all.push(...(res?.records ?? []));
+    pageToken = res?.pageToken || undefined;
+  } while (pageToken);
+  return all;
+}
+
+/**
+ * Steps per local day, de-duplicated, in one call. Health Connect slices by
+ * the device's local calendar days; each group's startTime is a local
+ * date-time ("2026-11-01T00:00"), so its first 10 characters are the day.
+ */
+async function dailyStepsMap(start: Date, end: Date): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  try {
+    const groups = await HealthConnect.aggregateGroupByPeriod({
+      recordType: 'Steps',
+      timeRangeFilter: between(start, end),
+      timeRangeSlicer: { period: 'DAYS', length: 1 },
+    });
+    for (const g of groups ?? []) {
+      const raw = String(g?.startTime ?? '');
+      const key = /[zZ]|[+-]\d\d:?\d\d$/.test(raw) ? localDateStr(new Date(raw)) : raw.slice(0, 10);
+      if (key) map.set(key, (map.get(key) || 0) + Math.round(g?.result?.COUNT_TOTAL ?? 0));
+    }
+  } catch (e: any) {
+    devWarn('   [HealthConnect] Steps by day failed:', e?.message || e);
+  }
+  return map;
+}
+
+async function averageHeartRateAggregate(start: Date, end: Date): Promise<number> {
+  try {
+    const res = await HealthConnect.aggregateRecord({ recordType: 'HeartRate', timeRangeFilter: between(start, end) });
+    return Math.round(res?.BPM_AVG ?? 0);
+  } catch (e: any) {
+    devWarn('   [HealthConnect] HeartRate aggregate failed:', e?.message || e);
+    return 0;
+  }
+}
+
+/** Average minutes asleep per night that has a sleep session; nights keyed by the day they end on. */
+async function averageSleepPerNight(start: Date, end: Date): Promise<number> {
+  try {
+    const byNight = new Map<string, number>();
+    for (const rec of await readAllRecords('SleepSession', start, end)) {
+      if (!rec.startTime || !rec.endTime) continue;
+      const ms = new Date(rec.endTime).getTime() - new Date(rec.startTime).getTime();
+      if (ms <= 0) continue;
+      const night = localDateStr(new Date(rec.endTime));
+      byNight.set(night, (byNight.get(night) || 0) + ms);
+    }
+    if (byNight.size === 0) return 0;
+    const totalMs = [...byNight.values()].reduce((a, b) => a + b, 0);
+    return Math.round(totalMs / byNight.size / 60000);
+  } catch (e: any) {
+    devWarn('   [HealthConnect] SleepSession read failed:', e?.message || e);
+    return 0;
+  }
+}
+
+async function countWorkoutsAll(start: Date, end: Date): Promise<number> {
+  try {
+    return (await readAllRecords('ExerciseSession', start, end)).length;
+  } catch (e: any) {
+    devWarn('   [HealthConnect] ExerciseSession read failed:', e?.message || e);
+    return 0;
+  }
+}
+
 // initialize() binds the Health Connect client. Done once and shared, instead
 // of on every permission check while several reads are already in flight.
 let initPromise: Promise<boolean> | null = null;
@@ -230,7 +312,15 @@ export class HealthConnectAdapter implements HealthAdapter {
     // Already allowed (e.g. reconnecting): skip the permission screen.
     if (hasEssential(await HealthConnect.getGrantedPermissions())) return true;
 
-    const granted = await HealthConnect.requestPermission(REQUESTED_PERMISSIONS);
+    // History access is optional and not offered by older Health Connect
+    // versions — if asking for it fails, ask again without it.
+    let granted: unknown;
+    try {
+      granted = await HealthConnect.requestPermission([...REQUESTED_PERMISSIONS, HISTORY_PERMISSION]);
+    } catch (e: any) {
+      devWarn('[HealthConnectAdapter] requestPermission with history failed, retrying without:', e?.message || e);
+      granted = await HealthConnect.requestPermission(REQUESTED_PERMISSIONS);
+    }
     devLog('[HealthConnectAdapter] requestPermission →', JSON.stringify(granted));
     if (hasEssential(granted)) return true;
     // Some versions return only the newly granted set; check what's in effect.
@@ -265,18 +355,48 @@ export class HealthConnectAdapter implements HealthAdapter {
     return summarizeDay(startOfLocalDay(now), now);
   }
 
-  async getYesterdaySummary(): Promise<DailyHealthSummary> {
-    const today = startOfLocalDay(new Date());
-    return summarizeDay(addDays(today, -1), today);
+  async getRangeSummary(range: HealthRange): Promise<RangeHealthSummary> {
+    const now = new Date();
+    const empty = emptyRangeSummary(range, now);
+    if (Platform.OS !== 'android' || !HealthConnect) return empty;
+    try {
+      if (!(await ensureClient())) return empty;
+    } catch {
+      return empty;
+    }
+
+    const start = rangeStart(range, now);
+    const [stepsByDay, totals, avgHeartRate, avgSleepMinutes, workouts] = await Promise.all([
+      dailyStepsMap(start, now),
+      aggregateTotals(start, now),
+      averageHeartRateAggregate(start, now),
+      // The first night ends on the period's first morning.
+      averageSleepPerNight(new Date(start.getFullYear(), start.getMonth(), start.getDate() - 1, 18, 0), now),
+      countWorkoutsAll(start, now),
+    ]);
+
+    const dailySteps = localDaysBetween(start, now).map((date) => ({ date, steps: stepsByDay.get(date) || 0 }));
+    const summary: RangeHealthSummary = {
+      range,
+      // Prefer the whole-period aggregate; fall back to the days if it failed.
+      steps: totals.steps || dailySteps.reduce((a, d) => a + d.steps, 0),
+      calories: totals.calories,
+      distanceKm: totals.distanceKm,
+      activeMinutes: dailySteps.reduce((a, d) => a + estimateActiveMinutes(d.steps), 0) + workouts * 30,
+      avgHeartRate,
+      avgSleepMinutes,
+      workoutCount: workouts,
+      dailySteps,
+    };
+    devLog(`📆 [HealthConnectAdapter] ${range} summary:`, JSON.stringify({ ...summary, dailySteps: dailySteps.length }));
+    return summary;
   }
 
-  /** Mon–Sun of the current week; each bar is that local day's de-duplicated steps. */
+  /** Sun–Sat of the current week (a new week starts empty on Sunday); each bar is that local day's de-duplicated steps. */
   async getWeekBarSamples(): Promise<DayBarSample[]> {
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const now = new Date();
     const today = startOfLocalDay(now);
-    const monday = addDays(today, now.getDay() === 0 ? -6 : 1 - now.getDay());
-    const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+    const days = currentWeekDays(now);
 
     const stepsPerDay = await Promise.all(
       days.map(async (day) => {
@@ -294,8 +414,9 @@ export class HealthConnectAdapter implements HealthAdapter {
 
     const maxTarget = 10000;
     const samples = days.map((day, i) => ({
-      day: dayNames[day.getDay()],
-      label: dayNames[day.getDay()],
+      day: WEEKDAY_SHORT[day.getDay()],
+      label: WEEKDAY_SHORT[day.getDay()],
+      date: localDateStr(day),
       value: Math.min(Math.round((stepsPerDay[i] / maxTarget) * 100), 100),
       steps: stepsPerDay[i],
       isCurrent: day.getTime() === today.getTime(),

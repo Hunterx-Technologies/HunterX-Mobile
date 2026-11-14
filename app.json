@@ -36,7 +36,8 @@
         "android.permission.health.READ_DISTANCE",
         "android.permission.health.READ_HEART_RATE",
         "android.permission.health.READ_SLEEP",
-        "android.permission.health.READ_EXERCISE"
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.READ_HEALTH_DATA_HISTORY"
       ],
       "googleServicesFile": "./google-services.json",
       "versionCode": 1,
@@ -107,8 +108,8 @@
       [
         "@kingstinct/react-native-healthkit",
         {
-          "NSHealthShareUsageDescription": "HunterX reads your steps, active calories, distance, heart rate, sleep and workouts to track your fitness progress and complete health-based quests.",
-          "NSHealthUpdateUsageDescription": "HunterX does not save or change any data in Apple Health. It only reads your activity to track quest progress.",
+          "NSHealthShareUsageDescription": "HunterX reads your steps, active calories, distance, heart rate, sleep and workouts to show your activity on the Metrics screen. This data stays on your iPhone and is never uploaded.",
+          "NSHealthUpdateUsageDescription": "HunterX does not save or change any data in Apple Health. It only reads your activity to show it on the Metrics screen.",
           "background": false
         }
       ],

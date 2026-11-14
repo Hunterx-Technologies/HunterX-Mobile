@@ -215,7 +215,7 @@ export function ConnectHealthView({
         <View style={styles.textHeader}>
           <Text style={styles.mainTitle}>Connect Your{'\n'}Health Data</Text>
           <Text style={styles.subTitle}>
-            Sync your activity, sleep, and wellness data to unlock powerful insights in HunterX.
+            Connect your activity, sleep, and wellness data to see your progress in HunterX.
           </Text>
         </View>
 
@@ -249,7 +249,7 @@ export function ConnectHealthView({
                   <Text style={styles.providerSubtitle}>Connect with</Text>
                   <Text style={styles.providerTitle}>Apple Health</Text>
                   <Text style={styles.providerDesc}>
-                    Sync your health and fitness data securely using HealthKit.
+                    Read your health and fitness data from Apple Health. It stays on your iPhone.
                   </Text>
                 </View>
                 <View style={styles.providerAction}>
@@ -295,7 +295,7 @@ export function ConnectHealthView({
                   <Text style={styles.providerSubtitle}>Connect with</Text>
                   <Text style={styles.providerTitle}>Google Fit / Health Connect</Text>
                   <Text style={styles.providerDesc}>
-                    Sync your health and fitness data securely using Health Connect.
+                    Read your health and fitness data from Health Connect. It stays on your phone.
                   </Text>
                 </View>
                 <View style={styles.providerAction}>
@@ -337,7 +337,7 @@ export function ConnectHealthView({
             <View style={styles.featureTextCol}>
               <Text style={styles.featureTitle}>Your data stays private</Text>
               <Text style={styles.featureSubtitle}>
-                You're in control. We only access what you allow.
+                It stays on your phone, never on our servers. We only read what you allow.
               </Text>
             </View>
           </View>

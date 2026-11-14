@@ -68,9 +68,9 @@ export function HealthConnectionBanner({ onPress }: HealthConnectionBannerProps)
           </Text>
           <Text style={styles.syncText}>
             {isSyncing
-              ? 'Syncing health data...'
+              ? 'Reading health data...'
               : isHealthConnected
-              ? `Last synced • ${lastSyncedText}`
+              ? `Updated • ${lastSyncedText}`
               : 'Tap to sync steps, sleep & workouts'}
           </Text>
         </View>

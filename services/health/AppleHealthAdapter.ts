@@ -1,6 +1,6 @@
 import { Linking, Platform } from 'react-native';
-import { HealthProviderError } from './HealthAdapter';
-import type { HealthAdapter, HealthAvailability, DailyHealthSummary, DayBarSample } from './HealthAdapter';
+import { HealthProviderError, WEEKDAY_SHORT, currentWeekDays, emptyRangeSummary, estimateActiveMinutes, localDateKey, localDaysBetween, rangeStart } from './HealthAdapter';
+import type { HealthAdapter, HealthAvailability, DailyHealthSummary, DayBarSample, HealthRange, RangeHealthSummary } from './HealthAdapter';
 import { devLog, devWarn } from './devLog';
 
 // react-native-health (the old bridge-only HealthKit binding this adapter
@@ -36,14 +36,8 @@ const SLEEP_NON_ASLEEP_VALUES = new Set([0, 2]);
 // HealthKit statistics buckets are aligned to calendar days in the device's
 // local timezone, but Date#toISOString() always renders in UTC — for any
 // timezone ahead of UTC (e.g. IST, UTC+5:30) that pushes local midnight onto
-// the previous UTC day, silently shifting every bucket by one day. Always key
-// dates by their local calendar day instead of the UTC ISO string.
-function localDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
+// the previous UTC day, silently shifting every bucket by one day. Dates are
+// always keyed by their local calendar day (localDateKey) instead.
 
 export class AppleHealthAdapter implements HealthAdapter {
   private isInitialized = false;
@@ -174,6 +168,94 @@ export class AppleHealthAdapter implements HealthAdapter {
     }
   }
 
+  /** Average minutes asleep per night that has sleep data, over [startDate, endDate). Nights are keyed by the day they end on. */
+  private async averageSleepPerNight(startDate: Date, endDate: Date): Promise<number> {
+    if (!HealthKit) return 0;
+    try {
+      const samples = await HealthKit.queryCategorySamples('HKCategoryTypeIdentifierSleepAnalysis', {
+        filter: { date: { startDate, endDate } },
+        limit: 0,
+      });
+      const byNight = new Map<string, number>();
+      (samples || []).forEach((sample: any) => {
+        if (SLEEP_NON_ASLEEP_VALUES.has(sample.value)) return;
+        const start = new Date(sample.startDate).getTime();
+        const end = new Date(sample.endDate);
+        if (end.getTime() <= start) return;
+        const night = localDateKey(end);
+        byNight.set(night, (byNight.get(night) || 0) + (end.getTime() - start));
+      });
+      if (byNight.size === 0) return 0;
+      const totalMs = [...byNight.values()].reduce((a, b) => a + b, 0);
+      return Math.round(totalMs / byNight.size / 60000);
+    } catch (e) {
+      devWarn('[AppleHealthAdapter] averageSleepPerNight failed:', e);
+      return 0;
+    }
+  }
+
+  /** Steps per local day from startDate to endDate, one HealthKit query (daily buckets). */
+  private async dailySteps(startDate: Date, endDate: Date): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    if (!HealthKit) return map;
+    try {
+      const buckets = await HealthKit.queryStatisticsCollectionForQuantity(
+        'HKQuantityTypeIdentifierStepCount',
+        ['cumulativeSum'],
+        startDate,
+        { day: 1 },
+        { filter: { date: { startDate, endDate } }, unit: 'count' }
+      );
+      (buckets || []).forEach((bucket: any) => {
+        if (!bucket.startDate) return;
+        const key = localDateKey(new Date(bucket.startDate));
+        map.set(key, (map.get(key) || 0) + (bucket.sumQuantity?.quantity || 0));
+      });
+    } catch (e) {
+      devWarn('[AppleHealthAdapter] dailySteps failed:', e);
+    }
+    return map;
+  }
+
+  async getRangeSummary(range: HealthRange): Promise<RangeHealthSummary> {
+    const now = new Date();
+    const empty = emptyRangeSummary(range, now);
+    if (Platform.OS !== 'ios' || !HealthKit) return empty;
+    if (!(await this.ensureInitialized())) return empty;
+
+    const start = rangeStart(range, now);
+    try {
+      const [stepsByDay, calories, distanceMeters, heartRate, avgSleep, workouts] = await Promise.all([
+        this.dailySteps(start, now),
+        this.sumQuantity('HKQuantityTypeIdentifierActiveEnergyBurned', 'kcal', start, now),
+        this.sumQuantity('HKQuantityTypeIdentifierDistanceWalkingRunning', 'm', start, now),
+        this.averageQuantity('HKQuantityTypeIdentifierHeartRate', 'count/min', start, now),
+        // The first night ends on the period's first morning.
+        this.averageSleepPerNight(new Date(start.getFullYear(), start.getMonth(), start.getDate() - 1, 18, 0), now),
+        this.countWorkouts(start, now),
+      ]);
+
+      const dailySteps = localDaysBetween(start, now).map((date) => ({ date, steps: Math.round(stepsByDay.get(date) || 0) }));
+      const steps = dailySteps.reduce((a, d) => a + d.steps, 0);
+      const summary: RangeHealthSummary = {
+        range,
+        steps,
+        calories: Math.round(calories),
+        distanceKm: parseFloat((distanceMeters / 1000).toFixed(2)),
+        activeMinutes: dailySteps.reduce((a, d) => a + estimateActiveMinutes(d.steps), 0) + workouts * 30,
+        avgHeartRate: Math.round(heartRate),
+        avgSleepMinutes: avgSleep,
+        workoutCount: workouts,
+        dailySteps,
+      };
+      devLog(`📆 [AppleHealthAdapter] ${range} summary:`, JSON.stringify({ ...summary, dailySteps: dailySteps.length }));
+      return summary;
+    } catch (e) {
+      devWarn('[AppleHealthAdapter] getRangeSummary failed:', e);
+      return empty;
+    }
+  }
+
   private async countWorkouts(startDate: Date, endDate: Date): Promise<number> {
     if (!HealthKit) return 0;
     try {
@@ -255,35 +337,20 @@ export class AppleHealthAdapter implements HealthAdapter {
     return summary;
   }
 
-  async getYesterdaySummary(): Promise<DailyHealthSummary> {
-    const now = new Date();
-    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-    const startOfYesterday = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0);
-    const endOfYesterday = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59);
-    return this.summaryFor(startOfYesterday, endOfYesterday, localDateKey(yesterday));
-  }
-
+  /** Sun–Sat of the current week (a new week starts empty on Sunday); future days are 0. */
   async getWeekBarSamples(): Promise<DayBarSample[]> {
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const now = new Date();
-    const currentDayIdx = now.getDay();
-
-    const mondayOffset = currentDayIdx === 0 ? -6 : 1 - currentDayIdx;
-    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset);
-
-    const weekDays: Array<{ dateStr: string; dayLabel: string; isCurrent: boolean }> = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-      weekDays.push({
-        dateStr: localDateKey(d),
-        dayLabel: dayNames[d.getDay()],
-        isCurrent: d.toDateString() === now.toDateString(),
-      });
-    }
+    const weekDays = currentWeekDays(now).map((d) => ({
+      dateStr: localDateKey(d),
+      dayLabel: WEEKDAY_SHORT[d.getDay()],
+      isCurrent: d.toDateString() === now.toDateString(),
+    }));
+    const startOfWeek = currentWeekDays(now)[0];
 
     const emptyBars: DayBarSample[] = weekDays.map((w) => ({
       day: w.dayLabel,
       label: w.dayLabel,
+      date: w.dateStr,
       value: 0,
       steps: 0,
       isCurrent: w.isCurrent,
@@ -295,8 +362,6 @@ export class AppleHealthAdapter implements HealthAdapter {
 
     const initialized = await this.ensureInitialized();
     if (!initialized) return emptyBars;
-
-    const startOfWeek = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0);
 
     try {
       const buckets = await HealthKit.queryStatisticsCollectionForQuantity(
@@ -321,6 +386,7 @@ export class AppleHealthAdapter implements HealthAdapter {
         return {
           day: w.dayLabel,
           label: w.dayLabel,
+          date: w.dateStr,
           value: pct,
           steps: stepVal,
           isCurrent: w.isCurrent,

@@ -2,12 +2,20 @@ import { create } from 'zustand';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { healthService, getAdapterForProvider } from '@/services/health/healthService';
-import { healthMetricsService, BackendDailyMetricItem } from '@/services/api/healthMetrics.service';
 import { devLog, devWarn } from '@/services/health/devLog';
 import { HealthProviderError } from '@/services/health/HealthAdapter';
+import { WEEKDAY_SHORT, currentWeekDays, localDateKey, rangeStart } from '@/services/health/HealthAdapter';
+import type { RangeHealthSummary } from '@/services/health/HealthAdapter';
 
 const HEALTH_STORAGE_KEY = '@hunterx_health_sync_state';
-const LAST_SYNC_TIME_KEY = '@hunterx_last_health_sync_time';
+// Left by older versions, which also uploaded daily totals to the server
+// (throttled with this timestamp). Health data is now only read on the
+// phone; the key is just cleared.
+const LEGACY_SYNC_TIME_KEY = '@hunterx_last_health_sync_time';
+
+const ALL_RANGES: TimeRange[] = ['Today', 'Week', 'Month', 'Year'];
+const DAILY_STEP_GOAL = 10000;
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export type TimeRange = 'Today' | 'Week' | 'Month' | 'Year';
 
@@ -26,6 +34,8 @@ export interface DayBarData {
   value: number; // 0 to 100 percentage
   steps?: number;
   isCurrent?: boolean;
+  /** YYYY-MM-DD, for daily bars (Week); shown under the day name. */
+  date?: string;
 }
 
 export interface MetricsDataset {
@@ -43,6 +53,12 @@ export interface MetricsDataset {
   weeklyActivity: {
     avgSteps: string;
     days: DayBarData[];
+    /** False until the phone's health store has been read for this period (the chart shows a loader). */
+    loaded: boolean;
+    /** First day of the period (YYYY-MM-DD). */
+    periodStart: string;
+    /** First day in the period with any steps, or null if none — "Recorded since …". */
+    firstDataDate: string | null;
   };
 }
 
@@ -63,9 +79,10 @@ export interface MetricsState {
   connectProvider: (provider: 'apple_health' | 'health_connect') => Promise<void>;
   disconnectProvider: () => void;
   verifyProviderAccess: () => Promise<boolean>;
+  /** Re-reads today (and the selected period) from the phone's health store. */
   syncNow: () => Promise<void>;
   fetchTodayLiveMetrics: () => Promise<void>;
-  syncHealthMetricsIfNeeded: () => Promise<void>;
+  /** Reads a period's totals and chart from the phone's health store. */
   fetchRangeData: (range: TimeRange) => Promise<void>;
   initFromStorage: () => Promise<void>;
 }
@@ -79,6 +96,90 @@ function formatSleepMinutes(mins: number): string {
 
 function formatNumberWithCommas(num: number): string {
   return (num || 0).toLocaleString('en-US');
+}
+
+const pctOf = (value: number, target: number) => (target > 0 ? Math.min(Math.round((value / target) * 100), 100) : 0);
+
+/**
+ * The chart bars for a period, from its daily steps:
+ *  Week  — Sun…Sat of this week (days still to come are empty; Sunday starts a new week)
+ *  Month — the month's weeks: 1–7, 8–14, 15–21, 22–28, 29–end
+ *  Year  — Jan…Dec
+ * Each bar's fill is its steps against the daily goal × the days it covers.
+ */
+function buildBars(range: 'Week' | 'Month' | 'Year', dailySteps: RangeHealthSummary['dailySteps'], now: Date): DayBarData[] {
+  const byDate = new Map(dailySteps.map((d) => [d.date, d.steps]));
+  const stepsOn = (d: Date) => byDate.get(localDateKey(d)) || 0;
+
+  if (range === 'Week') return emptyOrFilledWeek(now, stepsOn);
+
+  if (range === 'Month') {
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const bars: DayBarData[] = [];
+    for (let first = 1; first <= daysInMonth; first += 7) {
+      const last = Math.min(first + 6, daysInMonth);
+      let steps = 0;
+      for (let day = first; day <= last; day++) steps += stepsOn(new Date(y, m, day));
+      const label = first === last ? `${first}` : `${first}–${last}`;
+      bars.push({
+        day: label,
+        label,
+        steps,
+        value: pctOf(steps, DAILY_STEP_GOAL * (last - first + 1)),
+        isCurrent: now.getDate() >= first && now.getDate() <= last,
+      });
+    }
+    return bars;
+  }
+
+  const y = now.getFullYear();
+  return MONTH_NAMES.map((name, m) => {
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    let steps = 0;
+    for (let day = 1; day <= daysInMonth; day++) steps += stepsOn(new Date(y, m, day));
+    return { day: name, label: name, steps, value: pctOf(steps, DAILY_STEP_GOAL * daysInMonth), isCurrent: m === now.getMonth() };
+  });
+}
+
+/** Sun–Sat bars for the current week, each with its date. */
+function emptyOrFilledWeek(now: Date, stepsOn: (d: Date) => number = () => 0): DayBarData[] {
+  return currentWeekDays(now).map((d) => {
+    const name = WEEKDAY_SHORT[d.getDay()];
+    const steps = stepsOn(d);
+    return {
+      day: name,
+      label: name,
+      date: localDateKey(d),
+      steps,
+      value: pctOf(steps, DAILY_STEP_GOAL),
+      isCurrent: d.toDateString() === now.toDateString(),
+    };
+  });
+}
+
+function notLoaded(range: 'week' | 'month' | 'year') {
+  return { loaded: false, periodStart: localDateKey(rangeStart(range)), firstDataDate: null };
+}
+
+/** First day with any steps, or null. */
+function firstDayWithSteps(days: Array<{ date?: string; steps?: number }>): string | null {
+  return days.find((d) => (d.steps || 0) > 0 && d.date)?.date ?? null;
+}
+
+/** Days of the current week so far, today included (1 on Sunday … 7 on Saturday). */
+function weekDaysSoFar(now: Date): number {
+  return now.getDay() + 1;
+}
+
+/** The whole period's step goal: the daily goal × every day in the week / month / year. */
+function periodStepTarget(range: 'Week' | 'Month' | 'Year', now: Date): number {
+  if (range === 'Week') return DAILY_STEP_GOAL * 7;
+  if (range === 'Month') return DAILY_STEP_GOAL * new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const y = now.getFullYear();
+  const isLeap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  return DAILY_STEP_GOAL * (isLeap ? 366 : 365);
 }
 
 // The provider a stored connection is actually usable with on this install.
@@ -154,15 +255,8 @@ const DEFAULT_DATASETS: Record<TimeRange, MetricsDataset> = {
     workouts: { value: '0', unit: 'session', trend: 'Live today', trendDirection: 'neutral' },
     weeklyActivity: {
       avgSteps: '0',
-      days: [
-        { day: 'Mon', label: 'Mon', value: 0 },
-        { day: 'Tue', label: 'Tue', value: 0 },
-        { day: 'Wed', label: 'Wed', value: 0 },
-        { day: 'Thu', label: 'Thu', value: 0 },
-        { day: 'Fri', label: 'Fri', value: 0 },
-        { day: 'Sat', label: 'Sat', value: 0 },
-        { day: 'Sun', label: 'Sun', value: 0 },
-      ],
+      days: emptyOrFilledWeek(new Date()),
+      ...notLoaded('week'),
     },
   },
   Week: {
@@ -175,15 +269,8 @@ const DEFAULT_DATASETS: Record<TimeRange, MetricsDataset> = {
     workouts: { value: '0', unit: 'sessions', trend: 'This week', trendDirection: 'neutral' },
     weeklyActivity: {
       avgSteps: '0',
-      days: [
-        { day: 'Mon', label: 'Mon', value: 0 },
-        { day: 'Tue', label: 'Tue', value: 0 },
-        { day: 'Wed', label: 'Wed', value: 0 },
-        { day: 'Thu', label: 'Thu', value: 0 },
-        { day: 'Fri', label: 'Fri', value: 0 },
-        { day: 'Sat', label: 'Sat', value: 0 },
-        { day: 'Sun', label: 'Sun', value: 0 },
-      ],
+      days: emptyOrFilledWeek(new Date()),
+      ...notLoaded('week'),
     },
   },
   Month: {
@@ -196,7 +283,8 @@ const DEFAULT_DATASETS: Record<TimeRange, MetricsDataset> = {
     workouts: { value: '0', unit: 'sessions', trend: 'This month', trendDirection: 'neutral' },
     weeklyActivity: {
       avgSteps: '0',
-      days: [],
+      days: buildBars('Month', [], new Date()),
+      ...notLoaded('month'),
     },
   },
   Year: {
@@ -209,7 +297,8 @@ const DEFAULT_DATASETS: Record<TimeRange, MetricsDataset> = {
     workouts: { value: '0', unit: 'sessions', trend: 'This year', trendDirection: 'neutral' },
     weeklyActivity: {
       avgSteps: '0',
-      days: [],
+      days: buildBars('Year', [], new Date()),
+      ...notLoaded('year'),
     },
   },
 };
@@ -239,12 +328,13 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
       if (shouldClearStorage) {
         // Stored connection belongs to the other platform's provider — drop it
         // (and any sync throttle timestamp) so a fresh connect isn't held back.
-        AsyncStorage.multiRemove([HEALTH_STORAGE_KEY, LAST_SYNC_TIME_KEY]).catch(() => {});
+        AsyncStorage.multiRemove([HEALTH_STORAGE_KEY, LEGACY_SYNC_TIME_KEY]).catch(() => {});
       }
     })
     .catch(() => {
       set({ isLoaded: true });
     });
+  AsyncStorage.removeItem(LEGACY_SYNC_TIME_KEY).catch(() => {});
 
   // Persists a fresh "Last synced" text alongside the current connection
   // state. Without this, lastSyncedText only ever lived in memory — the next
@@ -261,9 +351,18 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
     ).catch(() => {});
   };
 
+  // A failed read still ends the loader; the chart then shows its empty state.
+  const markLoaded = (range: TimeRange) =>
+    set((state) => ({
+      datasets: {
+        ...state.datasets,
+        [range]: { ...state.datasets[range], weeklyActivity: { ...state.datasets[range].weeklyActivity, loaded: true } },
+      },
+    }));
+
   return {
     timeRange: 'Today',
-    availableRanges: ['Today'],
+    availableRanges: ALL_RANGES,
     isHealthConnected: false,
     connectedProvider: null,
     lastSyncedText: 'Not connected',
@@ -294,7 +393,7 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
         devLog('====================================================');
         set({ ...state, isLoaded: true });
         if (shouldClearStorage) {
-          await AsyncStorage.multiRemove([HEALTH_STORAGE_KEY, LAST_SYNC_TIME_KEY]).catch(() => {});
+          await AsyncStorage.multiRemove([HEALTH_STORAGE_KEY, LEGACY_SYNC_TIME_KEY]).catch(() => {});
         }
       } catch (_) {
         set({ isLoaded: true });
@@ -362,16 +461,11 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
 
         set(newState);
         await AsyncStorage.setItem(HEALTH_STORAGE_KEY, JSON.stringify(newState));
-        // Clear any prior sync throttle timestamp so this (re)connect — including
-        // one that follows a provider/platform switch — always syncs immediately
-        // instead of silently waiting out the old hourly window.
-        await AsyncStorage.removeItem(LAST_SYNC_TIME_KEY).catch(() => {});
 
-        // Fetch live metrics immediately upon connection & trigger sync.
-        // Access is granted at this point, so a hiccup here must not turn a
-        // successful connection into a "Connection Failed" alert.
+        // Read today's numbers straight away. Access is granted at this point,
+        // so a hiccup here must not turn a successful connection into a
+        // "Connection Failed" alert.
         await get().fetchTodayLiveMetrics().catch(() => {});
-        await get().syncHealthMetricsIfNeeded().catch(() => {});
       } catch (e) {
         set({ isSyncing: false });
         throw e;
@@ -384,11 +478,8 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
         connectedProvider: null,
         lastSyncedText: 'Not connected',
       };
-      set(newState);
+      set({ ...newState, timeRange: 'Today', datasets: DEFAULT_DATASETS });
       AsyncStorage.setItem(HEALTH_STORAGE_KEY, JSON.stringify(newState)).catch(() => {});
-      // Also drop the sync throttle timestamp so a later reconnect (same
-      // provider, or the platform-appropriate one) isn't held back by it.
-      AsyncStorage.removeItem(LAST_SYNC_TIME_KEY).catch(() => {});
     },
 
     // Health Connect (Android) exposes real, current permission-grant status,
@@ -418,23 +509,15 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
 
       set({ isSyncing: true });
       try {
-        const adapter = get().connectedProvider ? getAdapterForProvider(get().connectedProvider!) : healthService;
-        const [yesterdaySummary, todaySummary] = await Promise.all([
-          adapter.getYesterdaySummary(),
-          adapter.getTodaySummary(),
+        const range = get().timeRange;
+        await Promise.all([
+          get().fetchTodayLiveMetrics(),
+          range !== 'Today' ? get().fetchRangeData(range) : Promise.resolve(),
         ]);
-
-        await healthMetricsService.syncDailyMetrics(yesterdaySummary);
-        await healthMetricsService.syncDailyMetrics(todaySummary);
-
-        const now = new Date();
-        const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const lastSyncedText = `Today, ${timeString}`;
-
         set({ lastSyncedText, isSyncing: false });
-        await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, `${Date.now()}`);
         await persistLastSyncedText(lastSyncedText);
-        await get().fetchTodayLiveMetrics();
       } catch (e) {
         set({ isSyncing: false });
       }
@@ -456,8 +539,10 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
         const stepsTarget = 10000;
         const stepsPct = Math.min(Math.round((stepsCurrent / stepsTarget) * 100), 100);
 
+        // Average over the days of this week so far (Sunday counts as day 1),
+        // not all 7 — days still to come would drag it down.
         const totalWeekSteps = weekBars.reduce((acc, curr) => acc + (curr.steps || 0), 0);
-        const avgWeekSteps = Math.round(totalWeekSteps / (weekBars.length || 7));
+        const avgWeekSteps = Math.round(totalWeekSteps / weekDaysSoFar(new Date()));
 
         set((state) => ({
           datasets: {
@@ -507,206 +592,59 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
               weeklyActivity: {
                 avgSteps: formatNumberWithCommas(avgWeekSteps),
                 days: weekBars,
+                loaded: true,
+                periodStart: localDateKey(rangeStart('week')),
+                firstDataDate: firstDayWithSteps(weekBars),
               },
             },
           },
         }));
       } catch (e) {
         devWarn('[useMetricsStore] fetchTodayLiveMetrics failed:', e);
+        markLoaded('Today');
       }
       }),
 
-    syncHealthMetricsIfNeeded: () =>
-      singleFlight('syncHealthMetricsIfNeeded', async () => {
+    fetchRangeData: (range: TimeRange) =>
+      singleFlight(`range:${range}`, async () => {
+      if (range === 'Today') return get().fetchTodayLiveMetrics();
       if (!get().isHealthConnected) return;
       if (!(await get().verifyProviderAccess())) return;
 
-      try {
-        const lastSyncTimeStr = await AsyncStorage.getItem(LAST_SYNC_TIME_KEY);
-        const nowMs = Date.now();
-        const ONE_HOUR_MS = 60 * 60 * 1000;
-
-        if (lastSyncTimeStr) {
-          const lastSyncMs = parseInt(lastSyncTimeStr, 10);
-          if (nowMs - lastSyncMs < ONE_HOUR_MS) {
-            return;
-          }
-        }
-
-        const adapter = get().connectedProvider ? getAdapterForProvider(get().connectedProvider!) : healthService;
-        const [yesterdaySummary, todaySummary] = await Promise.all([
-          adapter.getYesterdaySummary(),
-          adapter.getTodaySummary(),
-        ]);
-
-        set({ isSyncing: true });
-
-        if (yesterdaySummary.steps > 0 || yesterdaySummary.calories > 0) {
-          await healthMetricsService.syncDailyMetrics(yesterdaySummary);
-        }
-        await healthMetricsService.syncDailyMetrics(todaySummary);
-
-        const now = new Date();
-        const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const lastSyncedText = `Today, ${timeString}`;
-
-        set({ lastSyncedText, isSyncing: false });
-        await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, `${nowMs}`);
-        await persistLastSyncedText(lastSyncedText);
-      } catch (e) {
-        devWarn('[useMetricsStore] syncHealthMetricsIfNeeded failed silently:', e);
-        set({ isSyncing: false });
-      }
-      }),
-
-    fetchRangeData: async (range: TimeRange) => {
-      if (range === 'Today') {
-        return get().fetchTodayLiveMetrics();
-      }
-
       set({ isLoadingRangeData: true });
-      const apiRange = range.toLowerCase() as 'week' | 'month' | 'year';
-
       try {
-        const result = await healthMetricsService.getHealthMetrics(apiRange);
+        const adapter = get().connectedProvider ? getAdapterForProvider(get().connectedProvider!) : healthService;
+        const apiRange = range.toLowerCase() as 'week' | 'month' | 'year';
+        const summary = await adapter.getRangeSummary(apiRange);
+        const now = new Date();
 
-        if (!result) {
-          set({ isLoadingRangeData: false });
-          return;
-        }
-
-        const totals = result.totals || {
-          steps: 0,
-          calories: 0,
-          distanceKm: 0,
-          activeMinutes: 0,
-          avgHeartRate: 0,
-          sleepMinutes: 0,
-          workoutCount: 0,
-        };
-
-        let stepsTarget = 70000;
-        if (range === 'Month') stepsTarget = 300000;
-        if (range === 'Year') stepsTarget = 3650000;
-
-        const stepsCurrent = totals.steps || 0;
-        const stepsPct = Math.min(Math.round((stepsCurrent / stepsTarget) * 100), 100);
-
-        const dailyItems: BackendDailyMetricItem[] = result.daily || [];
-        let chartDays: DayBarData[] = [];
-        let avgStepsVal = 0;
-
-        if (range === 'Week') {
-          const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-          const maxTarget = 10000;
-          const stepMap: Record<string, number> = {};
-          dailyItems.forEach((item) => {
-            if (item.date) {
-              const d = new Date(item.date);
-              const nameIdx = (d.getDay() + 6) % 7;
-              stepMap[dayNames[nameIdx]] = (stepMap[dayNames[nameIdx]] || 0) + item.steps;
-            }
-          });
-
-          chartDays = dayNames.map((d) => {
-            const steps = stepMap[d] || 0;
-            return {
-              day: d,
-              label: d,
-              value: Math.min(Math.round((steps / maxTarget) * 100), 100),
-              steps,
-            };
-          });
-          const totalWeekSteps = chartDays.reduce((acc, curr) => acc + (curr.steps || 0), 0);
-          avgStepsVal = Math.round(totalWeekSteps / 7);
-        } else if (range === 'Month') {
-          const maxTarget = 10000;
-          chartDays = dailyItems.map((item, idx) => {
-            const dayNum = item.date ? parseInt(item.date.split('-')[2], 10) : idx + 1;
-            const showLabel = dayNum === 1 || dayNum % 5 === 0;
-            return {
-              day: `${dayNum}`,
-              label: showLabel ? `${dayNum}` : '',
-              value: Math.min(Math.round(((item.steps || 0) / maxTarget) * 100), 100),
-              steps: item.steps || 0,
-            };
-          });
-          const totalMonthSteps = chartDays.reduce((acc, curr) => acc + (curr.steps || 0), 0);
-          avgStepsVal = Math.round(totalMonthSteps / (chartDays.length || 30));
-        } else if (range === 'Year') {
-          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          const monthlySteps = new Array(12).fill(0);
-
-          dailyItems.forEach((item) => {
-            if (item.date) {
-              const mIdx = new Date(item.date).getMonth();
-              monthlySteps[mIdx] += item.steps || 0;
-            }
-          });
-
-          const maxMonthlyTarget = 300000;
-          chartDays = monthNames.map((name, idx) => {
-            const steps = monthlySteps[idx] || 0;
-            return {
-              day: name,
-              label: name,
-              value: Math.min(Math.round((steps / maxMonthlyTarget) * 100), 100),
-              steps,
-            };
-          });
-          const totalYearSteps = monthlySteps.reduce((acc, curr) => acc + curr, 0);
-          avgStepsVal = Math.round(totalYearSteps / 365);
-        }
+        const stepsTarget = periodStepTarget(range, now);
+        const daysSoFar = summary.dailySteps.length || 1;
+        const period = `This ${range.toLowerCase()}`;
 
         set((state) => ({
           isLoadingRangeData: false,
           datasets: {
             ...state.datasets,
             [range]: {
-              steps: {
-                current: stepsCurrent,
-                target: stepsTarget,
-                percentage: stepsPct,
-              },
-              calories: {
-                value: formatNumberWithCommas(totals.calories),
-                unit: 'kcal',
-                trend: `Total ${range.toLowerCase()}`,
-                trendDirection: 'neutral',
-              },
-              distance: {
-                value: (totals.distanceKm || 0).toFixed(1),
-                unit: 'km',
-                trend: `Total ${range.toLowerCase()}`,
-                trendDirection: 'neutral',
-              },
-              activeMinutes: {
-                value: formatNumberWithCommas(totals.activeMinutes),
-                unit: 'min',
-                trend: `Total ${range.toLowerCase()}`,
-                trendDirection: 'neutral',
-              },
-              heartRate: {
-                value: `${totals.avgHeartRate || 0}`,
-                unit: 'bpm avg',
-                trend: `Avg ${range.toLowerCase()}`,
-                trendDirection: 'neutral',
-              },
-              sleep: {
-                value: formatSleepMinutes(totals.sleepMinutes),
-                unit: 'avg',
-                trend: `Avg ${range.toLowerCase()}`,
-                trendDirection: 'neutral',
-              },
+              steps: { current: summary.steps, target: stepsTarget, percentage: pctOf(summary.steps, stepsTarget) },
+              calories: { value: formatNumberWithCommas(summary.calories), unit: 'kcal', trend: period, trendDirection: 'neutral' },
+              distance: { value: (summary.distanceKm || 0).toFixed(1), unit: 'km', trend: period, trendDirection: 'neutral' },
+              activeMinutes: { value: formatNumberWithCommas(summary.activeMinutes), unit: 'min', trend: period, trendDirection: 'neutral' },
+              heartRate: { value: `${summary.avgHeartRate || 0}`, unit: 'bpm avg', trend: period, trendDirection: 'neutral' },
+              sleep: { value: formatSleepMinutes(summary.avgSleepMinutes), unit: 'avg', trend: 'Per night', trendDirection: 'neutral' },
               workouts: {
-                value: formatNumberWithCommas(totals.workoutCount),
-                unit: totals.workoutCount === 1 ? 'session' : 'sessions',
-                trend: `Total ${range.toLowerCase()}`,
+                value: formatNumberWithCommas(summary.workoutCount),
+                unit: summary.workoutCount === 1 ? 'session' : 'sessions',
+                trend: period,
                 trendDirection: 'neutral',
               },
               weeklyActivity: {
-                avgSteps: formatNumberWithCommas(avgStepsVal),
-                days: chartDays,
+                avgSteps: formatNumberWithCommas(Math.round(summary.steps / daysSoFar)),
+                days: buildBars(range, summary.dailySteps, now),
+                loaded: true,
+                periodStart: summary.dailySteps[0]?.date ?? localDateKey(rangeStart(apiRange, now)),
+                firstDataDate: firstDayWithSteps(summary.dailySteps),
               },
             },
           },
@@ -714,7 +652,8 @@ export const useMetricsStore = create<MetricsState>((set, get) => {
       } catch (e) {
         devWarn(`[useMetricsStore] fetchRangeData(${range}) failed:`, e);
         set({ isLoadingRangeData: false });
+        markLoaded(range);
       }
-    },
+      }),
   };
 });

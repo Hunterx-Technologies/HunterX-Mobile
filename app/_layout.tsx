@@ -31,6 +31,7 @@ import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useUnseenRewardsSync } from '@/hooks/useUnseenRewardsSync';
 import { useStreakEventsSync } from '@/hooks/useStreakEventsSync';
 import { useLevelUpSync } from '@/hooks/useLevelUpSync';
+import { useCelebrationStartupHold } from '@/hooks/useCelebrationStartupHold';
 
 import { SettingsProvider } from '@/context/SettingsContext';
 
@@ -141,6 +142,7 @@ function PushNotificationsObserver() {
   useUnseenRewardsSync();
   useStreakEventsSync();
   useLevelUpSync();
+  useCelebrationStartupHold();
   return null;
 }
 
@@ -191,10 +193,10 @@ export default function RootLayout() {
 
   // Health data (steps, calories, etc.) changes outside the app whenever
   // Apple Health / Health Connect records activity while HunterX isn't
-  // running. Refresh it here — at the root, not just inside the Metrics
-  // screen — so a cold launch or returning from the background always syncs
-  // before the user even taps the Metrics tab, instead of only refreshing
-  // once they happen to already be looking at it.
+  // running. Re-read it here — at the root, not just inside the Metrics
+  // screen — so a cold launch or returning from the background is already
+  // up to date before the user taps the Metrics tab. Nothing is uploaded:
+  // health data is only read on the phone.
   // Coming back to the app refreshes at most once a minute: 'active' also
   // fires after a system dialog or a glance at Notification Centre, and each
   // refresh is several Health queries. The Metrics screen still pulls fresh.
@@ -204,8 +206,10 @@ export default function RootLayout() {
       const { isHealthConnected, timeRange } = useMetricsStore.getState();
       if (!isHealthConnected) return;
       lastRefreshAt = Date.now();
-      useMetricsStore.getState().fetchRangeData(timeRange);
-      useMetricsStore.getState().syncHealthMetricsIfNeeded();
+      // Today's numbers feed the Home screen too; the selected period only
+      // matters if it's not Today.
+      useMetricsStore.getState().fetchTodayLiveMetrics();
+      if (timeRange !== 'Today') useMetricsStore.getState().fetchRangeData(timeRange);
     };
 
     // Cold start: wait for the persisted connection state to load first —

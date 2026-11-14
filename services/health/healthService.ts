@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
-import type { HealthAdapter } from './HealthAdapter';
+import { WEEKDAY_SHORT, currentWeekDays, emptyRangeSummary, localDateKey } from './HealthAdapter';
+import type { HealthAdapter, HealthRange } from './HealthAdapter';
 import { AppleHealthAdapter } from './AppleHealthAdapter';
 import { HealthConnectAdapter } from './HealthConnectAdapter';
 
@@ -22,25 +23,14 @@ class DummyHealthAdapter implements HealthAdapter {
       workoutCount: 0,
     };
   }
-  async getYesterdaySummary() {
-    const now = new Date();
-    const yesterdayStr = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString().split('T')[0];
-    return {
-      date: yesterdayStr,
-      steps: 0,
-      calories: 0,
-      distanceKm: 0,
-      activeMinutes: 0,
-      heartRate: 0,
-      sleepMinutes: 0,
-      workoutCount: 0,
-    };
+  async getRangeSummary(range: HealthRange) {
+    return emptyRangeSummary(range);
   }
   async getWeekBarSamples() {
-    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return dayNames.map((d) => ({
-      day: d,
-      label: d,
+    return currentWeekDays().map((d) => ({
+      day: WEEKDAY_SHORT[d.getDay()],
+      label: WEEKDAY_SHORT[d.getDay()],
+      date: localDateKey(d),
       value: 0,
       steps: 0,
     }));

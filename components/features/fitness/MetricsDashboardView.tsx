@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -42,7 +42,6 @@ export function MetricsDashboardView({
     datasets,
     connectedProvider,
     disconnectProvider,
-    fetchRangeData,
     syncNow,
   } = useMetricsStore(
     useShallow((state) => ({
@@ -52,32 +51,17 @@ export function MetricsDashboardView({
       datasets: state.datasets,
       connectedProvider: state.connectedProvider,
       disconnectProvider: state.disconnectProvider,
-      fetchRangeData: state.fetchRangeData,
       syncNow: state.syncNow,
     }))
   );
 
-  // Always reflects the latest selected range for the listeners below,
-  // without needing to resubscribe them every time it changes.
-  const timeRangeRef = useRef(timeRange);
-  useEffect(() => {
-    timeRangeRef.current = timeRange;
-  }, [timeRange]);
-
-  // Refresh whenever this screen gains focus — including the very first
-  // mount — so switching back from another tab always shows the latest
-  // health data instead of whatever was last fetched. This is a real sync
-  // (not the throttled hourly one in app/_layout.tsx's foreground listener),
-  // since routing into this screen is the moment the user actually expects
-  // "Last synced" to reflect right now, not up to an hour ago.
+  // Re-read from the phone's health store whenever this screen gains focus —
+  // including the first mount — so switching back from another tab always
+  // shows the latest numbers for the selected period.
   useFocusEffect(
     useCallback(() => {
-      syncNow().then(() => {
-        if (timeRangeRef.current !== 'Today') {
-          fetchRangeData(timeRangeRef.current);
-        }
-      });
-    }, [connectedProvider, syncNow, fetchRangeData])
+      syncNow();
+    }, [connectedProvider, syncNow])
   );
 
   // App-foreground refresh (leave HunterX, walk around, reopen) is handled
@@ -90,9 +74,11 @@ export function MetricsDashboardView({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       'Health Integration',
-      'Your health data is actively syncing with HunterX.',
+      connectedProvider === 'apple_health'
+        ? 'HunterX reads your activity from Apple Health on this phone. It isn\'t uploaded anywhere.'
+        : 'HunterX reads your activity from Health Connect on this phone. It isn\'t uploaded anywhere.',
       [
-        { text: 'Sync Now', onPress: () => syncNow() },
+        { text: 'Refresh', onPress: () => syncNow() },
         {
           text: 'Change Connection',
           // Disconnecting flips the Metrics tab to ConnectHealthView in
@@ -232,6 +218,12 @@ export function MetricsDashboardView({
 
         {/* Weekly Activity Bar Chart */}
         <WeeklyActivityChart
+          title={timeRange === 'Month' ? 'Monthly Activity' : timeRange === 'Year' ? 'Yearly Activity' : 'Weekly Activity'}
+          period={timeRange === 'Month' ? 'month' : timeRange === 'Year' ? 'year' : 'week'}
+          loaded={currentData.weeklyActivity.loaded}
+          periodStart={currentData.weeklyActivity.periodStart}
+          firstDataDate={currentData.weeklyActivity.firstDataDate}
+          healthAppName={connectedProvider === 'apple_health' ? 'Apple Health' : 'Health Connect'}
           avgSteps={currentData.weeklyActivity.avgSteps}
           days={currentData.weeklyActivity.days}
         />
