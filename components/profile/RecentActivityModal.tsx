@@ -93,7 +93,6 @@ export function RecentActivityModal({
     : '—';
 
   const currentStreak = summary?.current_streak ?? user?.streak ?? user?.current_streak ?? 0;
-  const currentStreakPadded = String(currentStreak).padStart(2, '0');
 
   const longestStreak = summary?.best_record ?? user?.longest_streak ?? user?.max_streak ?? 0;
   const totalTasksCompleted = summary?.total_quests_cleared ?? user?.total_tasks_completed ?? 0;
@@ -111,7 +110,7 @@ export function RecentActivityModal({
       {
         id: 'current_streak',
         label: 'CURRENT STREAK',
-        value: currentStreakPadded,
+        value: `${currentStreak}`,
         subtitle: 'DAYS ACTIVE',
         icon: <MaterialCommunityIcons name="fire" size={18} color="#FE5B01" />,
         accentColor: '#FE5B01',

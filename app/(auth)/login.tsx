@@ -144,6 +144,8 @@ export default function LoginScreen() {
         goToRegisterNoAccount();
         return;
       }
+      // Banned: the Account Suspended screen explains it.
+      if (getApiErrorCode(err) === API_ERROR.ACCOUNT_SUSPENDED) return;
       setError(err instanceof Error ? err.message : 'Login failed');
     }
   };
@@ -161,7 +163,7 @@ export default function LoginScreen() {
       const { isOnboarded } = await loginWithGoogle(idToken);
       router.replace(isOnboarded ? '/(tabs)' : '/(onboarding)/name');
     } catch (err) {
-      if (!isGoogleSignInCancelled(err)) {
+      if (!isGoogleSignInCancelled(err) && getApiErrorCode(err) !== API_ERROR.ACCOUNT_SUSPENDED) {
         setError(err instanceof Error ? err.message : 'Google sign-in failed');
       }
     } finally {
@@ -179,7 +181,7 @@ export default function LoginScreen() {
       const { isOnboarded } = await loginWithApple(credential);
       router.replace(isOnboarded ? '/(tabs)' : '/(onboarding)/name');
     } catch (err) {
-      if (!isAppleSignInCancelled(err)) {
+      if (!isAppleSignInCancelled(err) && getApiErrorCode(err) !== API_ERROR.ACCOUNT_SUSPENDED) {
         setError(err instanceof Error ? err.message : 'Apple sign-in failed');
       }
     } finally {

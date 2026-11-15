@@ -93,6 +93,8 @@ export default function PhysicalProfileScreen() {
   const mainScrollRef = useRef<ScrollView>(null);
   useScrollToTopOnFocus(mainScrollRef);
   const startWeightRef = useRef(targetWeight);
+  const weightAnimFrameRef = useRef<number | null>(null);
+  const weightAnimEndRef = useRef<number | null>(null); // where a running spin will land
 
   const triggerHaptic = () => {
     try {
@@ -162,6 +164,11 @@ export default function PhysicalProfileScreen() {
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
+        // A drag takes over from any spin still running after a typed-in save.
+        if (weightAnimFrameRef.current !== null) {
+          cancelAnimationFrame(weightAnimFrameRef.current);
+          weightAnimFrameRef.current = null;
+        }
         startWeightRef.current = targetWeightRef.current;
         setScrollEnabled(false);
       },
@@ -212,7 +219,8 @@ export default function PhysicalProfileScreen() {
   const handleContinue = () => {
     setHeightStore(height);
     setHeightUnitStore(heightUnit);
-    setWeightStore(weight);
+    // If the dial is still spinning to a typed-in value, save where it lands.
+    setWeightStore(weightAnimFrameRef.current !== null && weightAnimEndRef.current !== null ? weightAnimEndRef.current : weight);
     setWeightUnitStore(weightUnit);
     router.push('/(onboarding)/motivation');
   };
@@ -277,17 +285,50 @@ export default function PhysicalProfileScreen() {
       setWeightError(`Weight must be between ${minWeightVal} and ${maxWeightVal} ${weightUnit.toUpperCase()}.`);
       return;
     }
-    if (weightUnit === 'kg') {
-      const clampedKg = Number(Math.max(MIN_WEIGHT, Math.min(MAX_WEIGHT, parsed)).toFixed(1));
-      setWeight(clampedKg);
-      setTargetWeight(clampedKg);
-    } else {
-      const weightInKg = parsed / KG_TO_LBS;
-      const clampedKg = Number(Math.max(MIN_WEIGHT, Math.min(MAX_WEIGHT, weightInKg)).toFixed(1));
-      setWeight(clampedKg);
-      setTargetWeight(clampedKg);
-    }
+    const weightInKg = weightUnit === 'kg' ? parsed : parsed / KG_TO_LBS;
+    const clampedKg = Number(Math.max(MIN_WEIGHT, Math.min(MAX_WEIGHT, weightInKg)).toFixed(1));
     setIsWeightModalOpen(false);
+    animateWeightTo(clampedKg);
+  };
+
+  // Spin the dial to a typed-in weight, ticking on every 0.5 step it passes,
+  // the same way the height and age rulers tick while they scroll to a saved value.
+  const stopWeightAnimation = () => {
+    if (weightAnimFrameRef.current !== null) {
+      cancelAnimationFrame(weightAnimFrameRef.current);
+      weightAnimFrameRef.current = null;
+    }
+  };
+  useEffect(() => stopWeightAnimation, []);
+
+  const animateWeightTo = (endKg: number) => {
+    stopWeightAnimation();
+    const startKg = weightRef.current;
+    if (startKg === endKg) return;
+    weightAnimEndRef.current = endKg;
+
+    const toHalfStep = (kg: number) =>
+      Math.round((weightUnitRef.current === 'kg' ? kg : kg * KG_TO_LBS) * 2) / 2;
+    const duration = 600;
+    const startedAt = Date.now();
+    let lastStep = toHalfStep(startKg);
+
+    const frame = () => {
+      const t = Math.min(1, (Date.now() - startedAt) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const current = t === 1 ? endKg : Number((startKg + (endKg - startKg) * eased).toFixed(1));
+
+      const step = toHalfStep(current);
+      if (step !== lastStep) {
+        lastStep = step;
+        triggerHaptic();
+      }
+      setWeight(current);
+      setTargetWeight(current);
+
+      weightAnimFrameRef.current = t < 1 ? requestAnimationFrame(frame) : null;
+    };
+    weightAnimFrameRef.current = requestAnimationFrame(frame);
   };
 
   const handleWeightIncrement = () => {

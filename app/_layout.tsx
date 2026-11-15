@@ -19,6 +19,8 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useMetricsStore } from '@/store/useMetricsStore';
 import { GlobalToast } from '@/components/common/GlobalToast';
 import { OfflineNotice } from '@/components/common/OfflineNotice';
+import { ForceUpdateGate } from '@/components/common/ForceUpdateGate';
+import { AccountSuspendedNotice } from '@/components/common/AccountSuspendedNotice';
 import { SwordSplash } from '@/components/common/SwordSplash';
 import { GlobalLevelUp } from '@/components/features/levelUp/GlobalLevelUp';
 import { GlobalStreakBadge } from '@/components/features/streaks/GlobalStreakBadge';
@@ -300,6 +302,9 @@ export default function RootLayout() {
           )}
           {/* After the splash, so the intro animation isn't covered by it. */}
           {!showSplash && <OfflineNotice />}
+          {!showSplash && <AccountSuspendedNotice />}
+          {/* Last, so it sits above everything else, offline notice included. */}
+          {!showSplash && <ForceUpdateGate />}
         </SettingsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 
+import { localDateKey } from '@/services/health/HealthAdapter';
 import { registerPushDevice, sendTestPush, unregisterPushDevice } from '@/services/api/notifications.service';
 
 /**
@@ -104,7 +105,7 @@ export async function hasPromptedForPush(): Promise<boolean> {
   try {
     const lastDate = await AsyncStorage.getItem(PROMPTED_DATE_KEY);
     if (!lastDate) return false;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey(new Date());
     return lastDate === today;
   } catch {
     return false;
@@ -113,7 +114,7 @@ export async function hasPromptedForPush(): Promise<boolean> {
 
 export async function markPushPrompted(): Promise<void> {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey(new Date());
     await AsyncStorage.setItem(PROMPTED_DATE_KEY, today);
   } catch {}
 }

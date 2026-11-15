@@ -16,7 +16,7 @@ import { useScrollToTop } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { fetchTasksToday, completeTask, reopenTask } from '@/services/api/tasks.service';
+import { fetchTasksToday, completeTask, reopenTask, markDayCompleteSeen } from '@/services/api/tasks.service';
 import { invalidateLeaderboardCache } from '@/hooks/useLeaderboard';
 import { mapTaskToQuest, type QuestItem } from '@/utils/quests';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -189,6 +189,9 @@ export default function MissionsHomeScreen() {
   const lastLoadRef = useRef<{ at: number; day: string; userId: string | null } | null>(null);
   /** True once this screen has the server's answer, not just the saved copy. */
   const [tasksFresh, setTasksFresh] = useState(false);
+  // From GET /tasks/today: today's Day Complete screen was already shown for
+  // this account (any device, any login).
+  const [dayCompleteSeenOnServer, setDayCompleteSeenOnServer] = useState(false);
   const tasksFreshRef = useRef(false);
 
   const loadTasks = useCallback(async (options?: { refreshUser?: boolean }) => {
@@ -200,6 +203,7 @@ export default function MissionsHomeScreen() {
       ]);
       const mapped = mapTasksToday(tasksData);
       setQuests(mapped);
+      setDayCompleteSeenOnServer(tasksData.day_complete_seen === true);
       tasksFreshRef.current = true;
       setTasksFresh(true);
       lastLoadRef.current = { at: Date.now(), day: getTodayDateStr(), userId: userIdKeyRef.current };
@@ -354,18 +358,22 @@ export default function MissionsHomeScreen() {
   // one was completed (the rest may be skipped). All skipped isn't a clear.
   const dayCleared = dailyQuests.length > 0 && dailyTodoQuests.length === 0 && dailyDoneQuests.length > 0;
 
-  // Automatically pop up the MissionResultsScreen celebration ONCE per day when the day is cleared.
+  // Automatically pop up the MissionResultsScreen celebration ONCE per day
+  // per account: the first time the day is cleared. The server remembers it
+  // (day_complete_seen), so re-clearing the day (a task added from Shuffle,
+  // a skipped task reopened), logging in again or another phone doesn't show
+  // it again. The local flag only covers the moment before the server's
+  // answer arrives. The "Daily Quests Cleared" banner still opens it on demand.
   // It waits until home's other popups (the quest's action sheet, proof
   // upload…) have closed, so it never opens on top of one
   // still animating away — on iOS that open is silently dropped.
   const [dayCompletePending, setDayCompletePending] = useState(false);
   useEffect(() => {
-    if (loading || !tasksFresh) return;
-    if (!dayCleared) {
-      // Not (or no longer) cleared — e.g. a skipped task was reopened. Forget
-      // that it was shown, so clearing the day again earns the screen again.
+    // No account yet (logging in/out): the flag is per account, so wait —
+    // checking an 'anon' key would show the screen again after a re-login.
+    if (loading || !tasksFresh || user?.id == null) return;
+    if (!dayCleared || dayCompleteSeenOnServer) {
       setDayCompletePending(false);
-      AsyncStorage.removeItem(dayCompleteStorageKey(user?.id)).catch(() => { });
       return;
     }
     let cancelled = false;
@@ -379,7 +387,7 @@ export default function MissionsHomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [loading, tasksFresh, dayCleared, user?.id]);
+  }, [loading, tasksFresh, dayCleared, dayCompleteSeenOnServer, user?.id]);
 
   const otherHomeModalOpen =
     dropVisible || actionModalVisible || showBlackIntroOverlay || !!proofQuest;
@@ -387,7 +395,9 @@ export default function MissionsHomeScreen() {
     if (!dayCompletePending || otherHomeModalOpen) return;
     const timer = setTimeout(() => {
       setDayCompletePending(false);
+      setDayCompleteSeenOnServer(true);
       AsyncStorage.setItem(dayCompleteStorageKey(user?.id), 'true').catch(() => { });
+      markDayCompleteSeen().catch((err) => devWarn('[DayCompleteSeen Error]', err));
       openDayComplete();
     }, MODAL_GAP_MS);
     return () => clearTimeout(timer);

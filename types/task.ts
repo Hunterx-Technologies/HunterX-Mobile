@@ -66,6 +66,8 @@ export interface TasksTodayData {
     at_risk: boolean;
     [key: string]: any;
   };
+  /** Today's "Day Complete" screen was already shown for this account (any device/login). */
+  day_complete_seen?: boolean;
 }
 
 export interface CompleteTaskData {

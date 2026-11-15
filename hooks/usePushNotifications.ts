@@ -16,6 +16,16 @@ import {
 
 configureForegroundHandling();
 
+// The admin's ban push: sign out right away, even mid-screen. The server
+// has already refused every request; this just doesn't wait for one.
+function handleBanPush(data: Record<string, unknown> | undefined): boolean {
+  if (data?.event !== 'ACCOUNT_BANNED') return false;
+  if (useAuthStore.getState().user) {
+    useAuthStore.getState().suspendAccount(typeof data.reason === 'string' && data.reason ? data.reason : null);
+  }
+  return true;
+}
+
 const logRegisterError = (err: unknown) =>
   console.warn('[push] device registration failed:', (err as any)?.response?.data?.message ?? (err as any)?.message ?? err);
 
@@ -66,7 +76,13 @@ export function usePushNotifications() {
   useEffect(() => {
     if (!isPushSupported) return;
     const capture = (response: Notifications.NotificationResponse | null) => {
-      if (response) pendingResponse.current = response;
+      if (!response) return;
+      // A tapped ban push isn't routed anywhere: it ends the session.
+      if (handleBanPush(response.notification.request.content.data)) {
+        Notifications.clearLastNotificationResponseAsync().catch(() => {});
+        return;
+      }
+      pendingResponse.current = response;
     };
     Notifications.getLastNotificationResponseAsync().then(capture).catch(() => {});
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -94,7 +110,10 @@ export function usePushNotifications() {
     registerDeviceIfPermitted().catch(logRegisterError);
     refreshUnreadCount();
 
-    const received = Notifications.addNotificationReceivedListener(() => refreshUnreadCount());
+    const received = Notifications.addNotificationReceivedListener((notification) => {
+      if (handleBanPush(notification.request.content.data)) return;
+      refreshUnreadCount();
+    });
     const tokenRotated = Notifications.addPushTokenListener(({ data }) => {
       if (typeof data === 'string' && isDeviceTokenRotation(data)) {
         registerDeviceIfPermitted({ force: true }).catch(logRegisterError);

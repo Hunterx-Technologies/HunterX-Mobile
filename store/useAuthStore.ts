@@ -6,7 +6,7 @@ import { tokenStorage } from '@/services/api/tokenStorage';
 import { clearPendingReferral, getPendingReferral } from '@/services/referral/pendingReferral';
 import { unregisterDevice } from '@/services/notifications/push';
 import { signOutGoogle } from '@/services/auth/googleAuth';
-import { setSessionExpiredHandler } from '@/services/api/client';
+import { setAccountSuspendedHandler, setSessionExpiredHandler } from '@/services/api/client';
 import { resetUserState } from '@/store/resetUserState';
 import { pickedRoutineTaskIds } from '@/store/useOnboardingStore';
 import type { User } from '@/types/user';
@@ -98,6 +98,11 @@ type AuthState = {
   /** The stored session's account no longer exists (deleted); the login screen says so once. */
   accountNotFound: boolean;
   clearAccountNotFound: () => void;
+  /** Banned by an admin: set when it's found out (request, sign-in or the ban push); the suspended screen shows it. */
+  suspension: { reason: string | null } | null;
+  /** Ends the session on this device at once (no server calls: they'd all be refused) and shows the suspended screen. */
+  suspendAccount: (reason: string | null) => void;
+  clearSuspension: () => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (payload: authService.RegisterPayload) => Promise<void>;
   loginWithGoogle: (
@@ -122,6 +127,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   isBootstrapping: true,
   accountNotFound: false,
   clearAccountNotFound: () => set({ accountNotFound: false }),
+  suspension: null,
+  suspendAccount: (reason) => {
+    tokenStorage.clearTokens().catch(() => {});
+    signOutGoogle().catch(() => {});
+    resetUserState();
+    set({ user: null, suspension: { reason } });
+  },
+  clearSuspension: () => set({ suspension: null }),
 
   login: async (email, password) => {
     set({ isAuthenticating: true });
@@ -292,6 +305,9 @@ useAuthStore.subscribe((state, prev) => {
 // The refresh token was refused (expired, revoked, account deleted or
 // suspended): sign out, so the route guards send the hunter to Login
 // instead of leaving every request failing.
+// Banned (any request, sign-in, renewal or the ban push): signed out at once.
+setAccountSuspendedHandler((reason) => useAuthStore.getState().suspendAccount(reason));
+
 setSessionExpiredHandler((code) => {
   if (!useAuthStore.getState().user) return;
   resetUserState();

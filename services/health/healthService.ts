@@ -11,7 +11,7 @@ class DummyHealthAdapter implements HealthAdapter {
   async requestPermissions() { return false; }
   async checkPermissions() { return false; }
   async getTodaySummary() {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = localDateKey(new Date());
     return {
       date: todayStr,
       steps: 0,

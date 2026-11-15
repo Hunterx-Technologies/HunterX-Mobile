@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import { refreshAccessToken, setSessionExpiredHandler } from '../client';
+import { apiClient, refreshAccessToken, setAccountSuspendedHandler, setSessionExpiredHandler } from '../client';
 import { tokenStorage } from '../tokenStorage';
 
 jest.mock('../tokenStorage', () => {
@@ -68,5 +68,45 @@ describe('refreshAccessToken', () => {
     await refreshAccessToken();
     const logged = JSON.stringify((console.warn as jest.Mock).mock.calls);
     expect(logged).not.toContain('old-refresh');
+  });
+});
+
+describe('a banned account (403 ACCOUNT_SUSPENDED)', () => {
+  const onSuspended = jest.fn();
+  const onExpired = jest.fn();
+  const suspended = (reason: string | null) =>
+    Object.assign(new Error('Request failed with status code 403'), {
+      response: {
+        status: 403,
+        data: { success: false, message: 'Your account has been suspended', error: { code: 'ACCOUNT_SUSPENDED', reason } },
+      },
+    });
+
+  beforeEach(async () => {
+    await tokenStorage.setTokens('old-access', 'old-refresh');
+    onSuspended.mockReset();
+    onExpired.mockReset();
+    setAccountSuspendedHandler(onSuspended);
+    setSessionExpiredHandler(onExpired);
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('signs out with the reason when the session renewal is refused', async () => {
+    jest.spyOn(axios, 'post').mockRejectedValue(suspended('Cheating on quests'));
+    await expect(refreshAccessToken()).resolves.toBeNull();
+    expect(await tokenStorage.getRefreshToken()).toBeNull();
+    expect(onSuspended).toHaveBeenCalledWith('Cheating on quests');
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it('signs out on any ordinary request the server refuses', async () => {
+    const adapter = jest.fn(async (config: any) => {
+      throw Object.assign(suspended(null), { config, isAxiosError: true });
+    });
+    await expect(apiClient.get('/tasks/today', { adapter })).rejects.toMatchObject({ code: 'ACCOUNT_SUSPENDED', status: 403 });
+    expect(await tokenStorage.getAccessToken()).toBeNull();
+    expect(onSuspended).toHaveBeenCalledWith(null);
   });
 });

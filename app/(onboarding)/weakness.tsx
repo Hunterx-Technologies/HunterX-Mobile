@@ -23,7 +23,7 @@ import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 4; // fifth step (0-indexed)
-const MAX_SELECTIONS = 4;
+const REQUIRED_SELECTIONS = 4;
 
 type WeaknessOption = {
     id: string;
@@ -140,7 +140,7 @@ export default function WeaknessScreen() {
             if (prev.includes(id)) {
                 return prev.filter((item) => item !== id);
             }
-            if (prev.length >= MAX_SELECTIONS) {
+            if (prev.length >= REQUIRED_SELECTIONS) {
                 return prev;
             }
             return [...prev, id];
@@ -148,7 +148,7 @@ export default function WeaknessScreen() {
     };
 
     const handleContinue = () => {
-        if (selectedIds.length === 0) return;
+        if (selectedIds.length !== REQUIRED_SELECTIONS) return;
         setWeaknessesStore(selectedIds);
         // Navigate to step 4: assessment
         router.push('/(onboarding)/assessment');
@@ -202,7 +202,7 @@ export default function WeaknessScreen() {
 
     const renderOption = (option: WeaknessOption) => {
         const isSelected = selectedIds.includes(option.id);
-        const isDisabled = !isSelected && selectedIds.length >= MAX_SELECTIONS;
+        const isDisabled = !isSelected && selectedIds.length >= REQUIRED_SELECTIONS;
 
         return (
             <Pressable
@@ -248,10 +248,10 @@ export default function WeaknessScreen() {
                     <Text style={styles.sectionLabel}>IDENTIFY WEAKNESS</Text>
                     <Text style={styles.title}>What stands{'\n'}between you?</Text>
                     <Text style={styles.description}>
-                        Every hunter has a weakness the system must account for. Select all that apply.
+                        Every hunter has a weakness the system must account for. Pick your top four.
                     </Text>
                     <Text style={styles.selectRequirement}>
-                        SELECT <Text style={styles.selectRequirementHighlight}>1</Text> OF UP TO 4
+                        SELECT <Text style={styles.selectRequirementHighlight}>{selectedIds.length}</Text> OF 4
                     </Text>
                 </Animated.View>
 
@@ -261,30 +261,12 @@ export default function WeaknessScreen() {
             </ScrollView>
 
             <Animated.View style={[styles.bottomSection, fadeSlideStyle(buttonAnim)]}>
-                <View style={styles.weaknessesCounterContainer}>
-                    <Text style={styles.weaknessesCounterText}>
-                        WEAKNESSES IDENTIFIED: <Text style={styles.weaknessesCounterHighlight}>{selectedIds.length}</Text>
-                    </Text>
-
-                    <View style={styles.progressBarContainer}>
-                        {Array.from({ length: 4 }).map((_, index) => (
-                            <View
-                                key={index}
-                                style={[
-                                    styles.progressDash,
-                                    index < selectedIds.length && styles.progressDashActive
-                                ]}
-                            />
-                        ))}
-                    </View>
-                </View>
-
                 <View style={styles.bottomBar}>
                     <Button
                         label="CONTINUE"
                         onPress={handleContinue}
                         variant="primary"
-                        disabled={selectedIds.length === 0}
+                        disabled={selectedIds.length !== REQUIRED_SELECTIONS}
                         style={styles.ctaButton}
                         labelStyle={styles.ctaLabel}
                     />
@@ -411,35 +393,6 @@ const styles = StyleSheet.create({
     /* ─── Bottom Section ─── */
     bottomSection: {
         paddingBottom: Platform.OS === 'ios' ? 8 : 20,
-    },
-    weaknessesCounterContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 24,
-        marginBottom: 16,
-    },
-    weaknessesCounterText: {
-        fontFamily: fontFamilies.bold,
-        fontSize: 11,
-        color: '#71717A',
-        letterSpacing: 1,
-    },
-    weaknessesCounterHighlight: {
-        color: colors.accentGold,
-    },
-    progressBarContainer: {
-        flexDirection: 'row',
-        gap: 4,
-    },
-    progressDash: {
-        width: 16,
-        height: 3,
-        backgroundColor: '#26262B',
-        borderRadius: 2,
-    },
-    progressDashActive: {
-        backgroundColor: colors.accentGold,
     },
 
     bottomBar: {

@@ -11,7 +11,12 @@ export const API_ERROR = {
   ACCOUNT_PENDING_DELETION_LOGIN_TO_RESTORE: 'ACCOUNT_PENDING_DELETION_LOGIN_TO_RESTORE',
   /** Forgot password for a Google/Apple-only account: there's no password to reset. */
   SOCIAL_ACCOUNT: 'SOCIAL_ACCOUNT',
+  /** Banned by an admin: any request or sign-in. error.reason holds the admin's reason. */
+  ACCOUNT_SUSPENDED: 'ACCOUNT_SUSPENDED',
 } as const;
+
+/** Where a suspended hunter can appeal. */
+export const SUPPORT_EMAIL = 'customercare@hunterx.co.in';
 
 export function getApiErrorCode(err: unknown): string | null {
   const e = err as any;

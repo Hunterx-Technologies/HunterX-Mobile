@@ -46,11 +46,24 @@ if (__DEV__) {
   );
 }
 
+// The phone's IANA zone (e.g. "America/New_York"): quests, streaks and the
+// Day Complete screen roll over at the hunter's own midnight, and the
+// backend saves this whenever it changes (travel, DST zone switch).
+function deviceTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
 apiClient.interceptors.request.use(async (config) => {
   const accessToken = await tokenStorage.getAccessToken();
   if (accessToken) {
     config.headers.set('Authorization', `Bearer ${accessToken}`);
   }
+  const timeZone = deviceTimeZone();
+  if (timeZone) config.headers.set('X-Timezone', timeZone);
   return config;
 });
 
@@ -68,6 +81,20 @@ let sessionExpiredHandler: ((code: string | null) => void) | null = null;
 
 export function setSessionExpiredHandler(handler: ((code: string | null) => void) | null) {
   sessionExpiredHandler = handler;
+}
+
+// Called when the server says the account is banned (403 ACCOUNT_SUSPENDED,
+// on any request, sign-in or session renewal): no access at all, so the app
+// signs out at once and shows why. Registered by useAuthStore.
+let accountSuspendedHandler: ((reason: string | null) => void) | null = null;
+
+export function setAccountSuspendedHandler(handler: ((reason: string | null) => void) | null) {
+  accountSuspendedHandler = handler;
+}
+
+function suspendedReason(body: any): string | null | undefined {
+  if (body?.error?.code !== 'ACCOUNT_SUSPENDED') return undefined;
+  return typeof body.error.reason === 'string' && body.error.reason ? body.error.reason : null;
 }
 
 export async function refreshAccessToken(): Promise<string | null> {
@@ -91,7 +118,9 @@ export async function refreshAccessToken(): Promise<string | null> {
     // else (offline, timeout, 5xx) may pass, so the tokens are kept.
     if (status && [400, 401, 403, 404].includes(status)) {
       await tokenStorage.clearTokens();
-      sessionExpiredHandler?.(err?.response?.data?.error?.code ?? null);
+      const reason = suspendedReason(err?.response?.data);
+      if (reason !== undefined) accountSuspendedHandler?.(reason);
+      else sessionExpiredHandler?.(err?.response?.data?.error?.code ?? null);
     }
     // Status only — the error object carries the request body, which holds
     // the refresh token.
@@ -131,6 +160,13 @@ apiClient.interceptors.response.use(
     // pop-up. Any response, even an error status, means we're online.
     if (error.response) markOnline();
     else if (!axios.isCancel(error)) markOffline();
+
+    // Banned: sign out now, whatever the request was.
+    const reason = suspendedReason(error.response?.data);
+    if (reason !== undefined) {
+      await tokenStorage.clearTokens();
+      accountSuspendedHandler?.(reason);
+    }
 
     // A 401 that means "wrong password", not "expired token", is passed
     // straight through — refreshing wouldn't change it.

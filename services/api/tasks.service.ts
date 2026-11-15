@@ -25,6 +25,14 @@ export async function fetchTasksToday(): Promise<TasksTodayData> {
   return inFlightTasksToday;
 }
 
+/** Records that today's "Day Complete" screen was shown, so it isn't shown again today. */
+export async function markDayCompleteSeen(): Promise<void> {
+  const { data } = await apiClient.post<ApiResponse<{ day_complete_seen: boolean }>>('/tasks/day-complete/seen');
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to mark day complete as seen');
+  }
+}
+
 export async function completeTask(
   taskId: string,
   status: TaskStatus

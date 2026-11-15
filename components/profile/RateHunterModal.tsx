@@ -303,17 +303,17 @@ export function RateHunterModal({ visible, onClose }: RateHunterModalProps) {
                   </Text>
 
                   <View style={styles.feedbackCategoriesRow}>
-                    {['Quests & XP', 'UI & Design', 'Performance', 'Notifications', 'Other'].map(
-                      (cat) => {
-                        const isCatSelected = rateCategory === cat;
+                    {RATING_CATEGORIES.map(
+                      ({ key, label }) => {
+                        const isCatSelected = rateCategory === key;
                         return (
                           <TouchableOpacity
-                            key={cat}
+                            key={key}
                             style={[
                               styles.feedbackCategoryPill,
                               isCatSelected && styles.feedbackCategoryPillSelected,
                             ]}
-                            onPress={() => setRateCategory(isCatSelected ? null : cat)}
+                            onPress={() => setRateCategory(isCatSelected ? null : key)}
                             activeOpacity={0.7}
                           >
                             <Text
@@ -322,7 +322,7 @@ export function RateHunterModal({ visible, onClose }: RateHunterModalProps) {
                                 isCatSelected && styles.feedbackCategoryTextSelected,
                               ]}
                             >
-                              {cat}
+                              {label}
                             </Text>
                           </TouchableOpacity>
                         );
@@ -395,6 +395,15 @@ export function RateHunterModal({ visible, onClose }: RateHunterModalProps) {
     </Modal>
   );
 }
+
+// The pill label, and the key POST /ratings expects as `category`.
+const RATING_CATEGORIES = [
+  { key: 'quests_xp', label: 'Quests & XP' },
+  { key: 'ui_design', label: 'UI & Design' },
+  { key: 'performance', label: 'Performance' },
+  { key: 'notifications', label: 'Notifications' },
+  { key: 'other', label: 'Other' },
+] as const;
 
 const styles = StyleSheet.create({
   screen: {
