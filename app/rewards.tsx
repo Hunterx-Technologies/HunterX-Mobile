@@ -10,6 +10,7 @@ import {
   Dimensions,
   BackHandler,
   ActivityIndicator,
+  Linking,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -58,6 +59,8 @@ export interface CouponReward {
   productName: string;
   productCategory: string;
   productImageUrl?: string;
+  /** The partner's website: "Redeem now" opens it. */
+  redeemUrl?: string;
   expiresIn: string;
   /** Long-form expiry for the details screen, e.g. "October 9, 2026"; null = no expiry. */
   expiryDate: string | null;
@@ -92,6 +95,7 @@ export function toCouponReward(r: UserReward): CouponReward {
     productName: prize?.product_name ?? '',
     productCategory: prize?.product_category ?? '',
     productImageUrl: prize?.product_image_url,
+    redeemUrl: prize?.redeem_url,
     expiresIn: isUsed ? 'REDEEMED' : isExpired ? 'EXPIRED' : expiryDate ? `Expires ${expiryDate}` : 'No expiry',
     expiryDate,
     code: prize?.code ?? '',
@@ -305,13 +309,24 @@ export default function RewardsScreen() {
     router.replace('/(tabs)/profile');
   };
 
-  const handleMarkAsUsed = async (cardId: string) => {
+  // With a partner website, "Redeem now" lands here too (the code is
+  // already copied): it's marked redeemed first, then the site opens. If
+  // marking fails the site doesn't open, so a reward is never used on the
+  // partner's site while still showing as unused here.
+  const handleMarkAsUsed = async (card: CouponReward) => {
     setMarkingUsed(true);
     try {
-      await markRewardUsed(cardId);
+      await markRewardUsed(card.id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
       setSelectedDetailsCard(null);
-      showGlobalToast('Reward redeemed.', 'success');
+      if (card.redeemUrl) {
+        showGlobalToast('Code copied. Paste it at checkout.', 'success');
+        Linking.openURL(card.redeemUrl).catch(() =>
+          showGlobalToast("Couldn't open the website. Your code is copied.", 'warning')
+        );
+      } else {
+        showGlobalToast('Reward redeemed.', 'success');
+      }
     } catch (err) {
       const code = errorCode(err);
       if (code === API_ERROR.ACCOUNT_PENDING_DELETION) {
@@ -603,7 +618,7 @@ export default function RewardsScreen() {
         <RewardRevealModal
           visible={!!selectedDetailsCard}
           onClose={() => setSelectedDetailsCard(null)}
-          onMarkUsed={selectedDetailsCard && !deletionPending ? () => handleMarkAsUsed(selectedDetailsCard.id) : undefined}
+          onMarkUsed={selectedDetailsCard && !deletionPending ? () => handleMarkAsUsed(selectedDetailsCard) : undefined}
           markingUsed={markingUsed}
           reward={
             selectedDetailsCard
@@ -614,6 +629,7 @@ export default function RewardsScreen() {
                 productName: selectedDetailsCard.productName,
                 productCategory: selectedDetailsCard.productCategory,
                 productImageUrl: selectedDetailsCard.productImageUrl,
+                redeemUrl: selectedDetailsCard.redeemUrl,
                 expiryDate: selectedDetailsCard.expiryDate ?? undefined,
                 description: selectedDetailsCard.subtitle,
                 isUsed: selectedDetailsCard.isUsed,

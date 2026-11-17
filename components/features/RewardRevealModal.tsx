@@ -7,7 +7,6 @@ import {
   ScrollView,
   Modal,
   Clipboard,
-  Linking,
   Dimensions,
   Platform,
   ActivityIndicator,
@@ -38,8 +37,12 @@ export interface RewardRevealData {
   minSpend?: string;
   /** Extra terms shown under Details. */
   description?: string;
-  /** Where "Redeem now" goes. Without one, only the "Redeem reward" button is offered. */
-  amazonUrl?: string;
+  /**
+   * The partner's website. "Redeem now" then copies the code, marks the
+   * reward redeemed (onMarkUsed) and opens it, in one tap. Without one,
+   * "Redeem reward" marks it redeemed after a confirm.
+   */
+  redeemUrl?: string;
   isUsed?: boolean;
 }
 
@@ -47,7 +50,7 @@ export interface RewardRevealModalProps {
   visible: boolean;
   onClose: () => void;
   reward: RewardRevealData | null;
-  /** Shows a "Redeem" button (marks the reward used, after a confirm) while the reward is unused. */
+  /** Marks the reward used. Without it (e.g. account pending deletion) no redeem button is shown. */
   onMarkUsed?: () => void;
   /** Disables the button and shows progress while the request runs. */
   markingUsed?: boolean;
@@ -90,10 +93,12 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
     }, 2500);
   };
 
+  // Copy the code, then mark it redeemed; the screen opens the partner's
+  // site once that succeeds (rewards.tsx#handleMarkAsUsed).
   const handleRedeemNow = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     handleCopyCode();
-    if (reward.amazonUrl) Linking.openURL(reward.amazonUrl).catch(() => {});
+    onMarkUsed?.();
   };
 
   return (
@@ -242,7 +247,9 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
                   <View style={styles.bulletItem}>
                     <Text style={styles.bulletDot}>1.</Text>
                     <Text style={styles.bulletText}>
-                      {reward.amazonUrl ? "Tap 'Redeem now' below or copy the code from above." : 'Copy the code from above.'}
+                      {reward.redeemUrl
+                        ? "Tap 'Redeem now' below: your code is copied and the store's website opens."
+                        : 'Copy the code from above.'}
                     </Text>
                   </View>
                   <View style={styles.bulletItem}>
@@ -299,51 +306,32 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
 
           {/* 8. BOTTOM STICKY CTA: REDEEM NOW */}
           <View style={[styles.stickyFooterContainer, { paddingBottom: bottomInset + 12 }]}>
-            {(reward.isUsed || !!reward.amazonUrl) && (
+            {reward.isUsed ? (
+              <View style={[styles.redeemNowBtn, styles.disabledRedeemBtn]}>
+                <Ionicons name="checkmark-circle" size={18} color="#8E8E93" />
+                <Text style={[styles.redeemNowBtnText, styles.disabledRedeemBtnText]}>REDEEMED</Text>
+              </View>
+            ) : onMarkUsed ? (
               <TouchableOpacity
-                style={[
-                  styles.redeemNowBtn,
-                  reward.isUsed && styles.disabledRedeemBtn,
-                ]}
-                onPress={handleRedeemNow}
-                disabled={reward.isUsed}
-                activeOpacity={0.88}
-              >
-                <Ionicons
-                  name={reward.isUsed ? 'checkmark-circle' : 'open-outline'}
-                  size={18}
-                  color={reward.isUsed ? '#8E8E93' : '#0D0F12'}
-                />
-                <Text
-                  style={[
-                    styles.redeemNowBtnText,
-                    reward.isUsed && styles.disabledRedeemBtnText,
-                  ]}
-                >
-                  {reward.isUsed ? 'REDEEMED' : 'Redeem now'}
-                </Text>
-              </TouchableOpacity>
-            )}
-            {!reward.isUsed && onMarkUsed && (
-              <TouchableOpacity
-                style={[
-                  reward.amazonUrl ? styles.markUsedSecondaryBtn : styles.redeemNowBtn,
-                  markingUsed && styles.markUsedBusy,
-                ]}
-                onPress={() => setConfirmRedeem(true)}
+                style={[styles.redeemNowBtn, markingUsed && styles.markUsedBusy]}
+                // With a website: one tap copies, marks redeemed and opens it.
+                // Without: confirm first (the code must be used at checkout).
+                onPress={reward.redeemUrl ? handleRedeemNow : () => setConfirmRedeem(true)}
                 disabled={markingUsed}
                 activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityHint={reward.redeemUrl ? "Copies your code, marks this reward redeemed and opens the store's website" : undefined}
               >
                 {markingUsed ? (
-                  <ActivityIndicator size="small" color={reward.amazonUrl ? '#FFFFFF' : '#0D0F12'} />
+                  <ActivityIndicator size="small" color="#0D0F12" />
                 ) : (
-                  <Ionicons name={reward.amazonUrl ? 'checkmark-done' : 'gift'} size={18} color={reward.amazonUrl ? '#FFFFFF' : '#0D0F12'} />
+                  <Ionicons name={reward.redeemUrl ? 'open-outline' : 'gift'} size={18} color="#0D0F12" />
                 )}
-                <Text style={reward.amazonUrl ? styles.markUsedSecondaryText : styles.redeemNowBtnText}>
-                  {markingUsed ? 'Redeeming...' : reward.amazonUrl ? 'Mark as redeemed' : 'Redeem reward'}
+                <Text style={styles.redeemNowBtnText}>
+                  {markingUsed ? 'Redeeming...' : reward.redeemUrl ? 'Redeem now' : 'Redeem reward'}
                 </Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
 
           {/* Redeeming moves the card to Used: make sure the code was used first. */}
@@ -563,22 +551,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
     paddingVertical: 14,
-  },
-  markUsedSecondaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 10,
-    borderRadius: 28,
-    paddingVertical: 13,
-    borderWidth: 1,
-    borderColor: '#2A2C33',
-  },
-  markUsedSecondaryText: {
-    fontFamily: fontFamilies.bold,
-    color: '#FFFFFF',
-    fontSize: 15,
   },
   markUsedBusy: {
     opacity: 0.7,

@@ -21,6 +21,8 @@ export interface RewardPrize {
   product_name?: string;
   product_category?: string;
   product_image_url?: string;
+  /** The partner's website, set by the admin (optional). */
+  redeem_url?: string;
   valid_until: string | null;
   scratched_at: string;
   used_at?: string;
