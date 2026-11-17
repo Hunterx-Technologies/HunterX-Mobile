@@ -60,7 +60,8 @@ const NameWithStreak: React.FC<{ name: string; streak?: number | null; nameStyle
 
 interface LeaderboardHunterRowProps {
   hunter: LeaderboardHunter;
-  onPress?: (hunter: LeaderboardHunter) => void;
+  /** `pageY`: where on screen the row was tapped. */
+  onPress?: (hunter: LeaderboardHunter, pageY?: number) => void;
 }
 
 // ── Top 3: gold, silver and bronze ───────────────────────────
@@ -132,7 +133,8 @@ const SHINE_EVERY_MS = 3600;
 const Top3Card: React.FC<{
   hunter: LeaderboardHunter;
   rank: 1 | 2 | 3;
-  onPress?: (hunter: LeaderboardHunter) => void;
+  /** `pageY`: where on screen the row was tapped. */
+  onPress?: (hunter: LeaderboardHunter, pageY?: number) => void;
   formatScore: (val: number) => string;
 }> = ({ hunter, rank, onPress, formatScore }) => {
   const metal = METALS[rank];
@@ -271,7 +273,7 @@ const Top3Card: React.FC<{
 
   if (onPress) {
     return (
-      <TouchableOpacity activeOpacity={0.85} onPress={() => onPress(hunter)} style={styles.cardWrapper}>
+      <TouchableOpacity activeOpacity={0.85} onPress={(e) => onPress(hunter, e.nativeEvent.pageY)} style={styles.cardWrapper}>
         {content}
       </TouchableOpacity>
     );
@@ -350,7 +352,7 @@ const LeaderboardHunterRowComponent: React.FC<LeaderboardHunterRowProps> = ({
       return (
         <TouchableOpacity
           activeOpacity={0.85}
-          onPress={() => onPress(hunter)}
+          onPress={(e) => onPress(hunter, e.nativeEvent.pageY)}
           style={styles.cardWrapper}
         >
           {CardContent}
@@ -440,7 +442,7 @@ const LeaderboardHunterRowComponent: React.FC<LeaderboardHunterRowProps> = ({
     return (
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={() => onPress(hunter)}
+        onPress={(e) => onPress(hunter, e.nativeEvent.pageY)}
       >
         {RowContent}
       </TouchableOpacity>

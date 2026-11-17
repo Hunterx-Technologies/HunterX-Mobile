@@ -24,9 +24,12 @@ import { buildOnboardingAnswers, useOnboardingStore } from '@/store/useOnboardin
 import { useAuthStore } from '@/store/useAuthStore';
 import { getCurrentUser } from '@/services/api/auth.service';
 import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
+import { PRIVACY_URL, TERMS_URL, openLegalPage } from '@/utils/legalLinks';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 8; // ninth step (0-indexed)
+// Small legal links: padding + hitSlop give them a finger-sized target.
+const FOOTER_LINK_HIT_SLOP = { top: 4, bottom: 4, left: 6, right: 6 };
 
 export default function OathScreen() {
     const { isAuthenticated, submitOnboarding } = useAuth();
@@ -256,9 +259,26 @@ export default function OathScreen() {
                     style={styles.ctaButton}
                     labelStyle={styles.ctaLabel}
                 />
-                <Text style={styles.footerText}>
-                    By continuing you agree to HunterX's Terms & Privacy Policy
-                </Text>
+                <Text style={styles.footerText}>By continuing you agree to HunterX&apos;s</Text>
+                <View style={styles.footerLinksRow}>
+                    <Pressable
+                        onPress={() => openLegalPage(TERMS_URL)}
+                        hitSlop={FOOTER_LINK_HIT_SLOP}
+                        style={styles.footerLink}
+                        accessibilityRole="link"
+                    >
+                        <Text style={styles.footerLinkText}>Terms of Service</Text>
+                    </Pressable>
+                    <Text style={styles.footerText}>&amp;</Text>
+                    <Pressable
+                        onPress={() => openLegalPage(PRIVACY_URL)}
+                        hitSlop={FOOTER_LINK_HIT_SLOP}
+                        style={styles.footerLink}
+                        accessibilityRole="link"
+                    >
+                        <Text style={styles.footerLinkText}>Privacy Policy</Text>
+                    </Pressable>
+                </View>
             </Animated.View>
         </Screen>
     );
@@ -451,6 +471,23 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#FFFFFF',
         textAlign: 'center',
+    },
+    footerLinksRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        columnGap: 6,
+        marginTop: -6,
+        marginBottom: -10,
+    },
+    footerLink: {
+        paddingVertical: 10,
+    },
+    footerLinkText: {
+        fontFamily: fontFamilies.medium,
+        fontSize: 11,
+        color: '#FFFFFF',
+        textDecorationLine: 'underline',
     },
     errorText: {
         fontFamily: fontFamilies.regular,

@@ -22,9 +22,7 @@ export function FriendRequestsStrip({ onOpen }: { onOpen: (request: FriendReques
   if (requests.length === 0) return null;
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>
-        Friend requests <Text style={styles.count}>· {requests.length}</Text>
-      </Text>
+      <Text style={styles.title}>Friend requests</Text>
       {requests.map((r) => (
         <RequestRow key={r.userId} request={r} onOpen={onOpen} />
       ))}
@@ -99,9 +97,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     fontSize: 14,
     color: '#FFFFFF',
-  },
-  count: {
-    color: '#FE5B01',
   },
   row: {
     flexDirection: 'row',

@@ -126,6 +126,7 @@ export function SystemSettingsModal({
   const [isChangeEmailModalVisible, setIsChangeEmailModalVisible] = useState(false);
   const [currentPasswordInput, setCurrentPasswordInput] = useState('');
   const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [isNewPasswordFocused, setIsNewPasswordFocused] = useState(false);
   const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [visiblePasswordFields, setVisiblePasswordFields] = useState({
@@ -1163,6 +1164,8 @@ export function SystemSettingsModal({
                     setNewPasswordInput(noSpaces(t));
                     setPasswordError(null);
                   }}
+                  onFocus={() => setIsNewPasswordFocused(true)}
+                  onBlur={() => setIsNewPasswordFocused(false)}
                 />
                 <TouchableOpacity
                   style={styles.passwordEyeBtn}
@@ -1177,7 +1180,7 @@ export function SystemSettingsModal({
                   />
                 </TouchableOpacity>
               </View>
-              <PasswordStrengthMeter password={newPasswordInput} />
+              <PasswordStrengthMeter password={newPasswordInput} focused={isNewPasswordFocused} />
               <View style={styles.passwordInputWrap}>
                 <TextInput
                   style={[styles.modalInput, styles.passwordInput]}

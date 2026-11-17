@@ -13,7 +13,8 @@ type FriendsState = {
   requests: FriendRequest[];
   requestsLoaded: boolean;
   cards: Record<string, HunterCard>;
-  loadRequests: () => Promise<void>;
+  /** `maxAgeMs`: skip the call if the list was loaded more recently than this. */
+  loadRequests: (options?: { maxAgeMs?: number }) => Promise<void>;
   rememberCard: (card: HunterCard) => void;
   /** After a friend action: update the cached card and the request list. */
   applyRelationship: (userId: string, relationship: FriendRelationship) => void;
@@ -21,16 +22,27 @@ type FriendsState = {
 };
 
 let inFlight: Promise<void> | null = null;
+let loadedAt = 0;
+
+function sameRequests(a: FriendRequest[], b: FriendRequest[]) {
+  return a.length === b.length && JSON.stringify(a) === JSON.stringify(b);
+}
 
 export const useFriendsStore = create<FriendsState>((set, get) => ({
   requests: [],
   requestsLoaded: false,
   cards: {},
 
-  loadRequests: () => {
+  loadRequests: (options) => {
     if (inFlight) return inFlight;
+    if (options?.maxAgeMs && Date.now() - loadedAt < options.maxAgeMs) return Promise.resolve();
     inFlight = fetchFriendRequests()
-      .then(({ requests }) => set({ requests, requestsLoaded: true }))
+      .then(({ requests }) => {
+        loadedAt = Date.now();
+        // Checked often (Battles tab dot), so only a real change re-renders.
+        if (get().requestsLoaded && sameRequests(get().requests, requests)) return;
+        set({ requests, requestsLoaded: true });
+      })
       .catch(() => set({ requestsLoaded: true })) // keep what's shown; the strip just doesn't update
       .finally(() => {
         inFlight = null;
@@ -56,5 +68,8 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
     }
   },
 
-  reset: () => set({ requests: [], requestsLoaded: false, cards: {} }),
+  reset: () => {
+    loadedAt = 0;
+    set({ requests: [], requestsLoaded: false, cards: {} });
+  },
 }));

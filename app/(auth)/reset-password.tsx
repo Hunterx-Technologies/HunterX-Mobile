@@ -240,7 +240,7 @@ export default function ResetPasswordScreen() {
                 { opacity: reqOp, transform: [{ translateY: reqY }] },
               ]}
             >
-              <PasswordStrengthMeter password={newPassword} />
+              <PasswordStrengthMeter password={newPassword} focused={focusedField === 'new'} />
             </Animated.View>
 
             {/* ── Error Banner ─────────────────────────────────────────── */}

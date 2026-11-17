@@ -452,9 +452,13 @@ export default function SignupScreen() {
         </View>
 
         {/* Sign-up only requires 8 characters, so no rule checklist here. */}
-        {password.length > 0 && (
+        {(password.length > 0 || focusedInput === 'password') && (
           <View style={styles.strengthMeter}>
-            <PasswordStrengthMeter password={password} showRules={!meetsPasswordRules(password)} />
+            <PasswordStrengthMeter
+              password={password}
+              showRules={!meetsPasswordRules(password)}
+              focused={focusedInput === 'password'}
+            />
           </View>
         )}
 

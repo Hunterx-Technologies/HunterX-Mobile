@@ -1,12 +1,12 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { fontFamilies } from '@/theme/typography';
 
-// Password strength: a 4-segment bar with Weak / Fair / Good / Strong, and —
-// where the rules are enforced — the rule checklist. Used wherever a new
-// password is chosen: sign-up, reset and change.
+// Password strength, Google-style: one line of helper text under the field
+// ("Use 8 or more characters with a mix of letters, numbers & symbols") and,
+// once typing starts, "Password strength: Weak / Fair / Good / Strong".
+// Used wherever a new password is chosen: sign-up, reset and change.
 
 /** The rules the backend enforces on reset / change (helpers.js#isStrongPassword). */
 export const PASSWORD_RULES = [
@@ -17,6 +17,8 @@ export const PASSWORD_RULES = [
 ] as const;
 
 export const meetsPasswordRules = (p: string) => PASSWORD_RULES.every((r) => r.test(p));
+
+const HINT = 'Use 8 or more characters with a mix of letters, numbers & symbols';
 
 const LEVELS = [
   { label: 'Weak', color: '#EF4444' },
@@ -31,91 +33,61 @@ function strengthIndex(p: string): number {
   return Math.max(0, met - 1);
 }
 
-export interface PasswordStrengthMeterProps {
-  password: string;
-  /** Show the 4-rule checklist (where the rules are required). Defaults to true. */
-  showRules?: boolean;
+/** The helper line: the generic hint, or a nudge when only the uppercase rule is missing. */
+function hintFor(p: string): string {
+  const unmet = PASSWORD_RULES.filter((r) => !r.test(p));
+  if (unmet.length === 1 && unmet[0].key === 'upper') return 'Add an uppercase letter';
+  return HINT;
 }
 
-export function PasswordStrengthMeter({ password, showRules = true }: PasswordStrengthMeterProps) {
-  if (password.length === 0) return null;
+export interface PasswordStrengthMeterProps {
+  password: string;
+  /** Show the helper line while the rules aren't met. Defaults to true. */
+  showRules?: boolean;
+  /** Whether the password field has focus — the helper line only shows while it does. */
+  focused?: boolean;
+}
 
-  const idx = strengthIndex(password);
-  const level = LEVELS[idx];
+export function PasswordStrengthMeter({ password, showRules = true, focused = false }: PasswordStrengthMeterProps) {
+  if (password.length === 0) {
+    return showRules && focused ? (
+      <View style={styles.wrap}>
+        <Text style={styles.hint}>{HINT}</Text>
+      </View>
+    ) : null;
+  }
+
+  const level = LEVELS[strengthIndex(password)];
+  const showHint = showRules && focused && !meetsPasswordRules(password);
 
   return (
     <View style={styles.wrap} accessibilityLabel={`Password strength: ${level.label}`}>
-      <View style={styles.barRow}>
-        <View style={styles.bar}>
-          {LEVELS.map((_, i) => (
-            <View key={i} style={[styles.segment, i <= idx && { backgroundColor: level.color }]} />
-          ))}
-        </View>
-        <Text style={[styles.levelText, { color: level.color }]}>{level.label}</Text>
-      </View>
-
-      {showRules && (
-        <View style={styles.rules}>
-          {PASSWORD_RULES.map((r) => {
-            const met = r.test(password);
-            return (
-              <View key={r.key} style={styles.rule}>
-                <Ionicons name={met ? 'checkmark-circle' : 'ellipse-outline'} size={13} color={met ? '#22C55E' : '#52525B'} />
-                <Text style={[styles.ruleText, met && styles.ruleTextMet]}>{r.label}</Text>
-              </View>
-            );
-          })}
-        </View>
-      )}
+      <Text style={styles.strength}>
+        Password strength: <Text style={[styles.level, { color: level.color }]}>{level.label}</Text>
+      </Text>
+      {showHint && <Text style={styles.hint}>{hintFor(password)}</Text>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 8,
+    gap: 4,
     marginTop: 2,
     marginBottom: 6,
   },
-  barRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  bar: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 4,
-  },
-  segment: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  levelText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 12,
-    minWidth: 44,
-    textAlign: 'right',
-  },
-  rules: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    columnGap: 14,
-    rowGap: 6,
-  },
-  rule: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ruleText: {
+  strength: {
     fontFamily: fontFamilies.medium,
-    fontSize: 11.5,
-    color: '#71717A',
+    fontSize: 12,
+    color: '#A1A1AA',
   },
-  ruleTextMet: {
-    color: '#D4D4D8',
+  level: {
+    fontFamily: fontFamilies.semiBold,
+  },
+  hint: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#71717A',
   },
 });

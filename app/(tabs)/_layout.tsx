@@ -1,6 +1,6 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Tabs, useFocusEffect, usePathname, useRouter, Redirect } from 'expo-router';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { AppState, BackHandler, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -8,12 +8,54 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { colors } from '@/theme/colors';
 import { useAuth } from '@/hooks/useAuth';
 import { confirmExitApp } from '@/utils/confirmExitApp';
+import { useFriendsStore } from '@/store/useFriendsStore';
+
+// How often waiting friend requests are checked while the app is open.
+const FRIEND_REQUEST_POLL_MS = 60_000;
+// A tab switch only re-checks if the last check is older than this.
+const FRIEND_REQUEST_TAB_SWITCH_MS = 15_000;
 
 export default function TabsLayout() {
   const { isAuthenticated, isOnboarded, isBootstrapping } = useAuth();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
+  // A dot on Battles while friend requests are waiting (the Friends pill
+  // inside shows the count).
+  const hasFriendRequests = useFriendsStore((s) => s.requests.length > 0);
+  // Loaded here (not only on Leaderboard) so the dot shows from launch.
+  // Pushes can't be relied on to update it while the app is open: the server
+  // holds friend-request pushes in quiet hours (22:00-07:00) and sends one
+  // per sender per day. So it's also checked every minute while the app is in
+  // the foreground, on a tab switch (at most every 15s), and when the app
+  // comes back.
+  const signedIn = isAuthenticated && isOnboarded && !isBootstrapping;
+  useEffect(() => {
+    if (!signedIn) return;
+    const { loadRequests } = useFriendsStore.getState();
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (timer) return;
+      loadRequests();
+      timer = setInterval(loadRequests, FRIEND_REQUEST_POLL_MS);
+    };
+    const stop = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+    };
+    if (AppState.currentState === 'active') start();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') start();
+      else stop();
+    });
+    return () => {
+      stop();
+      sub.remove();
+    };
+  }, [signedIn]);
+  useEffect(() => {
+    if (signedIn) useFriendsStore.getState().loadRequests({ maxAgeMs: FRIEND_REQUEST_TAB_SWITCH_MS });
+  }, [signedIn, pathname]);
 
   // Hardware back button handler to prevent back navigation to auth/onboarding screens
   useFocusEffect(
@@ -96,9 +138,11 @@ export default function TabsLayout() {
         name="leaderboard"
         options={{
           title: 'Battles',
+          tabBarAccessibilityLabel: hasFriendRequests ? 'Battles, friend requests waiting' : 'Battles',
           tabBarIcon: ({ focused }) => (
             <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
               <MaterialCommunityIcons name="sword-cross" size={22} color={focused ? '#FE5B01' : '#71717A'} />
+              {hasFriendRequests && <View style={styles.requestDot} />}
             </View>
           ),
         }}
@@ -132,6 +176,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  requestDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FE5B01',
+    borderWidth: 1.5,
+    borderColor: colors.background,
   },
   activeIconContainer: {
     backgroundColor: '#141418',

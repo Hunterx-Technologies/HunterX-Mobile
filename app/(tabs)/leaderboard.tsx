@@ -6,6 +6,7 @@ import {
   FlatList,
   LayoutChangeEvent,
   ListRenderItem,
+  Platform,
   StatusBar,
   StyleSheet,
   Text,
@@ -48,6 +49,10 @@ import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 // Gap between the floating "you" row and the bottom of the screen.
 const FLOATING_ME_BOTTOM = 8;
+// See the pinned pills copy in the render below.
+const PINNED_PILLS_OVERLAY = Platform.OS === 'android';
+// A row tap this soon after the list moved is ignored (see openHunter).
+const ROW_TAP_AFTER_SCROLL_MS = 150;
 
 const SCOPE_BY_TAB: Record<MainCategoryTab, LeaderboardScope> = {
   Global: 'global',
@@ -79,15 +84,43 @@ export default function LeaderboardScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
   // Plain-number copy of the scroll offset for JS decisions (scope switch).
   const scrollOffsetRef = useRef(0);
+  // When the list last moved. A row tapped while it's still sliding is
+  // ignored, like native Android lists (the tap only stops the list).
+  const lastScrollAtRef = useRef(0);
+  const pinnedHeaderBottomRef = useRef(0);
+  // Whether the floating "You" row is showing (so it takes taps), for a
+  // scroll offset. Set further down, once the row positions are known.
+  const floatingMeVisibleAtRef = useRef<(y: number) => boolean>(() => false);
+  const [floatingMeTappable, setFloatingMeTappable] = useState(false);
+  const floatingMeTappableRef = useRef(false);
+  const syncFloatingMeTappable = useCallback((y: number) => {
+    const next = floatingMeVisibleAtRef.current(y);
+    if (next !== floatingMeTappableRef.current) {
+      floatingMeTappableRef.current = next;
+      setFloatingMeTappable(next);
+    }
+  }, []);
+  // Whether the title + pills are pinned at the top (scrolled past the hero).
+  // Only changes when crossing that point, so it doesn't re-render per frame.
+  const [headerPinned, setHeaderPinned] = useState(false);
+  const headerPinnedRef = useRef(false);
   const handleScroll = useMemo(
     () =>
       Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
         useNativeDriver: true,
         listener: (e: { nativeEvent: { contentOffset: { y: number } } }) => {
-          scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+          const y = e.nativeEvent.contentOffset.y;
+          scrollOffsetRef.current = y;
+          lastScrollAtRef.current = Date.now();
+          syncFloatingMeTappable(y);
+          const pinned = y >= HERO_SPACER;
+          if (pinned !== headerPinnedRef.current) {
+            headerPinnedRef.current = pinned;
+            setHeaderPinned(pinned);
+          }
         },
       }),
-    [scrollY]
+    [scrollY, syncFloatingMeTappable]
   );
   useAvatarsReady();
 
@@ -110,14 +143,20 @@ export default function LeaderboardScreen() {
   // One hunter card for the whole screen; tapping a row only sets which
   // hunter it shows, so the list itself never re-renders for it.
   const [cardTarget, setCardTarget] = useState<HunterCardTarget | null>(null);
-  const openHunter = useCallback((hunter: LeaderboardHunter) => {
-    if (hunter.isCurrentUser) return;
+  // Your own row opens your card too (no friend or block buttons on it).
+  const myName = user?.displayName;
+  const openHunter = useCallback((hunter: LeaderboardHunter, pageY?: number) => {
+    if (Date.now() - lastScrollAtRef.current < ROW_TAP_AFTER_SCROLL_MS) return;
+    // A row scrolled under the pinned title + pills is hidden, so a tap
+    // there was meant for the pills (Android can hand it to the row).
+    if (headerPinnedRef.current && pageY != null && pageY < pinnedHeaderBottomRef.current) return;
     setCardTarget({
       kind: 'id',
       userId: hunter.id,
       preview: {
         userId: hunter.id,
-        name: hunter.displayName,
+        // Rows say "You"; the card shows your real name.
+        name: hunter.isCurrentUser ? myName ?? hunter.displayName : hunter.displayName,
         avatarThumbUrl: hunter.avatarUrl,
         level: hunter.level,
         totalXp: hunter.score,
@@ -125,7 +164,7 @@ export default function LeaderboardScreen() {
         rank: hunter.rank,
       },
     });
-  }, []);
+  }, [myName]);
 
   // Requests waiting for me (answered on Invite Friends): refreshed when the
   // screen is opened and when Friends is picked, for the counts on the
@@ -169,7 +208,8 @@ export default function LeaderboardScreen() {
   const meHunter = useMemo<LeaderboardHunter | null>(() => {
     if (!me || me.status !== 'ranked') return null;
     return {
-      id: 'me',
+      // Your real id, so tapping it can load your own hunter card.
+      id: user?.id != null ? String(user.id) : 'me',
       rank: me.rank,
       displayName: 'You',
       score: me.totalXp,
@@ -178,7 +218,7 @@ export default function LeaderboardScreen() {
       isCurrentUser: true,
       streak: me.streak,
     };
-  }, [me]);
+  }, [me, user?.id]);
 
   // Floating "you" row: pinned near the footer while the viewer's real row
   // is off screen, handed off to the real row once it scrolls into the
@@ -191,6 +231,8 @@ export default function LeaderboardScreen() {
   const [meRowLayout, setMeRowLayout] = useState<{ y: number; height: number } | 'missing' | null>(null);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [stickyHeaderHeight, setStickyHeaderHeight] = useState(0);
+  // Screen y of the pinned header's bottom edge (list area top + header).
+  pinnedHeaderBottomRef.current = insets.top + HERO_STOP + stickyHeaderHeight;
 
   // Position of the real row within the scroll content, so visibility can
   // be derived from scrollY on the native thread.
@@ -283,6 +325,22 @@ export default function LeaderboardScreen() {
     });
   }, [meInList, meRowLayout, viewportHeight, stickyHeaderHeight, scrollY]);
 
+  // The same rule as floatingMeOpacity, as a plain check for a scroll
+  // offset: the floating row only takes taps while it's the one showing.
+  useEffect(() => {
+    floatingMeVisibleAtRef.current = (scroll: number) => {
+      if (!meHunter) return false;
+      if (!meInList || meRowLayout === 'missing') return true;
+      if (!meRowLayout || viewportHeight === 0) return false;
+      const { y, height } = meRowLayout;
+      const dockAt = y + height + FLOATING_ME_BOTTOM - viewportHeight;
+      const undockAt = y + height - stickyHeaderHeight;
+      if (scroll < dockAt) return true;
+      return undockAt > dockAt + 1 && scroll > undockAt;
+    };
+    syncFloatingMeTappable(scrollOffsetRef.current);
+  }, [meHunter, meInList, meRowLayout, viewportHeight, stickyHeaderHeight, syncFloatingMeTappable]);
+
   // The real row is hidden while the floating copy shows, so it never peeks
   // out below the floating row before the handoff.
   // Whichever of the two is showing, the other hides — exactly one "You"
@@ -318,11 +376,29 @@ export default function LeaderboardScreen() {
   const showSkeleton = isInitialLoading && entries.length === 0;
   const showBlockingError = Boolean(error) && !isInitialLoading && entries.length === 0;
 
+  // Where the pills sit inside the sticky header, for the Android copy below.
+  const [pillsLayout, setPillsLayout] = useState<{ y: number; height: number } | null>(null);
+  const pinnedPillsOpacity = useMemo(
+    () =>
+      scrollY.interpolate({
+        inputRange: [HERO_SPACER - 1, HERO_SPACER],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      }),
+    [scrollY]
+  );
+
   // Sticks at the top of the clipped list area (HERO_STOP) once scrolled up.
   const stickyHeader = (
     <View onLayout={(e: LayoutChangeEvent) => setStickyHeaderHeight(e.nativeEvent.layout.height)}>
       <LeaderboardHeroHeader scrollY={scrollY} />
-      <View style={styles.solidSection}>
+      <View
+        style={styles.solidSection}
+        onLayout={(e: LayoutChangeEvent) => {
+          const { y, height } = e.nativeEvent.layout;
+          setPillsLayout((prev) => (prev && prev.y === y && prev.height === height ? prev : { y, height }));
+        }}
+      >
         <TopCategoryFilterBar
           category={category}
           onSelectCategory={handleSelectCategory}
@@ -366,7 +442,7 @@ export default function LeaderboardScreen() {
             entry.isMe ? (
               <View key={entry.userId} ref={meRowRef} onLayout={measureMeRow}>
                 <Animated.View style={{ opacity: realMeOpacity }}>
-                  <LeaderboardHunterRow hunter={toHunter(entry)} />
+                  <LeaderboardHunterRow hunter={toHunter(entry)} onPress={openHunter} />
                 </Animated.View>
               </View>
             ) : (
@@ -418,7 +494,7 @@ export default function LeaderboardScreen() {
         >
           {item.entry.isMe ? (
             <Animated.View style={{ opacity: realMeOpacity }}>
-              <LeaderboardHunterRow hunter={toHunter(item.entry)} />
+              <LeaderboardHunterRow hunter={toHunter(item.entry)} onPress={openHunter} />
             </Animated.View>
           ) : (
             <LeaderboardHunterRow hunter={toHunter(item.entry)} onPress={openHunter} />
@@ -510,18 +586,46 @@ export default function LeaderboardScreen() {
             showsVerticalScrollIndicator={false}
           />
         )}
+
+        {/* Android: a tap on the pinned pills while the list is still
+            sliding went to the row underneath (and opened that hunter's
+            card), because React Native only tells the touch system where a
+            sticky header is once scrolling stops. This copy sits still at
+            the pinned spot, above the list, and takes the taps while the
+            header is pinned. It fades with the scroll position, so it looks
+            exactly like the real pills. */}
+        {PINNED_PILLS_OVERLAY && pillsLayout && !showBlockingError ? (
+          <Animated.View
+            pointerEvents={headerPinned ? 'box-none' : 'none'}
+            importantForAccessibility={headerPinned ? 'auto' : 'no-hide-descendants'}
+            style={[
+              styles.pinnedPills,
+              {
+                top: pillsLayout.y,
+                opacity: pinnedPillsOpacity,
+              },
+            ]}
+          >
+            <TopCategoryFilterBar
+              category={category}
+              onSelectCategory={handleSelectCategory}
+              badges={{ Friends: friendRequestCount }}
+            />
+          </Animated.View>
+        ) : null}
       </View>
 
       <LeaderboardBrandBar scrollY={scrollY} top={insets.top} />
 
       {/* Pinned "you" row — only while status is 'ranked' and the real row
-          isn't on screen. Never interactive, so touches reach the list. */}
+          isn't on screen. Tappable (opens your card) only while it's the one
+          showing; otherwise touches go through to the list. */}
       {meHunter ? (
         <Animated.View
-          pointerEvents="none"
+          pointerEvents={floatingMeTappable ? 'box-none' : 'none'}
           style={[styles.stickyBottomWrapper, { opacity: floatingMeOpacity }]}
         >
-          <LeaderboardHunterRow hunter={meHunter} />
+          <LeaderboardHunterRow hunter={meHunter} onPress={openHunter} />
         </Animated.View>
       ) : null}
 
@@ -619,6 +723,12 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'right',
     paddingRight: 8,
+  },
+  pinnedPills: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    backgroundColor: '#09090B',
   },
   stickyBottomWrapper: {
     position: 'absolute',

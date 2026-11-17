@@ -20,8 +20,6 @@ export interface QuestItem {
   image: any;
   status: 'todo' | 'done' | 'partial' | 'skipped' | 'locked';
   earnedXp?: number;
-  showTickButton?: boolean;
-  showWrongButton?: boolean;
   hasStatusPopup?: boolean;
   imageHeight?: number;
   imageStyle?: any;
@@ -118,8 +116,6 @@ export function mapTaskToQuest(
     image,
     status,
     earnedXp: item.xp_earned,
-    showTickButton: status !== 'done' && status !== 'skipped' && status !== 'locked',
-    showWrongButton: status !== 'done' && status !== 'skipped' && status !== 'locked',
     targetValue,
     allows_partial: item.allows_partial,
     period_start: item.period_start,

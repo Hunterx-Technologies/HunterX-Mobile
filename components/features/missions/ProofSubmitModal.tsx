@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { fontFamilies } from '@/theme/typography';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { uploadImageToCloudinary } from '@/services/media/cloudinary';
 import { submitTaskProof } from '@/services/api/tasks.service';
 import type { SubmitProofData } from '@/types/task';
@@ -49,6 +51,9 @@ export function ProofSubmitModal({
   onClose,
   onSubmitted,
 }: ProofSubmitModalProps) {
+  // The app draws edge-to-edge, so on Android the sheet must clear the
+  // navigation bar itself or it covers the Submit button.
+  const insets = useSafeAreaInsets();
   const [photos, setPhotos] = useState<string[]>([]);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +115,10 @@ export function ProofSubmitModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => !busy && onClose()}>
       <Pressable style={styles.overlay} onPress={() => !busy && onClose()}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
+        <Pressable
+          style={[styles.sheet, Platform.OS === 'android' && { paddingBottom: 36 + insets.bottom }]}
+          onPress={() => {}}
+        >
           <View style={styles.headerRow}>
             <View style={styles.headerIcon}>
               <Ionicons name="camera" size={18} color="#F66F28" />

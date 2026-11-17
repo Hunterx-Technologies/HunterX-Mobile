@@ -43,15 +43,7 @@ import { LegalDocumentModal } from '@/components/profile/LegalDocumentModal';
 import { AcknowledgementsModal } from '@/components/profile/AcknowledgementsModal';
 import { DISCLAIMER } from '@/constants/legal/disclaimer';
 import * as WebBrowser from 'expo-web-browser';
-import { env } from '@/config/env';
 
-// Terms and Privacy live on the website (UAT or production, matching the
-// API); opened in the in-app browser.
-const TERMS_URL = `${env.websiteUrl}/terms`;
-const PRIVACY_URL = `${env.websiteUrl}/privacy`;
-const openLegalPage = (url: string) => {
-  WebBrowser.openBrowserAsync(url).catch(() => Linking.openURL(url).catch(() => {}));
-};
 import { RateHunterModal } from '@/components/profile/RateHunterModal';
 import { RecentActivityModal } from '@/components/profile/RecentActivityModal';
 import { SystemSettingsModal } from '@/components/profile/SystemSettingsModal';
@@ -65,6 +57,24 @@ import { useAvatarsReady } from '@/services/api/avatar.service';
 import { invalidateLeaderboardCache } from '@/hooks/useLeaderboard';
 import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 import { MountWhenOpened } from '@/components/common/MountWhenOpened';
+import { PRIVACY_URL, TERMS_URL, openLegalPage } from '@/utils/legalLinks';
+
+// Footer legal links are 11pt text, so each gets padding plus hitSlop to make
+// a finger-sized target; text-sized targets made taps just off the words miss.
+const FOOTER_LINK_HIT_SLOP = { top: 4, bottom: 4, left: 6, right: 6 };
+function FooterLink({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      hitSlop={FOOTER_LINK_HIT_SLOP}
+      style={styles.footerLink}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+    >
+      <Text style={styles.footerLinkText}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
 
 // HunterX's official pages, shown under Profile → Follow us.
 const SOCIAL_LINKS = {
@@ -652,21 +662,13 @@ export default function ProfileScreen() {
           <Text style={styles.footerSubheading}>To make the world a healthier place.</Text>
 
           <View style={styles.footerLinksRow}>
-            <TouchableOpacity onPress={() => openLegalPage(TERMS_URL)} accessibilityRole="link">
-              <Text style={styles.footerLinkText}>Terms of Service</Text>
-            </TouchableOpacity>
+            <FooterLink label="Terms of Service" onPress={() => openLegalPage(TERMS_URL)} />
             <Text style={styles.footerDotText}>•</Text>
-            <TouchableOpacity onPress={() => openLegalPage(PRIVACY_URL)} accessibilityRole="link">
-              <Text style={styles.footerLinkText}>Privacy Policy</Text>
-            </TouchableOpacity>
+            <FooterLink label="Privacy Policy" onPress={() => openLegalPage(PRIVACY_URL)} />
             <Text style={styles.footerDotText}>•</Text>
-            <TouchableOpacity onPress={() => setActiveModal('Disclaimer')}>
-              <Text style={styles.footerLinkText}>Disclaimer</Text>
-            </TouchableOpacity>
+            <FooterLink label="Disclaimer" onPress={() => setActiveModal('Disclaimer')} />
             <Text style={styles.footerDotText}>•</Text>
-            <TouchableOpacity onPress={() => setActiveModal('Acknowledgements')}>
-              <Text style={styles.footerLinkText}>Acknowledgements</Text>
-            </TouchableOpacity>
+            <FooterLink label="Acknowledgements" onPress={() => setActiveModal('Acknowledgements')} />
           </View>
 
           <Text style={styles.footerVersionText}>
@@ -1107,8 +1109,14 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
+    columnGap: 6,
     paddingHorizontal: 12,
+    // The links' vertical padding adds height; pull the row back so the
+    // footer keeps its spacing.
+    marginVertical: -8,
+  },
+  footerLink: {
+    paddingVertical: 11,
   },
   footerLinkText: {
     fontFamily: fontFamilies.regular,

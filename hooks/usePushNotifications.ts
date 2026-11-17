@@ -5,6 +5,7 @@ import { router, usePathname, type Href } from 'expo-router';
 
 import { useAuthStore } from '@/store/useAuthStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
+import { useFriendsStore } from '@/store/useFriendsStore';
 import { markNotificationsRead } from '@/services/api/notifications.service';
 import { syncUnseenRewards } from '@/hooks/useUnseenRewardsSync';
 import {
@@ -107,12 +108,16 @@ export function usePushNotifications() {
     if (!isPushSupported || isBootstrapping || userId === null) return;
 
     const { refreshUnreadCount } = useNotificationStore.getState();
+    // A new friend request lights the dot on the Battles tab right away.
+    const { loadRequests } = useFriendsStore.getState();
     registerDeviceIfPermitted().catch(logRegisterError);
     refreshUnreadCount();
 
     const received = Notifications.addNotificationReceivedListener((notification) => {
-      if (handleBanPush(notification.request.content.data)) return;
+      const data = notification.request.content.data;
+      if (handleBanPush(data)) return;
       refreshUnreadCount();
+      if (data?.event === 'FRIEND_REQUEST' || data?.type === 'FRIEND_REQUEST') loadRequests();
     });
     const tokenRotated = Notifications.addPushTokenListener(({ data }) => {
       if (typeof data === 'string' && isDeviceTokenRotation(data)) {

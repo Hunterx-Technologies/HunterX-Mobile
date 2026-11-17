@@ -127,11 +127,11 @@ function QuestListCardComponent({
             <View style={styles.xpBadgeInline}>
               <Text style={styles.xpBadgeText}>+{quest.xpReward} XP</Text>
             </View>
-            {quest.showTickButton !== false && (
-              <AnimatedTickButton onPress={() => onComplete(quest.id)} />
-            )}
+            {/* Always derived from the variant: a quest reset from Skipped
+                is To-Do again and needs both buttons back. */}
+            <AnimatedTickButton onPress={() => onComplete(quest.id)} />
             {/* Paid quests can't be skipped — they only have the done button. */}
-            {quest.showWrongButton !== false && !quest.is_paid && (
+            {!quest.is_paid && (
               <AnimatedWrongButton onPress={() => onSkip(quest.id)} />
             )}
           </View>

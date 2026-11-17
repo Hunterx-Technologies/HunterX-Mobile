@@ -27,6 +27,7 @@ import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { playTickSound, preloadTickSound, releaseTickSound } from '@/services/audio/tickSound';
 import { digitsOnly } from '@/utils/textInput';
 import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 2; // third step (0-indexed)
@@ -54,6 +55,10 @@ const cmToFtIn = (cm: number) => {
 };
 
 export default function PhysicalProfileScreen() {
+  // The app draws edge-to-edge, so on Android the bottom sheets must clear the
+  // navigation bar themselves or it covers the sheets' buttons.
+  const insets = useSafeAreaInsets();
+  const sheetInsetStyle = Platform.OS === 'android' && { paddingBottom: 24 + insets.bottom };
   const storeHeight = useOnboardingStore((s) => s.height);
   const storeHeightUnit = useOnboardingStore((s) => s.heightUnit);
   const storeWeight = useOnboardingStore((s) => s.weight);
@@ -612,7 +617,7 @@ export default function PhysicalProfileScreen() {
             style={styles.modalOverlay}
           >
             <Pressable style={styles.modalBackdrop} onPress={() => setIsWeightModalOpen(false)} />
-            <View style={styles.modalSheet}>
+            <View style={[styles.modalSheet, sheetInsetStyle]}>
               <View style={styles.modalHandle} />
 
               <View style={styles.modalHeader}>
@@ -712,7 +717,7 @@ export default function PhysicalProfileScreen() {
           style={styles.modalOverlay}
         >
           <Pressable style={styles.modalBackdrop} onPress={() => setIsHeightModalOpen(false)} />
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, sheetInsetStyle]}>
             <View style={styles.modalHandle} />
 
             <View style={styles.modalHeader}>

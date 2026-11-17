@@ -26,6 +26,7 @@ import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { playTickSound, preloadTickSound, releaseTickSound } from '@/services/audio/tickSound';
 import { digitsOnly } from '@/utils/textInput';
 import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 1; // second step (0-indexed)
@@ -36,6 +37,9 @@ const MAX_AGE = 80;
 const TICK_SPACING = 16;
 
 export default function BiometricsScreen() {
+  // The app draws edge-to-edge, so on Android the bottom sheet must clear the
+  // navigation bar itself or it covers the sheet's buttons.
+  const insets = useSafeAreaInsets();
   const storeGender = useOnboardingStore((s) => s.gender);
   // A previously saved age may predate the 18+ rule — clamp it into range.
   const storeAge = Math.max(MIN_AGE, Math.min(MAX_AGE, useOnboardingStore((s) => s.age)));
@@ -368,7 +372,12 @@ export default function BiometricsScreen() {
           style={styles.modalOverlay}
         >
           <Pressable style={styles.modalBackdrop} onPress={() => setIsModalOpen(false)} />
-          <View style={styles.modalSheet}>
+          <View
+            style={[
+              styles.modalSheet,
+              Platform.OS === 'android' && { paddingBottom: 24 + insets.bottom },
+            ]}
+          >
             <View style={styles.modalHandle} />
 
             <View style={styles.modalHeader}>
