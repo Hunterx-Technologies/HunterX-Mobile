@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useScrollToTop } from '@react-navigation/native';
+import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -82,9 +82,22 @@ function mapTasksToday(data: TasksTodayData): QuestItem[] {
   ];
 }
 
-/** "Day Complete" auto-opens once per (local) day, per account — not per device. */
-const dayCompleteStorageKey = (userId: string | number | undefined) =>
-  `hasShownDayComplete_${userId ?? 'anon'}_${getTodayDateStr()}`;
+/**
+ * "Day Complete" auto-opens once per day, per account — not per device.
+ * `day` is the date of the task list the server sent (the hunter's own day),
+ * not the clock when the key is read: a day cleared just before midnight
+ * mustn't use up the next day's showing.
+ */
+const DAY_COMPLETE_KEY_PREFIX = 'hasShownDayComplete_';
+const dayCompleteStorageKey = (userId: string | number, day: string) =>
+  `${DAY_COMPLETE_KEY_PREFIX}${userId}_${day}`;
+
+/** Drops the flags of past days (one is written per day, per account). */
+async function pruneDayCompleteFlags(today: string): Promise<void> {
+  const keys = await AsyncStorage.getAllKeys();
+  const stale = keys.filter((k) => k.startsWith(DAY_COMPLETE_KEY_PREFIX) && !k.endsWith(`_${today}`));
+  if (stale.length) await AsyncStorage.multiRemove(stale);
+}
 
 // Time for a closing modal to finish animating before the next one opens
 // (iOS drops a modal presented while another is still dismissing).
@@ -192,6 +205,8 @@ export default function MissionsHomeScreen() {
   // From GET /tasks/today: today's Day Complete screen was already shown for
   // this account (any device, any login).
   const [dayCompleteSeenOnServer, setDayCompleteSeenOnServer] = useState(false);
+  // The day today's task list belongs to (GET /tasks/today `date`).
+  const [tasksDay, setTasksDay] = useState<string | null>(null);
   const tasksFreshRef = useRef(false);
 
   const loadTasks = useCallback(async (options?: { refreshUser?: boolean }) => {
@@ -204,6 +219,7 @@ export default function MissionsHomeScreen() {
       const mapped = mapTasksToday(tasksData);
       setQuests(mapped);
       setDayCompleteSeenOnServer(tasksData.day_complete_seen === true);
+      setTasksDay(tasksData.date || getTodayDateStr());
       tasksFreshRef.current = true;
       setTasksFresh(true);
       lastLoadRef.current = { at: Date.now(), day: getTodayDateStr(), userId: userIdKeyRef.current };
@@ -362,24 +378,41 @@ export default function MissionsHomeScreen() {
   // per account: the first time the day is cleared. The server remembers it
   // (day_complete_seen), so re-clearing the day (a task added from Shuffle,
   // a skipped task reopened), logging in again or another phone doesn't show
-  // it again. The local flag only covers the moment before the server's
-  // answer arrives. The "Daily Quests Cleared" banner still opens it on demand.
+  // it again. The local flag covers the moment before the server's answer
+  // arrives and a failed POST (it's re-sent on the next load). The "Daily
+  // Quests Cleared" banner still opens it on demand.
   // It waits until home's other popups (the quest's action sheet, proof
   // upload…) have closed, so it never opens on top of one
   // still animating away — on iOS that open is silently dropped.
   const [dayCompletePending, setDayCompletePending] = useState(false);
+  // `${userId}_${day}` once this session has auto-opened it for that day:
+  // a later reload can't queue it again even if storage or the POST failed.
+  const autoOpenedForRef = useRef<string | null>(null);
+  // Set when an auto-open is queued; it's recorded as seen once it is
+  // actually on screen (it can wait behind a level-up / badge celebration —
+  // if the app is closed in between, it still shows next time).
+  const markSeenDayRef = useRef<string | null>(null);
   useEffect(() => {
     // No account yet (logging in/out): the flag is per account, so wait —
     // checking an 'anon' key would show the screen again after a re-login.
-    if (loading || !tasksFresh || user?.id == null) return;
-    if (!dayCleared || dayCompleteSeenOnServer) {
+    if (loading || !tasksFresh || user?.id == null || !tasksDay) return;
+    const userId = user.id;
+    if (!dayCleared || dayCompleteSeenOnServer || autoOpenedForRef.current === `${userId}_${tasksDay}`) {
       setDayCompletePending(false);
       return;
     }
     let cancelled = false;
-    AsyncStorage.getItem(dayCompleteStorageKey(user?.id))
+    AsyncStorage.getItem(dayCompleteStorageKey(userId, tasksDay))
       .then((hasShown) => {
-        if (!cancelled && !hasShown) setDayCompletePending(true);
+        if (cancelled) return;
+        if (!hasShown) {
+          setDayCompletePending(true);
+          return;
+        }
+        // Shown on this phone, but the server never heard (offline, error):
+        // tell it now so other devices / a re-login don't show it again.
+        setDayCompleteSeenOnServer(true);
+        markDayCompleteSeen(tasksDay).catch((err) => devWarn('[DayCompleteSeen Error]', err));
       })
       .catch((err) => {
         console.warn('[DayCompleteModal] Storage check error:', err);
@@ -387,21 +420,39 @@ export default function MissionsHomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [loading, tasksFresh, dayCleared, dayCompleteSeenOnServer, user?.id]);
+  }, [loading, tasksFresh, dayCleared, dayCompleteSeenOnServer, tasksDay, user?.id]);
 
+  // Old days' flags are useless once the server has sent a new day.
+  useEffect(() => {
+    if (tasksDay) pruneDayCompleteFlags(tasksDay).catch(() => { });
+  }, [tasksDay]);
+
+  // Only opens while Home is the screen in front — a clear that lands while
+  // the hunter is on another tab waits until they come back to Home.
+  const isHomeFocused = useIsFocused();
   const otherHomeModalOpen =
     dropVisible || actionModalVisible || showBlackIntroOverlay || !!proofQuest;
   useEffect(() => {
-    if (!dayCompletePending || otherHomeModalOpen) return;
+    if (!dayCompletePending || otherHomeModalOpen || !isHomeFocused || user?.id == null || !tasksDay) return;
+    const userId = user.id;
+    const day = tasksDay;
     const timer = setTimeout(() => {
       setDayCompletePending(false);
       setDayCompleteSeenOnServer(true);
-      AsyncStorage.setItem(dayCompleteStorageKey(user?.id), 'true').catch(() => { });
-      markDayCompleteSeen().catch((err) => devWarn('[DayCompleteSeen Error]', err));
+      autoOpenedForRef.current = `${userId}_${day}`;
+      markSeenDayRef.current = day;
       openDayComplete();
     }, MODAL_GAP_MS);
     return () => clearTimeout(timer);
-  }, [dayCompletePending, otherHomeModalOpen, openDayComplete, user?.id]);
+  }, [dayCompletePending, otherHomeModalOpen, isHomeFocused, openDayComplete, tasksDay, user?.id]);
+
+  useEffect(() => {
+    const day = markSeenDayRef.current;
+    if (!showDayComplete || !day || user?.id == null) return;
+    markSeenDayRef.current = null;
+    AsyncStorage.setItem(dayCompleteStorageKey(user.id, day), 'true').catch(() => { });
+    markDayCompleteSeen(day).catch((err) => devWarn('[DayCompleteSeen Error]', err));
+  }, [showDayComplete, user?.id]);
 
   const prevTodoCountRef = useRef<number | null>(null);
 
