@@ -13,7 +13,7 @@ import { fontFamilies } from '@/theme/typography';
 import { getAvatars, getCachedAvatars, type AvatarItem } from '@/services/api/avatar.service';
 import { AVATAR_THUMB_WIDTH, DEFAULT_BLURHASH, optimizeCloudinaryUrl } from '@/services/media/cloudinary';
 
-export const DEFAULT_FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
+export const DEFAULT_FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/f_auto,q_auto/v1794925762/hunterx/app-assets/arise_avatar_11_nobg.png';
 
 // Avatars render small almost everywhere (a 40-90px circle), so the default
 // requests a width-capped, auto-format/quality derivative instead of the

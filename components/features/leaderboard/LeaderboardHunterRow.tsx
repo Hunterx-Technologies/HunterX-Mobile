@@ -26,7 +26,7 @@ import { fontFamilies } from '@/theme/typography';
 // through getAvatarSource()/optimizeCloudinaryUrl() which would insert
 // a second, redundant transform segment on top of the one the backend
 // already applied.
-const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
+const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1794925762/hunterx/app-assets/arise_avatar_11_nobg.png';
 const BLURHASH = 'L6PZfSi_.AyE_3t7t7R**0o#DgR4';
 
 export interface LeaderboardHunter {

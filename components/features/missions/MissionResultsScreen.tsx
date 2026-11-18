@@ -72,7 +72,7 @@ const CARD = '#131316';
 const CARD_BORDER = '#232328';
 const MUTED = '#8A8A93';
 const FALLBACK_AVATAR =
-  'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
+  'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1794925762/hunterx/app-assets/arise_avatar_11_nobg.png';
 
 // Hero sizes on the page; the intro draws them INTRO_SCALE times bigger and
 // shrinks into them, so the two line up exactly.

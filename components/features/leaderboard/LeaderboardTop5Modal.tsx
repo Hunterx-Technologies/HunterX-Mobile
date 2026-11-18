@@ -26,7 +26,7 @@ const TOP5_BG = require('@/assets/images/top5bg.jpg');
 // Dark vignette over the artwork — shared by the popup and the share image.
 const VIGNETTE_COLORS = ['rgba(2, 2, 3, 0.75)', 'rgba(2, 2, 3, 0.35)', 'rgba(2, 2, 3, 0.65)', '#020203'] as const;
 const VIGNETTE_LOCATIONS = [0, 0.25, 0.65, 1] as const;
-const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
+const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1794925762/hunterx/app-assets/arise_avatar_11_nobg.png';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface LeaderboardTop5ModalProps {

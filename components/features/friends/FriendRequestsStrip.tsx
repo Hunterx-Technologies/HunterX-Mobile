@@ -10,7 +10,7 @@ import { showGlobalToast } from '@/store/useToastStore';
 import { fontFamilies } from '@/theme/typography';
 import type { FriendRequest } from '@/types/friends';
 
-const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1788468328/hunterx/app-assets/arise_avatar_11.jpg';
+const FALLBACK_AVATAR = 'https://res.cloudinary.com/sc8zzixt/image/upload/w_96,h_96,c_fill/f_auto,q_auto/v1794925762/hunterx/app-assets/arise_avatar_11_nobg.png';
 
 /**
  * Friend requests waiting for me, on the Invite Friends screen (the only
