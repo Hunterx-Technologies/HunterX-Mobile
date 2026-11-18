@@ -658,9 +658,6 @@ export default function ProfileScreen() {
 
         {/* FOOTER METADATA SECTION */}
         <View style={styles.footerSection}>
-          <Text style={styles.footerHeading}>Made with ❤️ in India</Text>
-          <Text style={styles.footerSubheading}>To make the world a healthier place.</Text>
-
           <View style={styles.footerLinksRow}>
             <FooterLink label="Terms of Service" onPress={() => openLegalPage(TERMS_URL)} />
             <Text style={styles.footerDotText}>•</Text>
@@ -1091,18 +1088,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 20,
     gap: 8,
-  },
-  footerHeading: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  footerSubheading: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 12,
-    color: '#71717A',
-    marginBottom: 6,
   },
   footerLinksRow: {
     flexDirection: 'row',

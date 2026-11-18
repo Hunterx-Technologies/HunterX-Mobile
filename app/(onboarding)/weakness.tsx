@@ -36,7 +36,7 @@ const WEAKNESSES: WeaknessOption[] = [
     {
         id: 'procrastination',
         icon: <Feather name="loader" size={20} color="#A1A1AA" />,
-        title: 'Procrastination',
+        title: 'Time drift',
     },
     {
         id: 'no_routine',
