@@ -403,6 +403,7 @@ export default function LeaderboardScreen() {
           category={category}
           onSelectCategory={handleSelectCategory}
           badges={{ Friends: friendRequestCount }}
+          tutorialTargets
         />
       </View>
     </View>

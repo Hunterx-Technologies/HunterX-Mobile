@@ -10,6 +10,7 @@ import { CLOUDINARY_ASSETS } from '@/constants/cloudinaryAssets';
 import type { WeekStatus } from '@/types/user';
 import { STREAK_BADGES_DATA, StreakBadgesCarousel, UserBadgeData, useEarnedBadgeCount } from './StreakBadgesCarousel';
 import { StreakBadgeShowcaseModal } from './StreakBadgeShowcase';
+import { TutorialTarget } from '@/components/features/tutorial/TutorialTarget';
 import { useSettingsStore } from '@/store/useSettingsStore';
 
 export type DayStatus = 'completed' | 'today' | 'missed' | 'locked' | 'freeze';
@@ -285,136 +286,140 @@ export function WeeklyTracker({
   return (
     <View style={styles.container}>
       {/* DAYS ROW WITH MOVING PATH TIMELINE LINE */}
-      <View style={styles.daysRowContainer}>
-        {/* Background Connecting Timeline Line */}
-        <View
-          style={[
-            styles.timelineLineBackground,
-            { left: `${nodeMarginPercent}%`, right: `${nodeMarginPercent}%` },
-          ]}
-        >
-          {/* Base Inactive Path Line */}
-          <View style={styles.timelineBaseLine} />
-
-          {/* Animated Active Glowing Orange Moving Path */}
-          <Animated.View
-            style={[styles.timelineActiveLine, timelineActiveStyle]}
+      <TutorialTarget id="home-week" style={styles.daysRowTarget}>
+        <View style={styles.daysRowContainer}>
+          {/* Background Connecting Timeline Line */}
+          <View
+            style={[
+              styles.timelineLineBackground,
+              { left: `${nodeMarginPercent}%`, right: `${nodeMarginPercent}%` },
+            ]}
           >
-            <LinearGradient
-              colors={['#FE5B01', '#FF8800', '#FE5B01']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={StyleSheet.absoluteFill}
-            />
-            {/* Glowing particle head at the moving path tip */}
-            <View style={styles.timelineLeadGlow} />
-          </Animated.View>
-        </View>
+            {/* Base Inactive Path Line */}
+            <View style={styles.timelineBaseLine} />
 
-        {/* Days List */}
-        <View style={styles.daysRow}>
-          {activeDays.map((item, index) => {
-            const isToday = item.isToday || item.status === 'today';
+            {/* Animated Active Glowing Orange Moving Path */}
+            <Animated.View
+              style={[styles.timelineActiveLine, timelineActiveStyle]}
+            >
+              <LinearGradient
+                colors={['#FE5B01', '#FF8800', '#FE5B01']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={StyleSheet.absoluteFill}
+              />
+              {/* Glowing particle head at the moving path tip */}
+              <View style={styles.timelineLeadGlow} />
+            </Animated.View>
+          </View>
 
-            if (isToday) {
-              return (
-                <Pressable
-                  key={index}
-                  style={styles.todayCardContainer}
-                  onPress={() => onDayPress?.(item)}
-                >
-                  <Text style={styles.todayDayName}>{item.dayName}</Text>
+          {/* Days List */}
+          <View style={styles.daysRow}>
+            {activeDays.map((item, index) => {
+              const isToday = item.isToday || item.status === 'today';
 
-                  {/* Glowing Circle Node inside TODAY card */}
-                  <View style={styles.todayCircleNode}>
-                    <View style={styles.todayCircleInnerRim}>
-                      <TodayStarIcon size={17} />
+              if (isToday) {
+                return (
+                  <Pressable
+                    key={index}
+                    style={styles.todayCardContainer}
+                    onPress={() => onDayPress?.(item)}
+                  >
+                    <Text style={styles.todayDayName}>{item.dayName}</Text>
+
+                    {/* Glowing Circle Node inside TODAY card */}
+                    <View style={styles.todayCircleNode}>
+                      <View style={styles.todayCircleInnerRim}>
+                        <TodayStarIcon size={17} />
+                      </View>
                     </View>
-                  </View>
 
-                  <Text style={styles.todayDateNum}>{item.dateNum}</Text>
+                    <Text style={styles.todayDateNum}>{item.dateNum}</Text>
 
-                  {/* TODAY Pill Badge */}
-                  <View style={styles.todayPillBadge}>
-                    <Text style={styles.todayPillText}>TODAY</Text>
-                  </View>
-                </Pressable>
-              );
-            }
+                    {/* TODAY Pill Badge */}
+                    <View style={styles.todayPillBadge}>
+                      <Text style={styles.todayPillText}>TODAY</Text>
+                    </View>
+                  </Pressable>
+                );
+              }
 
-            // Normal Day - Completed
-            if (item.status === 'completed' || item.isDone) {
+              // Normal Day - Completed
+              if (item.status === 'completed' || item.isDone) {
+                return (
+                  <Pressable
+                    key={index}
+                    style={styles.normalDayColumn}
+                    onPress={() => onDayPress?.(item)}
+                  >
+                    <Text style={styles.completedDayName}>{item.dayName}</Text>
+                    <View style={styles.completedCircle}>
+                      <Ionicons name="checkmark" size={14} color="#FE5B01" />
+                    </View>
+                    <Text style={styles.completedDateNum}>{item.dateNum}</Text>
+                  </Pressable>
+                );
+              }
+
+              // Normal Day - Missed / Left Day (Hollow Dashed Ghost Ring)
+              if (item.status === 'missed') {
+                return (
+                  <Pressable
+                    key={index}
+                    style={styles.normalDayColumn}
+                    onPress={() => onDayPress?.(item)}
+                  >
+                    <Text style={styles.missedDayName}>{item.dayName}</Text>
+                    <View style={styles.missedCircle} />
+                    <Text style={styles.missedDateNum}>{item.dateNum}</Text>
+                  </Pressable>
+                );
+              }
+
+              // Normal Day - Frozen / Rest Day
+              if (item.status === 'freeze') {
+                return (
+                  <Pressable
+                    key={index}
+                    style={styles.normalDayColumn}
+                    onPress={() => onDayPress?.(item)}
+                  >
+                    <Text style={styles.freezeDayName}>{item.dayName}</Text>
+                    <View style={styles.freezeCircle}>
+                      <MaterialCommunityIcons name="snowflake" size={13} color="#38BDF8" />
+                    </View>
+                    <Text style={styles.freezeDateNum}>{item.dateNum}</Text>
+                  </Pressable>
+                );
+              }
+
+              // Normal Day - Upcoming Day (Locked)
               return (
                 <Pressable
                   key={index}
                   style={styles.normalDayColumn}
                   onPress={() => onDayPress?.(item)}
                 >
-                  <Text style={styles.completedDayName}>{item.dayName}</Text>
-                  <View style={styles.completedCircle}>
-                    <Ionicons name="checkmark" size={14} color="#FE5B01" />
+                  <Text style={styles.lockedDayName}>{item.dayName}</Text>
+                  <View style={styles.lockedCircle}>
+                    <Ionicons name="lock-closed" size={12} color="#52525B" />
                   </View>
-                  <Text style={styles.completedDateNum}>{item.dateNum}</Text>
+                  <Text style={styles.lockedDateNum}>{item.dateNum}</Text>
                 </Pressable>
               );
-            }
-
-            // Normal Day - Missed / Left Day (Hollow Dashed Ghost Ring)
-            if (item.status === 'missed') {
-              return (
-                <Pressable
-                  key={index}
-                  style={styles.normalDayColumn}
-                  onPress={() => onDayPress?.(item)}
-                >
-                  <Text style={styles.missedDayName}>{item.dayName}</Text>
-                  <View style={styles.missedCircle} />
-                  <Text style={styles.missedDateNum}>{item.dateNum}</Text>
-                </Pressable>
-              );
-            }
-
-            // Normal Day - Frozen / Rest Day
-            if (item.status === 'freeze') {
-              return (
-                <Pressable
-                  key={index}
-                  style={styles.normalDayColumn}
-                  onPress={() => onDayPress?.(item)}
-                >
-                  <Text style={styles.freezeDayName}>{item.dayName}</Text>
-                  <View style={styles.freezeCircle}>
-                    <MaterialCommunityIcons name="snowflake" size={13} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.freezeDateNum}>{item.dateNum}</Text>
-                </Pressable>
-              );
-            }
-
-            // Normal Day - Upcoming Day (Locked)
-            return (
-              <Pressable
-                key={index}
-                style={styles.normalDayColumn}
-                onPress={() => onDayPress?.(item)}
-              >
-                <Text style={styles.lockedDayName}>{item.dayName}</Text>
-                <View style={styles.lockedCircle}>
-                  <Ionicons name="lock-closed" size={12} color="#52525B" />
-                </View>
-                <Text style={styles.lockedDateNum}>{item.dateNum}</Text>
-              </Pressable>
-            );
-          })}
+            })}
+          </View>
         </View>
-      </View>
+      </TutorialTarget>
 
       {/* STREAK BADGES CAROUSEL (7 BADGES, 4 IN VIEW RESPONSIVE) */}
-      <StreakBadgesCarousel
-        currentStreak={streakDays}
-        userBadges={userBadges}
-        onBadgePress={(badge) => setViewingBadgeIndex(STREAK_BADGES_DATA.findIndex((b) => b.id === badge.id))}
-      />
+      <TutorialTarget id="home-badges">
+        <StreakBadgesCarousel
+          currentStreak={streakDays}
+          userBadges={userBadges}
+          onBadgePress={(badge) => setViewingBadgeIndex(STREAK_BADGES_DATA.findIndex((b) => b.id === badge.id))}
+        />
+      </TutorialTarget>
 
       {/* Tapping an earned badge opens the badge vault on it, just to look. */}
       {viewingBadgeIndex !== null ? (
@@ -514,9 +519,12 @@ const styles = StyleSheet.create({
   },
 
   /* DAYS ROW & MOVING TIMELINE PATH */
+  // The margin is on the tour target around the row, so its spotlight hugs the days.
+  daysRowTarget: {
+    marginBottom: 8,
+  },
   daysRowContainer: {
     position: 'relative',
-    marginBottom: 8,
   },
   timelineLineBackground: {
     position: 'absolute',

@@ -9,6 +9,8 @@ import { colors } from '@/theme/colors';
 import { useAuth } from '@/hooks/useAuth';
 import { confirmExitApp } from '@/utils/confirmExitApp';
 import { useFriendsStore } from '@/store/useFriendsStore';
+import { useTutorialStore } from '@/store/useTutorialStore';
+import { TutorialTarget } from '@/components/features/tutorial/TutorialTarget';
 
 // How often waiting friend requests are checked while the app is open.
 const FRIEND_REQUEST_POLL_MS = 60_000;
@@ -61,6 +63,13 @@ export default function TabsLayout() {
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
+        // Mid-tour, back steps back through the tour (and never leaves it).
+        const tour = useTutorialStore.getState();
+        if (tour.active) {
+          tour.back();
+          return true;
+        }
+
         // If on the Home tab, intercept back press so it never goes back to login/onboarding
         if (
           pathname === '/(tabs)' ||
@@ -128,9 +137,11 @@ export default function TabsLayout() {
         options={{
           title: 'Metrics',
           tabBarIcon: ({ focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons name="stats-chart" size={20} color={focused ? '#FE5B01' : '#71717A'} />
-            </View>
+            <TutorialTarget id="tab-metrics">
+              <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
+                <Ionicons name="stats-chart" size={20} color={focused ? '#FE5B01' : '#71717A'} />
+              </View>
+            </TutorialTarget>
           ),
         }}
       />
@@ -153,9 +164,11 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons name="person-outline" size={20} color={focused ? '#FE5B01' : '#71717A'} />
-            </View>
+            <TutorialTarget id="tab-profile">
+              <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
+                <Ionicons name="person-outline" size={20} color={focused ? '#FE5B01' : '#71717A'} />
+              </View>
+            </TutorialTarget>
           ),
         }}
       />

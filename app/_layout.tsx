@@ -26,6 +26,7 @@ import { GlobalLevelUp } from '@/components/features/levelUp/GlobalLevelUp';
 import { GlobalStreakBadge } from '@/components/features/streaks/GlobalStreakBadge';
 import { GlobalStreakBreak } from '@/components/features/streaks/GlobalStreakBreak';
 import { GlobalReward } from '@/components/features/reward/GlobalReward';
+import { AppTutorial } from '@/components/features/tutorial/AppTutorial';
 import { preloadPriorityAssets, preloadRemainingAssets } from '@/services/media/preloadAssets';
 import { getAvatars } from '@/services/api/avatar.service';
 import { captureInstallReferrer } from '@/services/referral/pendingReferral';
@@ -294,6 +295,8 @@ export default function RootLayout() {
           <GlobalReward />
           <GlobalStreakBreak />
           <GlobalToast />
+          {/* First-visit app tour; started from Home only. */}
+          <AppTutorial />
           {showSplash && (
             <SwordSplash
               onReady={() => SplashScreen.hideAsync().catch(() => {})}

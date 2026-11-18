@@ -59,6 +59,8 @@ import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 import { readTasksTodayCache, writeTasksTodayCache } from '@/services/cache/tasksTodayCache';
 import { devWarn } from '@/services/health/devLog';
 import type { TasksTodayData } from '@/types/task';
+import { TutorialTarget } from '@/components/features/tutorial/TutorialTarget';
+import { hasSeenTutorial, makeTutorialScroller, setTutorialScroller, useTutorialStore } from '@/store/useTutorialStore';
 
 function getTodayDateStr(): string {
   const now = new Date();
@@ -124,6 +126,12 @@ export default function MissionsHomeScreen() {
       }),
     []
   );
+
+  // Lets the app tour bring a section of home into view.
+  const [tourScroll] = useState(() =>
+    makeTutorialScroller((y) => scrollRef.current?.scrollTo({ y, animated: true }))
+  );
+  useEffect(() => setTutorialScroller('home', tourScroll.scroller), [tourScroll]);
 
   // Lets the streak break card's flame fly into the header pill.
   const streakFlameRef = useRef<View>(null);
@@ -302,6 +310,8 @@ export default function MissionsHomeScreen() {
   // popups is up, instead of opening on top of it. Day Complete waits its
   // turn in the other direction: it opens once nothing is celebrating.
   const celebrating = useCelebrationStore((s) => s.current !== null || s.queue.length > 0);
+  // The first-visit app tour covers the screen; Home's own popups wait for it.
+  const tutorialActive = useTutorialStore((s) => s.active);
   // Counts as idle a moment after the last celebration closes: iOS can't
   // present a modal while another is still dismissing — it silently doesn't
   // appear — so Day Complete waits for the closing animation to finish.
@@ -333,7 +343,13 @@ export default function MissionsHomeScreen() {
   // (the first XP is exactly when level-up / reward screens play).
   const maybeOfferPush = pushPrompt.maybeOffer;
   const isHomeModalOpen =
-    dropVisible || actionModalVisible || dayCompleteModalVisible || showBlackIntroOverlay || !!proofQuest || celebrating;
+    dropVisible ||
+    actionModalVisible ||
+    dayCompleteModalVisible ||
+    showBlackIntroOverlay ||
+    !!proofQuest ||
+    celebrating ||
+    tutorialActive;
   useEffect(() => {
     if (isHomeModalOpen) return;
     const timer = setTimeout(() => maybeOfferPush((user?.xp ?? 0) > 0), 1500);
@@ -431,7 +447,7 @@ export default function MissionsHomeScreen() {
   // the hunter is on another tab waits until they come back to Home.
   const isHomeFocused = useIsFocused();
   const otherHomeModalOpen =
-    dropVisible || actionModalVisible || showBlackIntroOverlay || !!proofQuest;
+    dropVisible || actionModalVisible || showBlackIntroOverlay || !!proofQuest || tutorialActive;
   useEffect(() => {
     if (!dayCompletePending || otherHomeModalOpen || !isHomeFocused || user?.id == null || !tasksDay) return;
     const userId = user.id;
@@ -445,6 +461,42 @@ export default function MissionsHomeScreen() {
     }, MODAL_GAP_MS);
     return () => clearTimeout(timer);
   }, [dayCompletePending, otherHomeModalOpen, isHomeFocused, openDayComplete, tasksDay, user?.id]);
+
+  // First visit to Home (after login or onboarding): the app tour, once per
+  // account on this device. Waits for the post-onboarding fade, today's
+  // quests and anything already celebrating, so it points at a settled screen.
+  const tutorialCheckedForRef = useRef<string | null>(null);
+  const tutorialReady =
+    isHomeFocused &&
+    !loading &&
+    userIdKey != null &&
+    !showBlackIntroOverlay &&
+    celebrationsIdle &&
+    !celebrating &&
+    !pushPrompt.visible &&
+    !dayCompleteModalVisible &&
+    !dropVisible &&
+    !actionModalVisible &&
+    !proofQuest &&
+    !routineModalVisible &&
+    !buyModalVisible;
+  useEffect(() => {
+    if (!tutorialReady || !userIdKey || tutorialCheckedForRef.current === userIdKey) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (await hasSeenTutorial(userIdKey)) {
+        tutorialCheckedForRef.current = userIdKey;
+        return;
+      }
+      if (cancelled) return;
+      tutorialCheckedForRef.current = userIdKey;
+      useTutorialStore.getState().start(userIdKey);
+    }, 900);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [tutorialReady, userIdKey]);
 
   useEffect(() => {
     const day = markSeenDayRef.current;
@@ -694,7 +746,10 @@ export default function MissionsHomeScreen() {
         ref={scrollRef}
         onScroll={(e) => {
           scrollYRef.current = e.nativeEvent.contentOffset.y;
+          tourScroll.metrics.y = e.nativeEvent.contentOffset.y;
         }}
+        onContentSizeChange={tourScroll.onContentSizeChange}
+        onLayout={tourScroll.onLayout}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -729,29 +784,33 @@ export default function MissionsHomeScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerActions}>
-            <StreakPillLanding>
-              <View style={styles.streakPill}>
-                <View ref={streakFlameRef} collapsable={false}>
-                  <Ionicons name="flame" size={20} color="#FF5500" />
+            <TutorialTarget id="home-streak">
+              <StreakPillLanding>
+                <View style={styles.streakPill}>
+                  <View ref={streakFlameRef} collapsable={false}>
+                    <Ionicons name="flame" size={20} color="#FF5500" />
+                  </View>
+                  <Text style={styles.streakText}>{displayStreak}</Text>
                 </View>
-                <Text style={styles.streakText}>{displayStreak}</Text>
-              </View>
-            </StreakPillLanding>
+              </StreakPillLanding>
+            </TutorialTarget>
 
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => router.push('/notifications')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
-              {unreadNotifications > 0 ? (
-                <View style={styles.bellBadge}>
-                  <Text style={styles.bellBadgeText}>
-                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
-                  </Text>
-                </View>
-              ) : null}
-            </TouchableOpacity>
+            <TutorialTarget id="home-notifications">
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => router.push('/notifications')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
+                {unreadNotifications > 0 ? (
+                  <View style={styles.bellBadge}>
+                    <Text style={styles.bellBadgeText}>
+                      {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            </TutorialTarget>
           </View>
         </View>
 
@@ -776,118 +835,122 @@ export default function MissionsHomeScreen() {
         {/* TODAY'S QUESTS HEADER + SHUFFLE (routine daily tasks only) */}
         <View style={styles.questsHeaderRow}>
           <Text style={styles.sectionTitleWide}>TODAY&apos;S QUESTS</Text>
-          <TouchableOpacity
-            style={[styles.addTaskButton, deletionPending && styles.addTaskButtonDisabled]}
-            onPress={() => setRoutineModalVisible(true)}
-            disabled={deletionPending}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="repeat" size={16} color="#0A0A0A" />
-            <Text style={styles.addTaskButtonText}>Shuffle</Text>
-          </TouchableOpacity>
+          <TutorialTarget id="home-shuffle">
+            <TouchableOpacity
+              style={[styles.addTaskButton, deletionPending && styles.addTaskButtonDisabled]}
+              onPress={() => setRoutineModalVisible(true)}
+              disabled={deletionPending}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="repeat" size={16} color="#0A0A0A" />
+              <Text style={styles.addTaskButtonText}>Shuffle</Text>
+            </TouchableOpacity>
+          </TutorialTarget>
         </View>
 
         {/* FILTER TABS ROW */}
-        <View style={styles.filterTabsRow}>
-          {/* TODO Tab */}
-          <Pressable
-            style={[
-              styles.filterTab,
-              activeTab === 'todo' ? styles.filterTabActive : styles.filterTabInactive,
-            ]}
-            onPress={() => setActiveTab('todo')}
-          >
-            <Text
+        <TutorialTarget id="home-quest-filters" style={styles.filterTabsTarget}>
+          <View style={styles.filterTabsRow}>
+            {/* TODO Tab */}
+            <Pressable
               style={[
-                styles.filterTabText,
-                activeTab === 'todo' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+                styles.filterTab,
+                activeTab === 'todo' ? styles.filterTabActive : styles.filterTabInactive,
               ]}
-            >
-              TODO
-            </Text>
-            <View
-              style={[
-                styles.tabBadge,
-                activeTab === 'todo' ? styles.tabBadgeActive : styles.tabBadgeInactive,
-              ]}
+              onPress={() => setActiveTab('todo')}
             >
               <Text
                 style={[
-                  styles.tabBadgeText,
-                  activeTab === 'todo' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive,
+                  styles.filterTabText,
+                  activeTab === 'todo' ? styles.filterTabTextActive : styles.filterTabTextInactive,
                 ]}
               >
-                {todoQuests.length}
+                TODO
               </Text>
-            </View>
-          </Pressable>
+              <View
+                style={[
+                  styles.tabBadge,
+                  activeTab === 'todo' ? styles.tabBadgeActive : styles.tabBadgeInactive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabBadgeText,
+                    activeTab === 'todo' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive,
+                  ]}
+                >
+                  {todoQuests.length}
+                </Text>
+              </View>
+            </Pressable>
 
-          {/* DONE Tab */}
-          <Pressable
-            style={[
-              styles.filterTab,
-              activeTab === 'done' ? styles.filterTabActive : styles.filterTabInactive,
-            ]}
-            onPress={() => setActiveTab('done')}
-          >
-            <Text
+            {/* DONE Tab */}
+            <Pressable
               style={[
-                styles.filterTabText,
-                activeTab === 'done' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+                styles.filterTab,
+                activeTab === 'done' ? styles.filterTabActive : styles.filterTabInactive,
               ]}
-            >
-              DONE
-            </Text>
-            <View
-              style={[
-                styles.tabBadge,
-                activeTab === 'done' ? styles.tabBadgeActive : styles.tabBadgeInactive,
-              ]}
+              onPress={() => setActiveTab('done')}
             >
               <Text
                 style={[
-                  styles.tabBadgeText,
-                  activeTab === 'done' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive,
+                  styles.filterTabText,
+                  activeTab === 'done' ? styles.filterTabTextActive : styles.filterTabTextInactive,
                 ]}
               >
-                {doneQuests.length}
+                DONE
               </Text>
-            </View>
-          </Pressable>
+              <View
+                style={[
+                  styles.tabBadge,
+                  activeTab === 'done' ? styles.tabBadgeActive : styles.tabBadgeInactive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabBadgeText,
+                    activeTab === 'done' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive,
+                  ]}
+                >
+                  {doneQuests.length}
+                </Text>
+              </View>
+            </Pressable>
 
-          {/* SKIPPED Tab */}
-          <Pressable
-            style={[
-              styles.filterTab,
-              activeTab === 'skipped' ? styles.filterTabActive : styles.filterTabInactive,
-            ]}
-            onPress={() => setActiveTab('skipped')}
-          >
-            <Text
+            {/* SKIPPED Tab */}
+            <Pressable
               style={[
-                styles.filterTabText,
-                activeTab === 'skipped' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+                styles.filterTab,
+                activeTab === 'skipped' ? styles.filterTabActive : styles.filterTabInactive,
               ]}
-            >
-              SKIPPED
-            </Text>
-            <View
-              style={[
-                styles.tabBadge,
-                activeTab === 'skipped' ? styles.tabBadgeActive : styles.tabBadgeInactive,
-              ]}
+              onPress={() => setActiveTab('skipped')}
             >
               <Text
                 style={[
-                  styles.tabBadgeText,
-                  activeTab === 'skipped' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive,
+                  styles.filterTabText,
+                  activeTab === 'skipped' ? styles.filterTabTextActive : styles.filterTabTextInactive,
                 ]}
               >
-                {skippedQuests.length}
+                SKIPPED
               </Text>
-            </View>
-          </Pressable>
-        </View>
+              <View
+                style={[
+                  styles.tabBadge,
+                  activeTab === 'skipped' ? styles.tabBadgeActive : styles.tabBadgeInactive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabBadgeText,
+                    activeTab === 'skipped' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive,
+                  ]}
+                >
+                  {skippedQuests.length}
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        </TutorialTarget>
 
         {/* CONDITIONALLY RENDER CONTENT BASED ON ACTIVE FILTER TAB */}
         {loading ? (
@@ -1556,10 +1619,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#0A0A0A',
   },
+  // The margin is on the tour target around the row, so its spotlight hugs the tabs.
+  filterTabsTarget: {
+    marginBottom: 24,
+  },
   filterTabsRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 24,
   },
   filterTab: {
     flexDirection: 'row',

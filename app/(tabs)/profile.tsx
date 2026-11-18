@@ -57,6 +57,8 @@ import { useAvatarsReady } from '@/services/api/avatar.service';
 import { invalidateLeaderboardCache } from '@/hooks/useLeaderboard';
 import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 import { MountWhenOpened } from '@/components/common/MountWhenOpened';
+import { makeTutorialScroller, setTutorialScroller, useTutorialStore } from '@/store/useTutorialStore';
+import { TutorialTarget } from '@/components/features/tutorial/TutorialTarget';
 import { PRIVACY_URL, TERMS_URL, openLegalPage } from '@/utils/legalLinks';
 
 // Footer legal links are 11pt text, so each gets padding plus hitSlop to make
@@ -94,6 +96,12 @@ export default function ProfileScreen() {
 
   useScrollToTopOnFocus(scrollRef);
   useScrollToTop(scrollRef);
+
+  // Lets the app tour bring Rewards into view.
+  const [tourScroll] = useState(() =>
+    makeTutorialScroller((y) => scrollRef.current?.scrollTo({ y, animated: true }))
+  );
+  useEffect(() => setTutorialScroller('profile', tourScroll.scroller), [tourScroll]);
 
   useFocusEffect(
     useCallback(() => {
@@ -372,6 +380,11 @@ export default function ProfileScreen() {
       case 'rewards':
         router.push('/rewards');
         break;
+      case 'app_tour':
+        // The tour starts on Home; give the tab a moment to come forward.
+        router.navigate('/(tabs)');
+        setTimeout(() => useTutorialStore.getState().start(user?.id ?? null), 450);
+        break;
       case 'rate_app':
         setIsRateModalVisible(true);
         break;
@@ -460,6 +473,12 @@ export default function ProfileScreen() {
         bounces={false}
         overScrollMode="never"
         ref={scrollRef}
+        onScroll={(e) => {
+          tourScroll.metrics.y = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
+        onContentSizeChange={tourScroll.onContentSizeChange}
+        onLayout={tourScroll.onLayout}
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
@@ -590,15 +609,22 @@ export default function ProfileScreen() {
             label="Badges"
             onPress={() => handleMenuPress('badges')}
           />
-          <MenuItem
-            icon="gift-outline"
-            label="Rewards"
-            onPress={() => handleMenuPress('rewards')}
-          />
+          <TutorialTarget id="profile-rewards">
+            <MenuItem
+              icon="gift-outline"
+              label="Rewards"
+              onPress={() => handleMenuPress('rewards')}
+            />
+          </TutorialTarget>
           <MenuItem
             icon="people-outline"
             label="Invite a friend"
             onPress={() => handleMenuPress('invite')}
+          />
+          <MenuItem
+            icon="compass-outline"
+            label="Replay app tour"
+            onPress={() => handleMenuPress('app_tour')}
           />
           <MenuItem
             icon="settings-outline"
