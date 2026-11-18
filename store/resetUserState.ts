@@ -7,6 +7,7 @@ import { useNotificationStore } from '@/store/useNotificationStore';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { useStreakBadgeStore } from '@/store/useStreakBadgeStore';
 import { useStreakBreakStore } from '@/store/useStreakBreakStore';
+import { useTutorialStore } from '@/store/useTutorialStore';
 import { clearTasksTodayCache } from '@/services/cache/tasksTodayCache';
 import { resetSeenOutbox } from '@/services/celebrations/seenOutbox';
 
@@ -25,6 +26,7 @@ export function resetUserState() {
   useStreakBreakStore.setState({ visible: false, options: null, pillLandedAt: null });
   useNotificationStore.getState().setUnreadCount(0);
   useFriendsStore.getState().reset();
+  useTutorialStore.getState().stop();
   useHomeOverlayStore.getState().reset();
   useOnboardingStore.getState().resetOnboarding();
   clearTasksTodayCache();

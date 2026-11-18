@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { fontFamilies } from '@/theme/typography';
+import { TutorialTarget } from '@/components/features/tutorial/TutorialTarget';
 
 export type MainCategoryTab = 'Global' | 'Friends';
 
@@ -11,6 +12,8 @@ interface TopCategoryFilterBarProps {
   onSelectCategory: (category: MainCategoryTab) => void;
   /** A small count on a pill, e.g. friend requests waiting on Friends. */
   badges?: Partial<Record<MainCategoryTab, number>>;
+  /** Lets the app tour spotlight each pill (only one copy on screen should). */
+  tutorialTargets?: boolean;
 }
 
 const CATEGORIES: MainCategoryTab[] = ['Global', 'Friends'];
@@ -19,6 +22,7 @@ export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
   category,
   onSelectCategory,
   badges,
+  tutorialTargets,
 }) => {
   return (
     <View style={styles.topBarContainer}>
@@ -32,7 +36,7 @@ export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
             </View>
           ) : null;
 
-          return (
+          const pill = (
             <TouchableOpacity
               key={tab}
               activeOpacity={0.85}
@@ -56,6 +60,13 @@ export const TopCategoryFilterBar: React.FC<TopCategoryFilterBarProps> = ({
                 </View>
               )}
             </TouchableOpacity>
+          );
+          return tutorialTargets ? (
+            <TutorialTarget key={tab} id={`battles-${tab.toLowerCase()}`} style={styles.tabTouchArea}>
+              {pill}
+            </TutorialTarget>
+          ) : (
+            pill
           );
         })}
       </View>
