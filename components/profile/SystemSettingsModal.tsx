@@ -44,16 +44,6 @@ import { digitsOnly, noSpaces } from '@/utils/textInput';
 // Dev builds and test APKs (eas.json `apk-local` sets EXPO_PUBLIC_PUSH_DEBUG) — never production.
 const SHOW_PUSH_DIAGNOSTICS = __DEV__ || process.env.EXPO_PUBLIC_PUSH_DEBUG === 'true';
 
-// Daily quest reminder slots (local time) — backend default is 19:00.
-const REMINDER_TIMES: { value: string; label: string }[] = [
-  { value: '07:00', label: '7 AM' },
-  { value: '09:00', label: '9 AM' },
-  { value: '12:00', label: '12 PM' },
-  { value: '17:00', label: '5 PM' },
-  { value: '19:00', label: '7 PM' },
-  { value: '21:00', label: '9 PM' },
-];
-
 export interface SystemSettingsModalProps {
   visible: boolean;
   onClose: () => void;
@@ -820,7 +810,7 @@ export function SystemSettingsModal({
                   <View style={styles.settingTextGroup}>
                     <Text style={styles.settingTitle}>Task Reminders</Text>
                     <Text style={styles.settingSubtitle}>
-                      Routine quests & daily task due prompts
+                      7 AM and 8 PM, only while daily quests are open
                     </Text>
                   </View>
                 </View>
@@ -830,33 +820,6 @@ export function SystemSettingsModal({
                   onValueChange={(val) => handleToggleAccountSetting('notify_task_reminders', val)}
                 />
               </View>
-
-              {allOn && accountSettings.notify_task_reminders && (
-                <View style={styles.reminderTimeBlock}>
-                  <Text style={styles.reminderTimeLabel}>Remind me at</Text>
-                  <View style={styles.reminderTimeChips}>
-                    {REMINDER_TIMES.map((slot) => {
-                      const active = (accountSettings.reminder_time ?? '19:00') === slot.value;
-                      return (
-                        <TouchableOpacity
-                          key={slot.value}
-                          style={[styles.reminderChip, active && styles.reminderChipActive]}
-                          onPress={() => {
-                            if (active) return;
-                            Haptics.selectionAsync().catch(() => { });
-                            handleToggleAccountSetting('reminder_time', slot.value);
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[styles.reminderChipText, active && styles.reminderChipTextActive]}>
-                            {slot.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
 
               <View style={styles.settingItemDivider} />
 
@@ -1394,43 +1357,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semiBold,
     fontSize: 13,
     color: '#FE5B01',
-  },
-  reminderTimeBlock: {
-    paddingTop: 2,
-    paddingBottom: 10,
-    paddingLeft: 44,
-  },
-  reminderTimeLabel: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 11,
-    color: '#71717A',
-    marginBottom: 8,
-  },
-  reminderTimeChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  reminderChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#2A2A30',
-    backgroundColor: '#18181C',
-  },
-  reminderChipActive: {
-    borderColor: '#FE5B01',
-    backgroundColor: 'rgba(254, 91, 1, 0.12)',
-  },
-  reminderChipText: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 12,
-    color: '#A1A1AA',
-  },
-  reminderChipTextActive: {
-    color: '#FE5B01',
-    fontFamily: fontFamilies.semiBold,
   },
   settingRow: {
     flexDirection: 'row',
