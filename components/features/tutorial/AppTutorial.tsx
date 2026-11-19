@@ -11,11 +11,13 @@ import {
 import Animated, {
   Easing,
   cancelAnimation,
+  runOnJS,
   useAnimatedProps,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
+  type WithTimingConfig,
 } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -46,6 +48,11 @@ const TAB_BAR_HEIGHT = 64;
 // One motion for the spotlight and the card, close to a native scroll's.
 const MOVE = { duration: 380, easing: Easing.bezier(0.22, 1, 0.36, 1) };
 const TEXT_OUT_MS = 110;
+// Changing tab: the spotlight closes this fast before the tab switches, so
+// nothing on the new screen ever shows through the old hole.
+const CLOSE = { duration: 160, easing: Easing.out(Easing.cubic) };
+// Longest wait for a step's target to be laid out (~2 s of frames).
+const MAX_FRAMES = 120;
 const ROUTES = {
   home: '/(tabs)',
   metrics: '/(tabs)/metrics',
@@ -54,6 +61,7 @@ const ROUTES = {
 } as const;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 const sameRect = (a: TutorialRect, b: TutorialRect) =>
   Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.width - b.width) < 1 && Math.abs(a.height - b.height) < 1;
 
@@ -106,6 +114,9 @@ function TutorialOverlay() {
   const directionRef = useRef<1 | -1>(1);
   const prevHoleRef = useRef<TutorialRect | null>(null);
   const readyRef = useRef(false);
+  // A Next / Back tapped while the tour is still moving: applied as soon as
+  // the step lands, so a tap is never lost.
+  const pendingRef = useRef<1 | -1 | null>(null);
   const closingRef = useRef(false);
   const cardPlacedRef = useRef(false);
   // The overlay's own top-left in measureInWindow's coordinates. On Android
@@ -126,7 +137,7 @@ function TutorialOverlay() {
   }, [overlay, pulse]);
 
   const moveSpotlight = useCallback(
-    (to: TutorialRect | null, radius: number, timing = MOVE) => {
+    (to: TutorialRect | null, radius: number, timing: WithTimingConfig = MOVE) => {
       const prev = prevHoleRef.current;
       if (to) {
         // From a centred card, the spotlight opens out of the target's centre.
@@ -153,6 +164,25 @@ function TutorialOverlay() {
     [hx, hy, hw, hh, hr]
   );
 
+  // Closes the spotlight into its centre; resolves once that has actually
+  // been drawn (the UI thread says so), not after a fixed time, so a slow
+  // phone can't show the next screen through a hole that's still open.
+  const closeSpotlight = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        const prev = prevHoleRef.current;
+        if (!prev) return resolve();
+        prevHoleRef.current = null;
+        hx.value = withTiming(prev.x + prev.width / 2, CLOSE);
+        hy.value = withTiming(prev.y + prev.height / 2, CLOSE);
+        hh.value = withTiming(0, CLOSE);
+        hw.value = withTiming(0, CLOSE, () => {
+          runOnJS(resolve)();
+        });
+      }),
+    [hx, hy, hw, hh]
+  );
+
   // Each step: fade the card's text out while the next target is found (and
   // Home scrolls to it), glide the spotlight and card there, fade text in.
   useEffect(() => {
@@ -164,33 +194,40 @@ function TutorialOverlay() {
     const s = TUTORIAL_STEPS[stepIndex];
 
     (async () => {
-      // Move to the step's tab. No fixed wait: the target is polled until
-      // the new tab has laid it out (same place twice in a row).
+      // Move to the step's tab. The spotlight closes first and the tab
+      // switches only then, so the new screen comes up fully dimmed instead
+      // of showing through the old hole; it opens on the target after.
       let switched = false;
       if (s.screen !== 'any' && screenRef.current !== s.screen) {
+        await closeSpotlight();
+        if (cancelled) return;
         screenRef.current = s.screen;
         router.navigate(ROUTES[s.screen]);
         switched = true;
       }
 
+      // Tab-bar targets never move, so they're used straight away. Others
+      // are checked every frame until the new tab has laid them out (same
+      // place twice in a row).
+      const inTabBar = !!s.target?.startsWith('tab-');
       let rect: TutorialRect | null = null;
       let scrolled = false;
       if (s.target) {
         let last: TutorialRect | null = null;
-        for (let i = 0; i < 40 && !cancelled; i++) {
+        for (let i = 0; i < MAX_FRAMES && !cancelled; i++) {
           const r = await measureTutorialTarget(s.target);
-          if (r && (!switched || (last && sameRect(r, last)))) {
+          if (r && (inTabBar || !switched || (last && sameRect(r, last)))) {
             rect = r;
             break;
           }
           last = r;
-          await wait(50);
+          await nextFrame();
         }
         // Home and Profile scroll; bring the section into the part of the
         // screen above the tab bar, about a third of the way down. The
         // spotlight heads for where it will land, moving with the scroll.
         // Tab-bar targets are always on screen: never scroll the page for one.
-        if (rect && !s.target.startsWith('tab-') && (s.screen === 'home' || s.screen === 'profile')) {
+        if (rect && !inTabBar && (s.screen === 'home' || s.screen === 'profile')) {
           const minY = insets.top + 12;
           const maxY = H - (TAB_BAR_HEIGHT + insets.bottom) - 12;
           if (rect.y < minY || rect.y + rect.height > maxY) {
@@ -231,6 +268,13 @@ function TutorialOverlay() {
       if (cancelled) return;
       setShown({ index: stepIndex, hole: padded });
       readyRef.current = true;
+      // A tap that came in while this step was on its way.
+      const pending = pendingRef.current;
+      if (pending) {
+        pendingRef.current = null;
+        go(pending);
+        return;
+      }
 
       // After a scroll, check where the target really ended up and nudge.
       if (scrolled && s.target) {
@@ -301,20 +345,27 @@ function TutorialOverlay() {
     setTimeout(() => useTutorialStore.getState().finish(), 230);
   }, [overlay]);
 
-  const onNext = useCallback(() => {
-    if (!readyRef.current) return;
-    tap();
-    directionRef.current = 1;
-    if (isLast) close();
-    else useTutorialStore.getState().next();
-  }, [tap, isLast, close]);
+  // Steps forward or back; the last step's "Let's go" closes the tour.
+  function go(dir: 1 | -1) {
+    directionRef.current = dir;
+    const { stepIndex: index, next, back } = useTutorialStore.getState();
+    if (dir === 1 && index >= TUTORIAL_STEPS.length - 1) close();
+    else if (dir === 1) next();
+    else back();
+  }
 
-  const onBack = useCallback(() => {
-    if (!readyRef.current) return;
+  // Mid-move, the tap is kept and applied when the step lands (latest wins).
+  const onNext = () => {
     tap();
-    directionRef.current = -1;
-    useTutorialStore.getState().back();
-  }, [tap]);
+    if (readyRef.current) go(1);
+    else pendingRef.current = 1;
+  };
+
+  const onBack = () => {
+    tap();
+    if (readyRef.current) go(-1);
+    else pendingRef.current = -1;
+  };
 
   const onCardLayout = (e: LayoutChangeEvent) => {
     const h = Math.round(e.nativeEvent.layout.height);
