@@ -36,7 +36,7 @@ const WEAKNESSES: WeaknessOption[] = [
     {
         id: 'procrastination',
         icon: <Feather name="loader" size={20} color="#A1A1AA" />,
-        title: 'Time drift',
+        title: 'Shiftless',
     },
     {
         id: 'no_routine',
@@ -71,7 +71,7 @@ const WEAKNESSES: WeaknessOption[] = [
     {
         id: 'loss_of_motivation',
         icon: <MaterialCommunityIcons name="trending-down" size={20} color="#A1A1AA" />,
-        title: 'Loss of motivation',
+        title: 'Unmotivated',
     },
     {
         id: 'comparing_to_others',
