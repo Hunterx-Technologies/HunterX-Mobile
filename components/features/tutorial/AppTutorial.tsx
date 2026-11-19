@@ -48,6 +48,7 @@ const MOVE = { duration: 380, easing: Easing.bezier(0.22, 1, 0.36, 1) };
 const TEXT_OUT_MS = 110;
 const ROUTES = {
   home: '/(tabs)',
+  metrics: '/(tabs)/metrics',
   battles: '/(tabs)/leaderboard',
   profile: '/(tabs)/profile',
 } as const;
@@ -188,7 +189,8 @@ function TutorialOverlay() {
         // Home and Profile scroll; bring the section into the part of the
         // screen above the tab bar, about a third of the way down. The
         // spotlight heads for where it will land, moving with the scroll.
-        if (rect && (s.screen === 'home' || s.screen === 'profile')) {
+        // Tab-bar targets are always on screen: never scroll the page for one.
+        if (rect && !s.target.startsWith('tab-') && (s.screen === 'home' || s.screen === 'profile')) {
           const minY = insets.top + 12;
           const maxY = H - (TAB_BAR_HEIGHT + insets.bottom) - 12;
           if (rect.y < minY || rect.y + rect.height > maxY) {

@@ -1,7 +1,7 @@
 import type Ionicons from '@expo/vector-icons/Ionicons';
 
-/** Where the tour needs to be for a step: on a tab, or wherever it already is (tab bar). */
-export type TutorialScreen = 'home' | 'battles' | 'profile' | 'any';
+/** Where the tour needs to be for a step: on a tab, or wherever it already is. */
+export type TutorialScreen = 'home' | 'metrics' | 'battles' | 'profile' | 'any';
 
 export type TutorialStep = {
   id: string;
@@ -89,7 +89,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: 'metrics',
     target: 'tab-metrics',
-    screen: 'any',
+    // Opens Metrics, then spotlights its tab, so the hunter sees the screen.
+    screen: 'metrics',
     icon: 'stats-chart',
     eyebrow: 'METRICS',
     title: 'See your progress',
@@ -120,7 +121,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: 'profile',
     target: 'tab-profile',
-    screen: 'any',
+    // Opens Profile, then spotlights its tab.
+    screen: 'profile',
     icon: 'person',
     eyebrow: 'PROFILE',
     title: 'Your hunter HQ',
