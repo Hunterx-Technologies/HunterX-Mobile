@@ -15,7 +15,11 @@ const { withAppBuildGradle, withDangerousMod } = require('expo/config-plugins');
 const MARKER = 'hunterx: skip Sentry upload without token';
 
 // Both Sentry Xcode phases (bundle + debug symbols) source ios/.xcode.env.
-const IOS_LINE = `[ -z "$SENTRY_AUTH_TOKEN" ] && export SENTRY_DISABLE_AUTO_UPLOAD=true # ${MARKER}`;
+// So do Expo's own phases, under `set -e`: the file must end with exit
+// status 0. `[ -z … ] && export …` returns 1 when the token IS set, which
+// made "[Expo] Configure project" stop silently on EAS production builds,
+// so this has to be an if/fi.
+const IOS_LINE = `if [ -z "$SENTRY_AUTH_TOKEN" ]; then export SENTRY_DISABLE_AUTO_UPLOAD=true; fi # ${MARKER}`;
 
 // sentry.gradle reads this closure in afterEvaluate, so redefining it at the
 // end of app/build.gradle (after sentry.gradle is applied) wins.
@@ -32,9 +36,9 @@ const withIos = (config) =>
     (mod) => {
       const file = path.join(mod.modRequest.platformProjectRoot, '.xcode.env');
       const contents = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-      if (!contents.includes(MARKER)) {
-        fs.writeFileSync(file, `${contents.replace(/\n*$/, '\n')}\n${IOS_LINE}\n`);
-      }
+      // Drop a line from an earlier version of this plugin, then add the current one.
+      const kept = contents.split('\n').filter((line) => !line.includes(MARKER)).join('\n');
+      fs.writeFileSync(file, `${kept.replace(/\n*$/, '\n')}\n${IOS_LINE}\n`);
       return mod;
     },
   ]);
