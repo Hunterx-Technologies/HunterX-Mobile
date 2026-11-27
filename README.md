@@ -147,6 +147,24 @@ Web
 
 ---
 
+## 🔄 Over-the-air updates
+
+JS-only fixes (screens, copy, logic, images) ship through EAS Update, with no store review. Each build profile in `eas.json` has its own channel, so a UAT update never reaches production builds.
+
+```bash
+npm run update:testflight -- "Fix streak copy"   # TestFlight / UAT builds
+npm run update:preview -- "Fix streak copy"      # internal preview APKs
+npm run update:production -- "Fix streak copy"   # store builds
+```
+
+Always use these scripts, not plain `eas update`. The script ignores the local `.env`, uses the profile's own env, checks that the bundle has the right API URL, and only then uploads. Add `--dry-run` to run the check without uploading.
+
+- Users get the update in the background on launch, and it takes effect on the **next** cold start.
+- An update only reaches builds with the same runtime fingerprint. A change to native code (a new native package, a config plugin, or native `app.json` settings) needs a new store build.
+- Changes to `app.config.ts` must never depend on a **secret** EAS variable. `eas update` can't read secrets, so the fingerprint would differ from the build's and no update would match.
+
+---
+
 ## 📦 Backend
 
 This application communicates with the **HunterX Backend API** for:

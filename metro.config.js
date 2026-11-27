@@ -1,6 +1,8 @@
-const { getDefaultConfig } = require('expo/metro-config');
+// Sentry's wrapper around Expo's default config: stamps each bundle with a
+// debug ID so uploaded source maps match the exact build in crash reports.
+const { getSentryExpoConfig } = require('@sentry/react-native/metro');
 
-const config = getDefaultConfig(__dirname);
+const config = getSentryExpoConfig(__dirname);
 
 // Native build output and CocoaPods live inside the project (ios/, android/)
 // but no JavaScript is ever imported from them. Without this, Metro crawls

@@ -810,3 +810,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+
+
+
+// This tab's own error boundary: a render error here keeps the tab bar usable.
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/common/RouteErrorBoundary';

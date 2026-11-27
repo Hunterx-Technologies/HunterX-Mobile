@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus, Platform, StyleSheet, View } from 'react-native';
-import { Stack, router, usePathname, useSegments } from 'expo-router';
+import { Stack, router, useNavigationContainerRef, usePathname, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
@@ -37,6 +37,20 @@ import { useLevelUpSync } from '@/hooks/useLevelUpSync';
 import { useCelebrationStartupHold } from '@/hooks/useCelebrationStartupHold';
 
 import { SettingsProvider } from '@/context/SettingsContext';
+import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
+import {
+  initMonitoring,
+  navigationIntegration,
+  setMonitoringUser,
+  wrapRoot,
+} from '@/services/monitoring';
+
+// First, so crashes during the rest of startup are reported too.
+initMonitoring();
+
+// Last line of defence: a screen without its own boundary that throws while
+// rendering lands here instead of crashing the app.
+export const ErrorBoundary = RouteErrorBoundary;
 
 SplashScreen.preventAutoHideAsync();
 
@@ -149,7 +163,7 @@ function PushNotificationsObserver() {
   return null;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -163,6 +177,20 @@ export default function RootLayout() {
   const fontsReady = fontsLoaded || !!fontError;
   // The animated launch splash plays once per cold start, over the app as it loads.
   const [showSplash, setShowSplash] = useState(true);
+
+  // Screen names and load times for Sentry's performance traces.
+  const navigationRef = useNavigationContainerRef();
+  useEffect(() => {
+    if (navigationRef) navigationIntegration.registerNavigationContainer(navigationRef);
+  }, [navigationRef]);
+
+  // Crash reports carry the signed-in user's ID (nothing else about them).
+  useEffect(() => {
+    setMonitoringUser(useAuthStore.getState().user);
+    return useAuthStore.subscribe((state, prev) => {
+      if (state.user?.id !== prev.user?.id) setMonitoringUser(state.user);
+    });
+  }, []);
 
   // Runs once on app start: what the first screen needs, right away.
   useEffect(() => {
@@ -314,3 +342,4 @@ export default function RootLayout() {
   );
 }
 
+export default wrapRoot(RootLayout);
