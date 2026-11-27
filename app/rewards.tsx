@@ -386,30 +386,17 @@ export default function RewardsScreen() {
         <View style={styles.gridTopImageSection}>
           <RewardProductImage uri={item.productImageUrl} width={REWARD_IMAGE_WIDTH.grid} />
 
-          {/* Top-Right Status Tag */}
-          <View
-            style={[
-              styles.gridStatusBadge,
-              item.isUsed
-                ? styles.statusBadgeUsed
-                : item.isExpired
-                  ? styles.statusBadgeExpired
-                  : styles.statusBadgeNew,
-            ]}
-          >
-            <Text
-              style={[
-                styles.gridStatusText,
-                item.isUsed
-                  ? styles.statusTextUsed
-                  : item.isExpired
-                    ? styles.statusTextExpired
-                    : styles.statusTextNew,
-              ]}
-            >
-              {item.isUsed ? 'USED' : item.isExpired ? 'EXPIRED' : 'New'}
-            </Text>
-          </View>
+          {/* Top-Right Status Tag. "New" belongs to a card not revealed yet
+              (the unscratched ScratchCard shows it); once scratched it's
+              gone — the server's SCRATCHED status keeps it gone after a
+              refresh or a new login. Only USED / EXPIRED are tagged here. */}
+          {(item.isUsed || item.isExpired) && (
+            <View style={[styles.gridStatusBadge, item.isUsed ? styles.statusBadgeUsed : styles.statusBadgeExpired]}>
+              <Text style={[styles.gridStatusText, item.isUsed ? styles.statusTextUsed : styles.statusTextExpired]}>
+                {item.isUsed ? 'USED' : 'EXPIRED'}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Bottom Info Section */}
@@ -856,9 +843,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2.5,
     borderRadius: 6,
   },
-  statusBadgeNew: {
-    backgroundColor: '#154726',
-  },
   statusBadgeUsed: {
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
     borderWidth: 1,
@@ -873,9 +857,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     fontSize: 8.5,
     letterSpacing: 0.5,
-  },
-  statusTextNew: {
-    color: '#4ADE80',
   },
   statusTextUsed: {
     color: '#10B981',

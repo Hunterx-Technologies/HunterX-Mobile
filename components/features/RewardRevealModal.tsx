@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import { fontFamilies } from '../../theme/typography';
 import { RewardProductImage, REWARD_IMAGE_WIDTH } from './reward/RewardProductImage';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { SUPPORT_EMAIL } from '../../services/api/errors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -83,6 +84,9 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
 
   // Only the reward's own data is shown — never placeholder offers or codes.
   const currentSlide = reward;
+  // Copy below is shared by every reward type (discounts, free items, gift
+  // cards, in-store offers), so it never assumes a cart or a product.
+  const partner = reward.brandName || 'the partner';
 
   const handleCopyCode = () => {
     Clipboard.setString(currentSlide.code);
@@ -218,7 +222,7 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
                   <View style={styles.bulletItem}>
                     <Text style={styles.bulletDot}>•</Text>
                     <Text style={styles.bulletText}>
-                      Customer support: support@hunterx.app
+                      Need help? Contact {SUPPORT_EMAIL}
                     </Text>
                   </View>
                 </View>
@@ -244,26 +248,20 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
 
               {howToRedeemExpanded && (
                 <View style={styles.accordionBody}>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>1.</Text>
-                    <Text style={styles.bulletText}>
-                      {reward.redeemUrl
-                        ? "Tap 'Redeem now' below: your code is copied and the store's website opens."
-                        : 'Copy the code from above.'}
-                    </Text>
-                  </View>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>2.</Text>
-                    <Text style={styles.bulletText}>
-                      Add {reward.productName ? `the ${reward.productName}` : 'your items'} to the cart.
-                    </Text>
-                  </View>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>3.</Text>
-                    <Text style={styles.bulletText}>
-                      Apply the coupon code at checkout to enjoy instant discount.
-                    </Text>
-                  </View>
+                  {[
+                    reward.redeemUrl
+                      ? "Tap 'Redeem now' below. Your code is copied and the partner's website opens."
+                      : "Tap 'Get code' above to reveal and copy your code.",
+                    `Enter the code where ${partner} asks for it: at checkout, in their app or in store.`,
+                    reward.redeemUrl
+                      ? 'Your reward is applied once the code is accepted.'
+                      : "Once you've used it, tap 'Redeem reward' below to move it to your Used tab.",
+                  ].map((step, i) => (
+                    <View key={i} style={styles.bulletItem}>
+                      <Text style={styles.bulletDot}>{i + 1}.</Text>
+                      <Text style={styles.bulletText}>{step}</Text>
+                    </View>
+                  ))}
                 </View>
               )}
             </View>
@@ -287,18 +285,18 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
 
               {termsExpanded && (
                 <View style={styles.accordionBody}>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>•</Text>
-                    <Text style={styles.bulletText}>
-                      This voucher is single-use and non-transferable.
-                    </Text>
-                  </View>
-                  <View style={styles.bulletItem}>
-                    <Text style={styles.bulletDot}>•</Text>
-                    <Text style={styles.bulletText}>
-                      Valid only on eligible products, until the expiry date.
-                    </Text>
-                  </View>
+                  {[
+                    "Each code works once and can't be transferred or exchanged for cash.",
+                    currentSlide.expiryDate
+                      ? `Valid until ${currentSlide.expiryDate}.`
+                      : 'Partner offers can end without notice, so use it soon.',
+                    `${reward.brandName ? `${reward.brandName}'s` : "The partner's"} own terms apply when you redeem.`,
+                  ].map((term, i) => (
+                    <View key={i} style={styles.bulletItem}>
+                      <Text style={styles.bulletDot}>•</Text>
+                      <Text style={styles.bulletText}>{term}</Text>
+                    </View>
+                  ))}
                 </View>
               )}
             </View>
@@ -338,7 +336,7 @@ export const RewardRevealModal: React.FC<RewardRevealModalProps> = ({
           <ConfirmDialog
             visible={confirmRedeem}
             title="Redeem this reward?"
-            message="Use your code at checkout first. Once redeemed, this reward moves to your Used tab."
+            message="Use your code with the partner first. Once redeemed, this reward moves to your Used tab."
             confirmLabel="Redeem"
             cancelLabel="Not yet"
             onConfirm={() => {
