@@ -2,7 +2,6 @@ import React, { memo, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { LinearGradient } from "expo-linear-gradient";
 
 import { fontFamilies } from "@/theme/typography";
 import type { QuestItem } from "@/utils/quests";
@@ -77,13 +76,12 @@ function getQuestTargetValue(quest: QuestItem, proteinGoal?: number | null): str
 
 export interface QuestListCardProps {
   quest: QuestItem;
-  variant: "todo" | "done" | "skipped" | "locked";
+  variant: "todo" | "done" | "skipped";
   /** Only needed to resolve the "Protein Goal" quest dynamic target text. */
   proteinGoal?: number | null;
   onComplete: (questId: string) => void;
   onSkip: (questId: string) => void;
   onReset: (questId: string) => void;
-  onBuy?: (quest: QuestItem) => void;
   /** Dims the card while quest actions are unavailable (account pending deletion). */
   actionsDisabled?: boolean;
 }
@@ -95,7 +93,6 @@ function QuestListCardComponent({
   onComplete,
   onSkip,
   onReset,
-  onBuy,
   actionsDisabled = false,
 }: QuestListCardProps) {
   const targetValue = getQuestTargetValue(quest, proteinGoal);
@@ -104,8 +101,6 @@ function QuestListCardComponent({
       ? "Weekly"
       : quest.type === "monthly"
       ? "Monthly"
-      : quest.type === "locked"
-      ? "Offer"
       : quest.isRoutine
       ? "Routine"
       : "Daily";
@@ -115,7 +110,6 @@ function QuestListCardComponent({
       style={[
         styles.questCard,
         variant === "skipped" && styles.questCardSkipped,
-        variant === "locked" && styles.questCardLocked,
         actionsDisabled && styles.questCardDisabled,
       ]}
     >
@@ -130,10 +124,7 @@ function QuestListCardComponent({
             {/* Always derived from the variant: a quest reset from Skipped
                 is To-Do again and needs both buttons back. */}
             <AnimatedTickButton onPress={() => onComplete(quest.id)} />
-            {/* Paid quests can't be skipped — they only have the done button. */}
-            {!quest.is_paid && (
-              <AnimatedWrongButton onPress={() => onSkip(quest.id)} />
-            )}
+            <AnimatedWrongButton onPress={() => onSkip(quest.id)} />
           </View>
         )}
 
@@ -166,56 +157,25 @@ function QuestListCardComponent({
           </View>
         )}
 
-        {variant === "locked" && (
-          <View style={styles.topRightActionsCol}>
-            <View style={[styles.xpBadgeInline, styles.lockedPriceBadge]}>
-              <Ionicons name="lock-closed" size={12} color="#FE5B01" />
-              <Text style={styles.lockedPriceText}>₹{quest.price ?? 0}</Text>
-            </View>
-            <View style={styles.xpBadgeInline}>
-              <Text style={styles.xpBadgeText}>+{quest.xpReward} XP</Text>
-            </View>
-          </View>
-        )}
       </View>
 
       <View style={styles.questBody}>
         <View style={styles.questTitleCol}>
           <View style={styles.categoryRow}>
-            <View
-              style={[
-                styles.categoryPill,
-                variant === "locked" && styles.lockedCategoryPill,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.categoryPillText,
-                  variant === "locked" && styles.lockedCategoryPillText,
-                ]}
-              >
-                {variant === "locked" ? "PREMIUM OFFER" : quest.category}
+            <View style={styles.categoryPill}>
+              <Text style={styles.categoryPillText}>{quest.category}</Text>
+            </View>
+            <View style={styles.routineBadgeInline}>
+              <Ionicons name="repeat-outline" size={12} color="#A1A1AA" />
+              <Text style={styles.routineBadgeText}>
+                {quest.period_end ? `Ends ${quest.period_end}` : typeLabel}
               </Text>
             </View>
-            {/* A bought premium quest, now in the normal lists */}
-            {variant !== "locked" && quest.is_paid && (
-              <View style={[styles.categoryPill, styles.lockedCategoryPill]}>
-                <Text style={[styles.categoryPillText, styles.lockedCategoryPillText]}>PREMIUM</Text>
-              </View>
-            )}
-            {variant !== "locked" && (
-              <View style={styles.routineBadgeInline}>
-                <Ionicons name="repeat-outline" size={12} color="#A1A1AA" />
-                <Text style={styles.routineBadgeText}>
-                  {quest.period_end ? `Ends ${quest.period_end}` : typeLabel}
-                </Text>
-              </View>
-            )}
           </View>
           <Text style={styles.questTitle}>{quest.title}</Text>
           {/* No up-front "Photo proof" hint — the upload prompt appears when
               the hunter taps done. Only show the status once proof is sent. */}
-          {(quest.proofCount ?? 0) > 0 && variant !== "locked" && quest.reviewStatus === "in_review" && (
+          {(quest.proofCount ?? 0) > 0 && quest.reviewStatus === "in_review" && (
             <View style={styles.proofRow}>
               <Ionicons name="camera-outline" size={12} color="#F66F28" />
               <Text style={styles.proofText}>Proof sent · XP once approved</Text>
@@ -230,30 +190,9 @@ function QuestListCardComponent({
               {quest.reviewNote}
             </Text>
           )}
-          {variant === "locked" && quest.description ? (
-            <Text style={styles.lockedDescription} numberOfLines={2}>
-              {quest.description}
-            </Text>
-          ) : null}
         </View>
 
-        {variant === "locked" ? (
-          <TouchableOpacity
-            style={styles.buyButton}
-            activeOpacity={0.85}
-            onPress={() => onBuy?.(quest)}
-          >
-            <LinearGradient
-              colors={["#FF7A2E", "#FE5B01"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.buyButtonGradient}
-            >
-              <Ionicons name="lock-open" size={13} color="#FFFFFF" />
-              <Text style={styles.buyButtonText}>BUY</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        ) : variant === "skipped" ? (
+        {variant === "skipped" ? (
           <TouchableOpacity style={styles.undoButton} onPress={() => onReset(quest.id)}>
             <Ionicons name="refresh-outline" size={16} color="#A1A1AA" />
             <Text style={styles.undoButtonText}>Reset</Text>
@@ -286,9 +225,6 @@ const styles = StyleSheet.create({
   },
   questCardDisabled: {
     opacity: 0.45,
-  },
-  questCardLocked: {
-    borderColor: "rgba(254, 91, 1, 0.35)",
   },
   questImageWrapper: {
     height: 115,
@@ -337,18 +273,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
-  },
-  lockedPriceBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(254, 91, 1, 0.2)",
-    borderColor: "rgba(254, 91, 1, 0.4)",
-  },
-  lockedPriceText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 13,
-    color: "#FE5B01",
   },
   reviewBadge: {
     flexDirection: "row",
@@ -426,13 +350,6 @@ const styles = StyleSheet.create({
     color: "#A1A1AA",
     letterSpacing: 0.8,
   },
-  lockedCategoryPill: {
-    backgroundColor: "rgba(254, 91, 1, 0.15)",
-    borderColor: "rgba(254, 91, 1, 0.35)",
-  },
-  lockedCategoryPillText: {
-    color: "#FE5B01",
-  },
   routineBadgeInline: {
     flexDirection: "row",
     alignItems: "center",
@@ -449,13 +366,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: "#FFFFFF",
     letterSpacing: 0.2,
-  },
-  lockedDescription: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 12,
-    color: "#71717A",
-    marginTop: 4,
-    lineHeight: 16,
   },
   targetValueBox: {
     backgroundColor: "#18181B",
@@ -487,23 +397,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     fontSize: 12,
     color: "#A1A1AA",
-  },
-  buyButton: {
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  buyButtonGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  buyButtonText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 12,
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
   },
   creamSquareTickButton: {
     width: 30,

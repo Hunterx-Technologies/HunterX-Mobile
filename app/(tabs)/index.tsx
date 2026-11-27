@@ -31,7 +31,6 @@ import { Screen } from '@/components/common/Screen';
 import { ExactMedalIcon } from '@/components/common/ExactMedalIcon';
 import { MissionResultsScreen } from '@/components/features/missions/MissionResultsScreen';
 import { QuestListCard } from '@/components/features/missions/QuestListCard';
-import { PaidTaskPurchaseModal } from '@/components/features/missions/PaidTaskPurchaseModal';
 import { LootDropModal } from '@/components/features/loot/LootDropModal';
 import { QuestActionModal } from '@/components/features/missions/QuestActionModal';
 import { ProofSubmitModal } from '@/components/features/missions/ProofSubmitModal';
@@ -80,7 +79,6 @@ function mapTasksToday(data: TasksTodayData): QuestItem[] {
     ...(data.daily || []).map((item) => mapTaskToQuest(item, 'daily')),
     ...(data.weekly || []).map((item) => mapTaskToQuest(item, 'weekly')),
     ...(data.monthly || []).map((item) => mapTaskToQuest(item, 'monthly')),
-    ...(data.locked || []).map((item) => mapTaskToQuest(item, 'locked')),
   ];
 }
 
@@ -190,8 +188,6 @@ export default function MissionsHomeScreen() {
   const [selectedQuest, setSelectedQuest] = useState<QuestItem | null>(null);
   /** The proof quest whose upload sheet is open. */
   const [proofQuest, setProofQuest] = useState<QuestItem | null>(null);
-  const [selectedBuyQuest, setSelectedBuyQuest] = useState<QuestItem | null>(null);
-  const [buyModalVisible, setBuyModalVisible] = useState(false);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [dayCompleteModalVisible, setDayCompleteModalVisible] = useState(false);
   const [routineModalVisible, setRoutineModalVisible] = useState(false);
@@ -375,7 +371,6 @@ export default function MissionsHomeScreen() {
       : user?.weeklyStreak ?? user?.user_progression?.weekly_streak ?? Math.min(displayStreak, 7));
 
   const dailyQuests = quests.filter((q) => q.type === 'daily');
-  const lockedQuests = quests.filter((q) => q.status === 'locked' || q.type === 'locked');
 
   const todoQuests = quests.filter((q) => q.status === 'todo');
   const doneQuests = quests.filter((q) => q.status === 'done' || q.status === 'partial');
@@ -484,8 +479,7 @@ export default function MissionsHomeScreen() {
     !dropVisible &&
     !actionModalVisible &&
     !proofQuest &&
-    !routineModalVisible &&
-    !buyModalVisible;
+    !routineModalVisible;
   useEffect(() => {
     if (!tutorialReady || !userIdKey || tutorialCheckedForRef.current === userIdKey) return;
     let cancelled = false;
@@ -685,19 +679,7 @@ export default function MissionsHomeScreen() {
     }
   }, [handleCompleteTask, showDeletionPendingNotice]);
 
-  const handleOpenBuyModal = useCallback((quest: QuestItem) => {
-    setSelectedBuyQuest(quest);
-    setBuyModalVisible(true);
-  }, []);
-
-  const handleConfirmPurchase = useCallback((quest: QuestItem) => {
-    setBuyModalVisible(false);
-    showHomeErrorToast('Payment Coming Soon', `Checkout for "${quest.title}" (₹${quest.price ?? 499}) will be available in the upcoming release.`);
-  }, []);
-
   const handleDirectSkip = useCallback((questId: string) => {
-    // Paid quests can't be skipped.
-    if (questsRef.current.find((q) => q.id === questId)?.is_paid) return;
     handleCompleteTask(questId, 'SKIPPED');
   }, [handleCompleteTask]);
 
@@ -1072,26 +1054,6 @@ export default function MissionsHomeScreen() {
                         ))}
                       </>
                     )}
-
-                    {/* SPECIAL OFFERS (LOCKED PAID TASKS) */}
-                    {lockedQuests.length > 0 && (
-                      <>
-                        <Text style={[styles.sectionMonoLabel, { marginTop: 24 }]}>SPECIAL OFFERS</Text>
-                        {lockedQuests.map((quest) => (
-                          <QuestListCard
-                            actionsDisabled={deletionPending}
-                            key={quest.id}
-                            quest={quest}
-                            variant="locked"
-                            proteinGoal={user?.daily_protein_goal}
-                            onComplete={handleOpenQuestActions}
-                            onSkip={handleDirectSkip}
-                            onReset={handleResetQuest}
-                            onBuy={handleOpenBuyModal}
-                          />
-                        ))}
-                      </>
-                    )}
                   </>
                 )}
               </>
@@ -1254,12 +1216,6 @@ export default function MissionsHomeScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
       {/* Quest Action Selection Modal (Partial, Skip, Complete) */}
-      <PaidTaskPurchaseModal
-        visible={buyModalVisible}
-        quest={selectedBuyQuest}
-        onClose={() => setBuyModalVisible(false)}
-        onConfirmPurchase={handleConfirmPurchase}
-      />
       <ProofSubmitModal
         visible={!!proofQuest}
         questId={proofQuest?.id ?? ''}

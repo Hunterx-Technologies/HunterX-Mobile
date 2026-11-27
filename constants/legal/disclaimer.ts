@@ -64,12 +64,6 @@ export const DISCLAIMER: LegalDocument = {
       ],
     },
     {
-      heading: 'Paid quests',
-      paragraphs: [
-        'A paid quest gives you access to that quest’s content and its reward for the period shown at purchase. Payment does not guarantee any fitness result. Prices, refunds and access are explained at the time of purchase.',
-      ],
-    },
-    {
       heading: 'Photos and proof you submit',
       paragraphs: [
         'Some quests ask for photo proof. Only upload photos you have the right to share, and do not include other people without their consent. Approval of proof is at our discretion, and XP or rewards are only given once proof is approved.',

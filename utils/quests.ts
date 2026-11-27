@@ -12,13 +12,13 @@ export interface QuestItem {
   category: string;
   xpReward: number;
   xpPartial?: number;
-  type: 'daily' | 'weekly' | 'monthly' | 'locked';
+  type: 'daily' | 'weekly' | 'monthly';
   /** Routine task the hunter chose (shown as "Routine"); other daily tasks show as "Daily". */
   isRoutine?: boolean;
   /** A built-in daily task (sleep, water, protein, steps). Admins can rename these, so match them by category (tag), not title. */
   isBuiltIn?: boolean;
   image: any;
-  status: 'todo' | 'done' | 'partial' | 'skipped' | 'locked';
+  status: 'todo' | 'done' | 'partial' | 'skipped';
   earnedXp?: number;
   hasStatusPopup?: boolean;
   imageHeight?: number;
@@ -28,9 +28,6 @@ export interface QuestItem {
   period_start?: string;
   period_end?: string;
   end_date?: string;
-  price?: number;
-  currency?: string;
-  is_paid?: boolean;
   /** Photos needed to complete it (0 or missing = a normal quest). */
   proofCount?: number;
   /** Proof quests: waiting on the admin, sent back for new photos, or rejected. */
@@ -51,7 +48,7 @@ function addDaysToIso(dateStr: string, days: number): string {
 
 export function mapTaskToQuest(
   item: TaskItem,
-  type: 'daily' | 'weekly' | 'monthly' | 'locked'
+  type: 'daily' | 'weekly' | 'monthly'
 ): QuestItem {
   const tagUpper = item.tag?.toUpperCase() || '';
 
@@ -60,7 +57,7 @@ export function mapTaskToQuest(
   // full-resolution original (see services/media/cloudinary.ts).
   const image = item.image_url ? { uri: optimizeCloudinaryUrl(item.image_url) } : null;
 
-  let status: 'todo' | 'done' | 'partial' | 'skipped' | 'locked' = 'todo';
+  let status: 'todo' | 'done' | 'partial' | 'skipped' = 'todo';
   let reviewStatus: QuestItem['reviewStatus'];
   // Proof quests: submitted proof sits with the done ones (it counts for
   // today's streak) until the admin decides; a resubmit request reopens it.
@@ -78,8 +75,6 @@ export function mapTaskToQuest(
     status = 'partial';
   } else if (item.status === 'SKIPPED') {
     status = 'skipped';
-  } else if (item.status === 'LOCKED' || type === 'locked') {
-    status = 'locked';
   }
 
   let targetValue: string | undefined = undefined;
@@ -106,7 +101,7 @@ export function mapTaskToQuest(
     id: item.id,
     title: item.title,
     description: item.description,
-    category: item.tag || (type === 'locked' ? 'PREMIUM' : 'QUEST'),
+    category: item.tag || 'QUEST',
     xpReward: item.xp_reward,
     xpPartial: item.xp_partial,
     type,
@@ -121,9 +116,6 @@ export function mapTaskToQuest(
     period_start: item.period_start,
     period_end,
     end_date: item.end_date ? item.end_date.slice(0, 10) : undefined,
-    price: item.price,
-    currency: item.currency || 'INR',
-    is_paid: item.is_paid,
     proofCount: item.proof_count ?? 0,
     reviewStatus,
     reviewNote: item.review_note ?? null,

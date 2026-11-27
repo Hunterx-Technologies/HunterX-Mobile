@@ -5,7 +5,7 @@ import type { StreakMilestoneUnlock, UserReward } from './reward';
  * IN_REVIEW (no XP yet); the admin approves (→ COMPLETED), asks for new photos (→ RESUBMIT)
  * or rejects it for good (→ REJECTED).
  */
-export type TaskStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED' | 'SKIPPED' | 'LOCKED' | 'IN_REVIEW' | 'RESUBMIT' | 'REJECTED';
+export type TaskStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED' | 'SKIPPED' | 'IN_REVIEW' | 'RESUBMIT' | 'REJECTED';
 export type TaskType = 'DAILY_FIXED' | 'DAILY_ADMIN' | 'WEEKLY' | 'MONTHLY';
 
 export interface TaskItem {
@@ -27,14 +27,11 @@ export interface TaskItem {
   is_recurring: boolean;
   start_date?: string;
   end_date?: string;
-  is_paid?: boolean;
   status: TaskStatus;
   progress_value: number | null;
   xp_earned: number;
   completed_at: string | null;
   period_start?: string; // For MONTHLY tasks
-  price?: number; // For locked tasks
-  currency?: string; // e.g. "INR"
   /** Photos needed to complete it; 0 (or missing on older backends) = a normal task. */
   proof_count?: number;
   /** The photos sent, while IN_REVIEW / after a decision. */
@@ -43,19 +40,12 @@ export interface TaskItem {
   review_note?: string | null;
 }
 
-export interface LockedTaskItem extends TaskItem {
-  status: 'LOCKED';
-  price: number;
-  currency: string;
-}
-
 export interface TasksTodayData {
   date: string;
   week_start: string;
   daily: TaskItem[];
   weekly: TaskItem[];
   monthly: (TaskItem & { period_start?: string })[];
-  locked: LockedTaskItem[];
   daily_xp_earned: number;
   daily_xp_possible: number;
   weekly_xp_earned: number;
