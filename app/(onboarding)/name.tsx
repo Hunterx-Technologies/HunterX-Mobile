@@ -22,7 +22,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { colors } from '@/theme/colors';
 import { fontFamilies } from '@/theme/typography';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
-import { cleanName } from '@/utils/textInput';
+import { HUNTER_NAME_MAX, HUNTER_NAME_RULE, hunterNameError, isValidHunterName } from '@/utils/textInput';
 import { useScrollToTopOnFocus } from '@/hooks/useScrollToTopOnFocus';
 
 const TOTAL_STEPS = 9;
@@ -85,8 +85,12 @@ export default function OnboardingNameScreen() {
         ],
     });
 
+    // Exactly what was typed is kept and checked — never cleaned up to fit.
+    const nameError = hunterNameError(hunterName);
+    const canContinue = isValidHunterName(hunterName);
+
     const handleContinue = () => {
-        if (!hunterName.trim()) return;
+        if (!canContinue) return;
         setHunterNameStore(hunterName.trim());
         // Navigate to step 2: biometrics baseline
         router.push('/(onboarding)/biometrics');
@@ -136,6 +140,7 @@ export default function OnboardingNameScreen() {
                             style={[
                                 styles.inputWrapper,
                                 isFocused && styles.inputWrapperFocused,
+                                nameError && styles.inputWrapperError,
                             ]}
                         >
                             <Feather
@@ -149,19 +154,27 @@ export default function OnboardingNameScreen() {
                                 placeholder="Enter your hunter name"
                                 placeholderTextColor="#52525B"
                                 value={hunterName}
-                                onChangeText={(t) => setHunterName(cleanName(t))}
+                                onChangeText={setHunterName}
                                 onFocus={() => setIsFocused(true)}
                                 onBlur={() => setIsFocused(false)}
-                                maxLength={24}
+                                maxLength={HUNTER_NAME_MAX}
+                                accessibilityHint={HUNTER_NAME_RULE}
                                 autoCapitalize="none"
                                 autoCorrect={false}
                             />
                             {hunterName.length > 0 && (
                                 <Text style={styles.charCount}>
-                                    {hunterName.length}/24
+                                    {hunterName.length}/{HUNTER_NAME_MAX}
                                 </Text>
                             )}
                         </View>
+                        {nameError ? (
+                            <Text style={styles.nameError} accessibilityRole="alert">
+                                {nameError}
+                            </Text>
+                        ) : (
+                            <Text style={styles.nameHint}>{HUNTER_NAME_RULE}</Text>
+                        )}
 
                         <View style={styles.inviteCode}>
                             <InviteCodeInput value={inviteCode} onChangeValue={setInviteCode} />
@@ -175,7 +188,7 @@ export default function OnboardingNameScreen() {
                         label="CLAIM YOUR NAME"
                         onPress={handleContinue}
                         variant="primary"
-                        disabled={!hunterName.trim()}
+                        disabled={!canContinue}
                         style={styles.ctaButton}
                         labelStyle={styles.ctaLabel}
                     />
@@ -264,8 +277,25 @@ const styles = StyleSheet.create({
         borderColor: colors.accentGold,
         backgroundColor: '#1A1A1E',
     },
+    inputWrapperError: {
+        borderColor: '#F87171',
+    },
     inputIcon: {
         marginRight: 12,
+    },
+    nameHint: {
+        fontFamily: fontFamilies.regular,
+        fontSize: 12,
+        lineHeight: 17,
+        color: '#71717A',
+        marginTop: -8,
+    },
+    nameError: {
+        fontFamily: fontFamilies.medium,
+        fontSize: 12,
+        lineHeight: 17,
+        color: '#F87171',
+        marginTop: -8,
     },
     input: {
         flex: 1,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { fontFamilies } from '@/theme/typography';
-import { cleanName } from '@/utils/textInput';
+import { HUNTER_NAME_MAX, HUNTER_NAME_RULE, hunterNameError } from '@/utils/textInput';
 
 export interface EditNameModalProps {
   visible: boolean;
@@ -22,10 +22,14 @@ export function EditNameModal({
     setName(initialName);
   }, [initialName, visible]);
 
+  // Kept exactly as typed. A new name must be letters only; the current one
+  // is fine as it is, even if it predates the rule.
+  const unchanged = name.trim() === initialName.trim();
+  const error = unchanged ? null : name.trim() ? hunterNameError(name) : 'Enter a username.';
+
   const handleSave = () => {
-    // Re-clean in case the pre-filled name predates the name rules.
-    const finalName = cleanName(name).trim();
-    if (!finalName) return;
+    const finalName = name.trim();
+    if (!finalName || error) return;
     onSave(finalName);
     onClose();
   };
@@ -41,13 +45,20 @@ export function EditNameModal({
         <View style={styles.modalCard}>
           <Text style={styles.modalTitle}>Edit Display Name</Text>
           <TextInput
-            style={styles.modalInput}
+            style={[styles.modalInput, error && styles.modalInputError]}
             value={name}
-            onChangeText={(t) => setName(cleanName(t))}
+            onChangeText={setName}
+            maxLength={Math.max(HUNTER_NAME_MAX, initialName.length)}
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityHint={HUNTER_NAME_RULE}
             placeholder="Enter your hunter name"
             placeholderTextColor="#71717A"
             autoFocus
           />
+          <Text style={error ? styles.nameError : styles.nameHint} accessibilityRole={error ? 'alert' : undefined}>
+            {error ?? HUNTER_NAME_RULE}
+          </Text>
           <View style={styles.modalActionRow}>
             <TouchableOpacity
               style={[styles.modalBtn, styles.cancelBtn]}
@@ -57,8 +68,9 @@ export function EditNameModal({
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.modalBtn, styles.saveBtn]}
+              style={[styles.modalBtn, styles.saveBtn, !!error && styles.saveBtnDisabled]}
               onPress={handleSave}
+              disabled={!!error || !name.trim()}
               activeOpacity={0.7}
             >
               <Text style={styles.saveBtnText}>Save</Text>
@@ -108,6 +120,30 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#FFFFFF',
     marginBottom: 20,
+  },
+  modalInputError: {
+    borderColor: '#F87171',
+  },
+  nameHint: {
+    alignSelf: 'stretch',
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#71717A',
+    marginTop: -12,
+    marginBottom: 16,
+  },
+  nameError: {
+    alignSelf: 'stretch',
+    fontFamily: fontFamilies.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#F87171',
+    marginTop: -12,
+    marginBottom: 16,
+  },
+  saveBtnDisabled: {
+    opacity: 0.5,
   },
   modalActionRow: {
     flexDirection: 'row',

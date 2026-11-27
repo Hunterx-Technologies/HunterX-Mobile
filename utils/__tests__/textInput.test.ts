@@ -1,4 +1,4 @@
-import { cleanFreeText, cleanName, digitsOnly, noEmoji, noSpaces } from '../textInput';
+import { cleanFreeText, cleanName, digitsOnly, hunterNameError, HUNTER_NAME_ERROR, HUNTER_NAME_RULE, isValidHunterName, noEmoji, noSpaces } from '../textInput';
 
 describe('noEmoji', () => {
   it.each([
@@ -62,5 +62,27 @@ describe('noSpaces / digitsOnly', () => {
   });
   it('codes keep digits only', () => {
     expect(digitsOnly('12 3😀45-6')).toBe('123456');
+  });
+});
+
+describe('hunterNameError (the hunter name rule: English letters only, never cleaned up)', () => {
+  it.each(['Shadow', 'hunter', 'ABC', 'a', '  Shadow  '])('accepts %j', (name) => {
+    expect(hunterNameError(name)).toBeNull();
+    expect(isValidHunterName(name)).toBe(true);
+  });
+  it.each(['hxtest01', 'hx_test', 'John Smith', 'hunter!', "O'Neil", 'Zoë', 'தமிழ்', 'hunter😀', 'a-b', '123'])('rejects %j with the letters-only message', (name) => {
+    expect(hunterNameError(name)).toBe(HUNTER_NAME_ERROR);
+    expect(isValidHunterName(name)).toBe(false);
+  });
+  it('empty is not an error yet, but not saveable either', () => {
+    expect(hunterNameError('   ')).toBeNull();
+    expect(isValidHunterName('   ')).toBe(false);
+  });
+  it('more than 24 letters is rejected', () => {
+    expect(hunterNameError('a'.repeat(25))).toMatch(/at most 24/);
+  });
+  it('shows the rule text the spec asks for', () => {
+    expect(HUNTER_NAME_RULE).toBe('Username can contain letters only. Numbers, spaces and special characters are not allowed.');
+    expect(HUNTER_NAME_ERROR).toBe('Please use letters only for your username.');
   });
 });

@@ -21,7 +21,7 @@ import { fontFamilies } from '@/theme/typography';
 import { AvatarSelectionModal, getAvatarSource } from './AvatarSelectionModal';
 import { useAvatarsReady } from '@/services/api/avatar.service';
 import { DEFAULT_BLURHASH } from '@/services/media/cloudinary';
-import { cleanName } from '@/utils/textInput';
+import { HUNTER_NAME_MAX, HUNTER_NAME_RULE, hunterNameError } from '@/utils/textInput';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -234,8 +234,14 @@ export function EditProfileModal({
   const isHeightChanged = Math.abs(currentHeightCm - initialHeightCm) > 1;
   const isWeightChanged = Math.abs(currentWeightKg - initialWeightKg) > 0.3;
 
+  // The name is kept exactly as typed. A changed name must follow the rule
+  // (letters only); an unchanged one is fine even if it predates the rule,
+  // so saving other fields never forces a rename.
+  const nameChanged = profileForm.name.trim() !== initialForm.name.trim();
+  const nameError = nameChanged ? (profileForm.name.trim() ? hunterNameError(profileForm.name) : 'Enter a username.') : null;
+
   const isProfileChanged =
-    profileForm.name.trim() !== initialForm.name.trim() ||
+    nameChanged ||
     profileForm.gender !== initialForm.gender ||
     profileForm.birthday !== initialForm.birthday ||
     isHeightChanged ||
@@ -298,9 +304,8 @@ export function EditProfileModal({
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
-    // Re-clean in case the pre-filled name predates the name rules.
-    const finalName = cleanName(profileForm.name).trim();
-    if (!finalName || isSaving) return;
+    const finalName = profileForm.name.trim();
+    if (!finalName || nameError || isSaving) return;
     try {
       setIsSaving(true);
       await onSave({
@@ -352,8 +357,8 @@ export function EditProfileModal({
           <Text style={styles.editProfileTitle}>Edit Profile</Text>
           <TouchableOpacity
             style={styles.editSaveBtn}
-            onPress={isProfileChanged && !isSaving ? handleSave : undefined}
-            disabled={!isProfileChanged || isSaving}
+            onPress={isProfileChanged && !nameError && !isSaving ? handleSave : undefined}
+            disabled={!isProfileChanged || !!nameError || isSaving}
             activeOpacity={0.7}
           >
             {isSaving ? (
@@ -362,7 +367,7 @@ export function EditProfileModal({
               <Text
                 style={[
                   styles.saveActionText,
-                  !isProfileChanged && styles.saveActionTextDisabled,
+                  (!isProfileChanged || !!nameError) && styles.saveActionTextDisabled,
                 ]}
               >
                 SAVE
@@ -408,7 +413,7 @@ export function EditProfileModal({
           {/* Form Fields Section */}
           <View style={styles.modernFormContainer}>
             {/* Name field */}
-            <View style={styles.modernFormRow}>
+            <View style={[styles.modernFormRow, nameError && styles.modernFormRowError]}>
               <View style={styles.modernRowLeft}>
                 <Ionicons
                   name="person-outline"
@@ -421,10 +426,19 @@ export function EditProfileModal({
               <TextInput
                 style={styles.modernRowInput}
                 value={profileForm.name}
-                onChangeText={(val) => setProfileForm({ ...profileForm, name: cleanName(val) })}
+                onChangeText={(val) => setProfileForm({ ...profileForm, name: val })}
+                maxLength={Math.max(HUNTER_NAME_MAX, initialForm.name.length)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                accessibilityHint={HUNTER_NAME_RULE}
                 placeholderTextColor="#72727D"
               />
             </View>
+            {nameError ? (
+              <Text style={styles.nameError} accessibilityRole="alert">{nameError}</Text>
+            ) : nameChanged ? (
+              <Text style={styles.nameHint}>{HUNTER_NAME_RULE}</Text>
+            ) : null}
 
             {/* Gender field */}
             <TouchableOpacity
@@ -1044,7 +1058,8 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     overflow: 'hidden',
-    backgroundColor: '#6B7280',
+    // Avatars are transparent PNGs; black fills the circle behind them.
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1052,6 +1067,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 50,
+    backgroundColor: '#000000',
   },
   editPencilBadge: {
     position: 'absolute',
@@ -1072,6 +1088,25 @@ const styles = StyleSheet.create({
   modernFormContainer: {
     gap: 12,
     marginVertical: 10,
+  },
+  modernFormRowError: {
+    borderColor: '#F87171',
+  },
+  nameHint: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#71717A',
+    marginTop: -6,
+    paddingHorizontal: 4,
+  },
+  nameError: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#F87171',
+    marginTop: -6,
+    paddingHorizontal: 4,
   },
   modernFormRow: {
     flexDirection: 'row',

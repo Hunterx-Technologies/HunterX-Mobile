@@ -2,8 +2,9 @@
 // spaces) and emoji can't be typed anywhere in the app. Pick the one that
 // fits the field:
 //
-//   cleanName      names: letters and single spaces only (no digits, symbols,
-//                  emoji or leading spaces)
+//   cleanName      free-form names: letters and single spaces only (no digits,
+//                  symbols, emoji or leading spaces). Not for the hunter
+//                  name — that one is validated, never cleaned (hunterNameError)
 //   cleanFreeText  messages/search: no emoji, no leading spaces or blank
 //                  lines; the text itself (spacing, line breaks) is kept
 //   noSpaces       emails, new passwords: no emoji, no spaces at all
@@ -43,6 +44,32 @@ export function cleanName(text: string): string {
     .replace(NOT_NAME_CHAR, '')
     .replace(/^ +/, '')
     .replace(/ {2,}/g, ' ');
+}
+
+// ── Hunter name (users.name) ────────────────────────────────────
+// English letters only: A–Z and a–z. No digits, spaces, underscores or
+// other characters. Hunter-name fields keep exactly what is typed (they no
+// longer run cleanName, which silently dropped characters) and show
+// HUNTER_NAME_RULE under the field and hunterNameError() when it breaks the
+// rule. The backend applies the same rule (HunterX-Backend
+// src/utils/hunterName.js) and keeps names that predate it unchanged.
+
+export const HUNTER_NAME_MAX = 24;
+export const HUNTER_NAME_RULE = 'Username can contain letters only. Numbers, spaces and special characters are not allowed.';
+export const HUNTER_NAME_ERROR = 'Please use letters only for your username.';
+
+/** null when `name` (trimmed) is a valid hunter name, else the message to show. Empty → null: nothing to complain about yet. */
+export function hunterNameError(name: string): string | null {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  if (!/^[A-Za-z]+$/.test(trimmed)) return HUNTER_NAME_ERROR;
+  if (trimmed.length > HUNTER_NAME_MAX) return `Username can be at most ${HUNTER_NAME_MAX} letters.`;
+  return null;
+}
+
+/** A hunter name that can be saved: not empty and following the rule. */
+export function isValidHunterName(name: string): boolean {
+  return name.trim().length > 0 && hunterNameError(name) === null;
 }
 
 /** Drops emoji, leading spaces and blank lines; keeps everything after them. */
