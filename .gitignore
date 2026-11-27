@@ -51,3 +51,7 @@ yarn-error.*
 
 # Editor settings
 .vscode/
+
+# Gradle output of local Expo modules (generated on every build)
+modules/*/android/build/
+modules/*/android/.gradle/
