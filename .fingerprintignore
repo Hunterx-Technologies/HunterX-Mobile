@@ -1,0 +1,21 @@
+# Files that exist only on this machine and must not change the runtime
+# version. If they do, the fingerprint here differs from the one EAS
+# calculates and builds fail at "Configure expo-updates" (runtime version
+# mismatch). Appended to @expo/fingerprint's default ignores.
+
+# Eclipse project files the VS Code Java extension writes into every
+# Gradle project it finds (node_modules and modules/).
+**/.classpath
+**/.project
+**/.settings/**
+**/.factorypath
+**/android/bin/**
+**/android-expo/bin/**
+
+# Gradle output outside android/ (the defaults only cover android/build).
+**/android-expo/build/**
+**/android-expo/.gradle/**
+**/android-expo/.cxx/**
+**/*-gradle-plugin/build/**
+**/*-gradle-plugin/.gradle/**
+**/*-gradle-plugin/bin/**
