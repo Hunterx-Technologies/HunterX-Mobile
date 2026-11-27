@@ -131,3 +131,32 @@ it('waits for a screen that is not mounted yet (cold start)', () => {
   unregister.push(registerCelebrationPresenter('reward', (_o, done) => shown.push({ kind: 'reward', done })));
   expect(shown.map((s) => s.kind)).toEqual(['reward']);
 });
+
+// D10: "Got it!" on a reward card opens the wallet through
+// whenCelebrationsIdle. Until that has run, the store reports idlePending,
+// so Home's Day Complete summary doesn't open over the wallet.
+it('reports idlePending from "Got it!" until the wallet has been opened', () => {
+  showReward(reward('r1'));
+  jest.advanceTimersByTime(0);
+  expect(useCelebrationStore.getState().idlePending).toBe(false);
+
+  const openWallet = jest.fn();
+  shown[0].done();
+  whenCelebrationsIdle(openWallet);
+  expect(useCelebrationStore.getState().idlePending).toBe(true);
+  expect(openWallet).not.toHaveBeenCalled();
+
+  jest.advanceTimersByTime(500);
+  expect(openWallet).toHaveBeenCalledTimes(1);
+  expect(useCelebrationStore.getState().idlePending).toBe(false);
+});
+
+it('idlePending stays on while a hold keeps the wallet from opening, and resetCelebrations clears it', () => {
+  setCelebrationHold('home', true);
+  whenCelebrationsIdle(jest.fn());
+  jest.advanceTimersByTime(2000);
+  expect(useCelebrationStore.getState().idlePending).toBe(true);
+  resetCelebrations();
+  setCelebrationHold('home', false);
+  expect(useCelebrationStore.getState().idlePending).toBe(false);
+});

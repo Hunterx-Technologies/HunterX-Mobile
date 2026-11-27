@@ -309,7 +309,9 @@ export default function MissionsHomeScreen() {
   // Celebrations (level-up, badge, reward…) wait while one of home's own
   // popups is up, instead of opening on top of it. Day Complete waits its
   // turn in the other direction: it opens once nothing is celebrating.
-  const celebrating = useCelebrationStore((s) => s.current !== null || s.queue.length > 0);
+  // idlePending: a closing celebration is about to open another screen (the
+  // reward card's "Got it!" opens the wallet) — wait for that too.
+  const celebrating = useCelebrationStore((s) => s.current !== null || s.queue.length > 0 || s.idlePending);
   // The first-visit app tour covers the screen; Home's own popups wait for it.
   const tutorialActive = useTutorialStore((s) => s.active);
   // Counts as idle a moment after the last celebration closes: iOS can't
@@ -324,7 +326,12 @@ export default function MissionsHomeScreen() {
     const timer = setTimeout(() => setCelebrationsIdle(true), MODAL_GAP_MS);
     return () => clearTimeout(timer);
   }, [celebrating]);
-  const showDayComplete = dayCompleteModalVisible && celebrationsIdle;
+  // Day Complete is a native Modal, which covers every screen — so it only
+  // shows while Home is the screen in front. When "Got it!" on a reward card
+  // opens the wallet, it waits there and opens once the hunter is back on
+  // Home, instead of covering the card they are about to scratch.
+  const isHomeFocused = useIsFocused();
+  const showDayComplete = dayCompleteModalVisible && celebrationsIdle && isHomeFocused;
   // Bumped on every open so the screen is mounted fresh — if a previous
   // open never made it onto the screen, Celebrate still opens it.
   const [dayCompleteKey, setDayCompleteKey] = useState(0);
@@ -445,7 +452,6 @@ export default function MissionsHomeScreen() {
 
   // Only opens while Home is the screen in front — a clear that lands while
   // the hunter is on another tab waits until they come back to Home.
-  const isHomeFocused = useIsFocused();
   const otherHomeModalOpen =
     dropVisible || actionModalVisible || showBlackIntroOverlay || !!proofQuest || tutorialActive;
   useEffect(() => {

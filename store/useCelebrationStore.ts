@@ -45,11 +45,18 @@ const GAP_MS = 450;
 interface CelebrationState {
   queue: Celebration[];
   current: Celebration | null;
+  /**
+   * Something queued with whenCelebrationsIdle hasn't run yet — e.g. the
+   * reward card's "Got it!" is about to open the wallet. Home's own popups
+   * (Day Complete) wait for it, so they don't open over the screen it opens.
+   */
+  idlePending: boolean;
 }
 
 export const useCelebrationStore = create<CelebrationState>(() => ({
   queue: [],
   current: null,
+  idlePending: false,
 }));
 
 const presenters: { [K in CelebrationKind]?: CelebrationPresenter<K> } = {};
@@ -154,6 +161,7 @@ export function enqueueCelebration(item: Celebration) {
 function runIdleCallbacks() {
   const callbacks = idleCallbacks;
   idleCallbacks = [];
+  if (callbacks.length) useCelebrationStore.setState({ idlePending: false });
   callbacks.forEach((cb) => cb());
 }
 
@@ -164,6 +172,7 @@ function runIdleCallbacks() {
  */
 export function whenCelebrationsIdle(cb: () => void) {
   idleCallbacks.push(cb);
+  useCelebrationStore.setState({ idlePending: true });
   setTimeout(advance, GAP_MS);
 }
 
@@ -187,5 +196,5 @@ export function resetCelebrations() {
   batchScheduled = false;
   idleCallbacks = [];
   queuedRewardIds.clear();
-  useCelebrationStore.setState({ queue: [], current: null });
+  useCelebrationStore.setState({ queue: [], current: null, idlePending: false });
 }
