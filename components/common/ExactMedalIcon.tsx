@@ -20,7 +20,6 @@ export function ExactMedalIcon({
         fill={color}
       />
 
-      {/* Two vertical inner cutout bars */}
       <Path
         d="M 25 13 V 30 M 39 13 V 30"
         stroke={bgColor}
