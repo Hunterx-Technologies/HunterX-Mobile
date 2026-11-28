@@ -59,6 +59,8 @@ export const StreakBadgeImage: React.FC<{
   />
 );
 
+// In streak order. Ids are stable (the first seven kept theirs when the ten
+// in between were added), so they don't follow the order.
 export const STREAK_BADGES_DATA: StreakBadgeItem[] = [
   {
     id: 1,
@@ -75,11 +77,25 @@ export const STREAK_BADGES_DATA: StreakBadgeItem[] = [
     imageSource: badgeImage(STREAK_BADGE_ASSETS.iron_resolve),
   },
   {
+    id: 8,
+    dayNumber: 21,
+    daysText: '21 days',
+    title: 'Habit Forged',
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.habit_forged),
+  },
+  {
     id: 3,
     dayNumber: 30,
     daysText: '30 days',
     title: 'Shadow Oath',
     imageSource: badgeImage(STREAK_BADGE_ASSETS.shadow_oath),
+  },
+  {
+    id: 9,
+    dayNumber: 45,
+    daysText: '45 days',
+    title: 'Night Vigil',
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.night_vigil),
   },
   {
     id: 4,
@@ -89,11 +105,32 @@ export const STREAK_BADGES_DATA: StreakBadgeItem[] = [
     imageSource: badgeImage(STREAK_BADGE_ASSETS.phantom_discipline),
   },
   {
+    id: 10,
+    dayNumber: 75,
+    daysText: '75 days',
+    title: 'Blade Unbroken',
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.blade_unbroken),
+  },
+  {
     id: 5,
     dayNumber: 90,
     daysText: '90 days',
     title: 'Sovereign Will',
     imageSource: badgeImage(STREAK_BADGE_ASSETS.sovereign_will),
+  },
+  {
+    id: 11,
+    dayNumber: 120,
+    daysText: '120 days',
+    title: 'Crimson Resolve',
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.crimson_resolve),
+  },
+  {
+    id: 12,
+    dayNumber: 150,
+    daysText: '150 days',
+    title: 'Steel Ascent',
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.steel_ascent),
   },
   {
     id: 6,
@@ -103,11 +140,46 @@ export const STREAK_BADGES_DATA: StreakBadgeItem[] = [
     imageSource: badgeImage(STREAK_BADGE_ASSETS.void_ascendant),
   },
   {
+    id: 13,
+    dayNumber: 250,
+    daysText: '250 days',
+    title: 'Abyss Walker',
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.abyss_walker),
+  },
+  {
+    id: 14,
+    dayNumber: 300,
+    daysText: '300 days',
+    title: 'Dragonbound Will',
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.dragonbound_will),
+  },
+  {
     id: 7,
     dayNumber: 365,
     daysText: '365 days',
     title: 'Eternal Hunter',
     imageSource: badgeImage(STREAK_BADGE_ASSETS.eternal_hunter),
+  },
+  {
+    id: 15,
+    dayNumber: 500,
+    daysText: '500 days',
+    title: 'Immortal Flame',
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.immortal_flame),
+  },
+  {
+    id: 16,
+    dayNumber: 730,
+    daysText: '730 days',
+    title: 'Undying Legend',
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.undying_legend),
+  },
+  {
+    id: 17,
+    dayNumber: 1000,
+    daysText: '1000 days',
+    title: 'Mythic Hunter',
+    imageSource: badgeImage(STREAK_BADGE_ASSETS.mythic_hunter),
   },
 ];
 

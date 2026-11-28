@@ -46,6 +46,16 @@ const BADGE_ACCENT: Record<number, string> = {
   5: '#FFC23D',
   6: '#8E5BFF',
   7: '#FFD27A',
+  8: '#4FD8FF',
+  9: '#7C8CFF',
+  10: '#B066FF',
+  11: '#FF4D4D',
+  12: '#D6E2F0',
+  13: '#7A5CFF',
+  14: '#FF8A2B',
+  15: '#FFC44D',
+  16: '#FFB020',
+  17: '#C08CFF',
 };
 
 /** Copy per badge: before (sealed) and after (unlocked). */
@@ -57,6 +67,16 @@ const BADGE_COPY: Record<number, { sealed: string; unlocked: string }> = {
   5: { sealed: 'Hold your streak for 90 days to break the seal.', unlocked: 'Ninety days. Your will rules your days.' },
   6: { sealed: 'Hold your streak for 200 days to break the seal.', unlocked: 'Two hundred days. You have risen past the void.' },
   7: { sealed: 'Hold your streak for 365 days to break the seal.', unlocked: 'A full year. You are the Eternal Hunter.' },
+  8: { sealed: 'Hold your streak for 21 days to break the seal.', unlocked: 'Three weeks in. The habit is forged.' },
+  9: { sealed: 'Hold your streak for 45 days to break the seal.', unlocked: 'Forty-five nights kept. You never miss a watch.' },
+  10: { sealed: 'Hold your streak for 75 days to break the seal.', unlocked: 'Seventy-five days. Your blade never dulls.' },
+  11: { sealed: 'Hold your streak for 120 days to break the seal.', unlocked: 'One hundred twenty days. Your resolve burns crimson.' },
+  12: { sealed: 'Hold your streak for 150 days to break the seal.', unlocked: 'One hundred fifty days. You climb like steel.' },
+  13: { sealed: 'Hold your streak for 250 days to break the seal.', unlocked: 'Two hundred fifty days. You walk the abyss unafraid.' },
+  14: { sealed: 'Hold your streak for 300 days to break the seal.', unlocked: 'Three hundred days. Your will binds dragons.' },
+  15: { sealed: 'Hold your streak for 500 days to break the seal.', unlocked: 'Five hundred days. Your flame will never die.' },
+  16: { sealed: 'Hold your streak for 730 days to break the seal.', unlocked: 'Two years unbroken. You are an undying legend.' },
+  17: { sealed: 'Hold your streak for 1000 days to break the seal.', unlocked: 'One thousand days. You are the stuff of myth.' },
 };
 
 const TAPS_TO_OPEN = 3;

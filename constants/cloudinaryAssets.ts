@@ -3,6 +3,8 @@
 // Automatically applies Cloudinary automatic format (WebP/AVIF) and quality compression
 // to reduce asset size by up to 90% and ensure blazing fast load times.
 
+import { env, isProductionApi } from '@/config/env';
+
 export const CLOUDINARY_ASSETS: Record<string, { uri: string }> = {
   active_campaign_bg: { uri: 'https://res.cloudinary.com/sc8zzixt/image/upload/f_auto,q_auto/v1787861185/hunterx/app-assets/active_campaign_bg.jpg' },
 
@@ -15,16 +17,34 @@ export const CLOUDINARY_ASSETS: Record<string, { uri: string }> = {
   screen: { uri: 'https://res.cloudinary.com/sc8zzixt/image/upload/f_auto,q_auto/v1787861237/hunterx/app-assets/screen.png' },
 };
 
-// Streak badge artwork (1024px originals). Kept out of CLOUDINARY_ASSETS so the
-// startup preload fetches them at STREAK_BADGE_WIDTH instead of full size.
+// Streak badge artwork (1024px originals), uploaded to both Cloudinary roots:
+// production reads hunterx/, UAT and local backends read hunterx-uat/ (the
+// backend's CLOUDINARY_FOLDER convention). Kept out of CLOUDINARY_ASSETS so
+// the startup preload fetches them at STREAK_BADGE_WIDTH instead of full size.
+// Versions are per root: re-uploading a badge means updating its pair here.
+const BADGE_ROOT = isProductionApi(env.apiUrl) ? 'hunterx' : 'hunterx-uat';
+const badge = (slug: string, prodVersion: string, uatVersion: string) => ({
+  uri: `https://res.cloudinary.com/sc8zzixt/image/upload/${BADGE_ROOT === 'hunterx' ? prodVersion : uatVersion}/${BADGE_ROOT}/app-assets/streak-badges/${slug}.png`,
+});
+
 export const STREAK_BADGE_ASSETS = {
-  ember_vow: { uri: 'https://res.cloudinary.com/sc8zzixt/image/upload/v1792567664/hunterx/app-assets/streak-badges/ember_vow.png' },
-  iron_resolve: { uri: 'https://res.cloudinary.com/sc8zzixt/image/upload/v1792567665/hunterx/app-assets/streak-badges/iron_resolve.png' },
-  shadow_oath: { uri: 'https://res.cloudinary.com/sc8zzixt/image/upload/v1792567666/hunterx/app-assets/streak-badges/shadow_oath.png' },
-  phantom_discipline: { uri: 'https://res.cloudinary.com/sc8zzixt/image/upload/v1792567668/hunterx/app-assets/streak-badges/phantom_discipline.png' },
-  sovereign_will: { uri: 'https://res.cloudinary.com/sc8zzixt/image/upload/v1792567669/hunterx/app-assets/streak-badges/sovereign_will.png' },
-  void_ascendant: { uri: 'https://res.cloudinary.com/sc8zzixt/image/upload/v1792567670/hunterx/app-assets/streak-badges/void_ascendant.png' },
-  eternal_hunter: { uri: 'https://res.cloudinary.com/sc8zzixt/image/upload/v1792567671/hunterx/app-assets/streak-badges/eternal_hunter.png' },
+  ember_vow: badge('ember_vow', 'v1795872300', 'v1795872302'),
+  iron_resolve: badge('iron_resolve', 'v1795872304', 'v1795872305'),
+  habit_forged: badge('habit_forged', 'v1795872307', 'v1795872310'),
+  shadow_oath: badge('shadow_oath', 'v1795872312', 'v1795872314'),
+  night_vigil: badge('night_vigil', 'v1795872316', 'v1795872318'),
+  phantom_discipline: badge('phantom_discipline', 'v1795872320', 'v1795872322'),
+  blade_unbroken: badge('blade_unbroken', 'v1795872324', 'v1795872326'),
+  sovereign_will: badge('sovereign_will', 'v1795872327', 'v1795872329'),
+  crimson_resolve: badge('crimson_resolve', 'v1795872331', 'v1795872333'),
+  steel_ascent: badge('steel_ascent', 'v1795872335', 'v1795872336'),
+  void_ascendant: badge('void_ascendant', 'v1795872338', 'v1795872340'),
+  abyss_walker: badge('abyss_walker', 'v1795872341', 'v1795872343'),
+  dragonbound_will: badge('dragonbound_will', 'v1795872344', 'v1795872346'),
+  eternal_hunter: badge('eternal_hunter', 'v1795872348', 'v1795872350'),
+  immortal_flame: badge('immortal_flame', 'v1795872351', 'v1795872353'),
+  undying_legend: badge('undying_legend', 'v1795872355', 'v1795872356'),
+  mythic_hunter: badge('mythic_hunter', 'v1795872359', 'v1795872361'),
 } as const;
 
 // Largest badge on screen is 260pt (the vault popup); 768px keeps it sharp at

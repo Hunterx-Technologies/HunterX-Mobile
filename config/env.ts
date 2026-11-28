@@ -13,9 +13,11 @@ const apiUrl = requireEnv('EXPO_PUBLIC_API_URL', process.env.EXPO_PUBLIC_API_URL
 // The website matching the API we talk to: production API → production
 // site; UAT (and local/LAN backends) → the UAT site. app.config.ts has the
 // same rule for the app-link host.
+export function isProductionApi(api: string): boolean {
+  return /^https:\/\/api\.hunterx\.co\.in(\/|$)/.test(api);
+}
 export function websiteHostFor(api: string): string {
-  const isProduction = /^https:\/\/api\.hunterx\.co\.in(\/|$)/.test(api);
-  return isProduction ? 'www.hunterx.co.in' : 'uat.hunterx.co.in';
+  return isProductionApi(api) ? 'www.hunterx.co.in' : 'uat.hunterx.co.in';
 }
 const websiteHost = websiteHostFor(apiUrl);
 
