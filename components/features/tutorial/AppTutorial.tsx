@@ -12,7 +12,6 @@ import Animated, {
   Easing,
   cancelAnimation,
   runOnJS,
-  useAnimatedProps,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -22,7 +21,7 @@ import Animated, {
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, Mask, RadialGradient, Rect, Stop, Circle } from 'react-native-svg';
+import Svg, { Defs, RadialGradient, Stop, Circle } from 'react-native-svg';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 
@@ -35,8 +34,8 @@ import {
   type TutorialRect,
 } from '@/store/useTutorialStore';
 import { TUTORIAL_STEPS, type TutorialScreen } from './tutorialSteps';
-
-const AnimatedRect = Animated.createAnimatedComponent(Rect);
+import { TutorialScratchDemo } from './TutorialScratchDemo';
+import { TutorialSpotlight } from './TutorialSpotlight';
 
 const ORANGE = '#FE5B01';
 const DIM = 'rgba(3, 3, 5, 0.80)';
@@ -373,27 +372,6 @@ function TutorialOverlay() {
   };
 
   const rootStyle = useAnimatedStyle(() => ({ opacity: overlay.value }));
-  const spotlightProps = useAnimatedProps(() => ({
-    x: hx.value,
-    y: hy.value,
-    width: hw.value,
-    height: hh.value,
-    rx: hr.value,
-    ry: hr.value,
-  }));
-  const ringStyle = useAnimatedStyle(() => ({
-    left: hx.value,
-    top: hy.value,
-    width: hw.value,
-    height: hh.value,
-    borderRadius: hr.value,
-    opacity: hw.value > 2 ? 1 : 0,
-  }));
-  const pulseStyle = useAnimatedStyle(() => ({
-    borderRadius: hr.value,
-    opacity: pulse.value < 0.2 ? (pulse.value / 0.2) * 0.7 : 0.7 * (1 - (pulse.value - 0.2) / 0.8),
-    transform: [{ scale: 1 + pulse.value * 0.12 }],
-  }));
   const cardStyle = useAnimatedStyle(() => ({
     opacity: cardVisible.value,
     transform: [{ translateY: cardY.value }, { scale: 0.96 + cardVisible.value * 0.04 }],
@@ -412,21 +390,8 @@ function TutorialOverlay() {
       onStartShouldSetResponder={() => true}
       accessibilityViewIsModal
     >
-      {/* Dim layer with the spotlight cut out */}
-      <Svg width={W} height={H} style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Defs>
-          <Mask id="tourSpotlight" x={0} y={0} width={W} height={H} maskUnits="userSpaceOnUse">
-            <Rect x={0} y={0} width={W} height={H} fill="#FFFFFF" />
-            <AnimatedRect animatedProps={spotlightProps} fill="#000000" />
-          </Mask>
-        </Defs>
-        <Rect x={0} y={0} width={W} height={H} fill={DIM} mask="url(#tourSpotlight)" />
-      </Svg>
-
-      {/* Glowing ring around the spotlight, with a soft pulse */}
-      <Animated.View pointerEvents="none" style={[styles.ring, ringStyle]}>
-        <Animated.View style={[StyleSheet.absoluteFill, styles.ringPulse, pulseStyle]} />
-      </Animated.View>
+      {/* Dim layer with the spotlight cut out, and its glowing, pulsing ring */}
+      <TutorialSpotlight hx={hx} hy={hy} hw={hw} hh={hh} hr={hr} pulse={pulse} width={W} height={H} dim={DIM} color={ORANGE} />
 
       {/* Glass card */}
       <Animated.View
@@ -481,6 +446,8 @@ function TutorialOverlay() {
                 </Text>
               </View>
             </View>
+
+            {step.illustration === 'scratch-card' ? <TutorialScratchDemo width={cardWidth - 40} /> : null}
 
             <Text style={styles.title}>{step.title}</Text>
             <Text style={styles.body}>{step.body}</Text>
@@ -543,19 +510,6 @@ const styles = StyleSheet.create({
   // No zIndex: mount order in app/_layout.tsx keeps it above the app and the
   // tab bar, but below the offline notice and the force-update gate.
   root: {},
-  ring: {
-    position: 'absolute',
-    borderWidth: 1.5,
-    borderColor: 'rgba(254, 91, 1, 0.95)',
-    shadowColor: ORANGE,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
-  },
-  ringPulse: {
-    borderWidth: 2,
-    borderColor: ORANGE,
-  },
   cardShadow: {
     position: 'absolute',
     borderRadius: 24,

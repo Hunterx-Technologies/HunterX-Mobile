@@ -77,6 +77,6 @@ it('holds celebrations while it runs', () => {
 it('every spotlight step has a unique id and a target', () => {
   const ids = TUTORIAL_STEPS.map((s) => s.id);
   expect(new Set(ids).size).toBe(ids.length);
-  // Only the first and last steps are centred cards.
-  expect(TUTORIAL_STEPS.slice(1, -1).every((s) => !!s.target)).toBe(true);
+  // Only the first and last steps, and illustrated ones, are centred cards.
+  expect(TUTORIAL_STEPS.slice(1, -1).every((s) => !!s.target || !!s.illustration)).toBe(true);
 });

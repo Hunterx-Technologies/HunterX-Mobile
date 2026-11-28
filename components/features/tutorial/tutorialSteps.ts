@@ -15,6 +15,8 @@ export type TutorialStep = {
   /** Extra room around the target, and the spotlight's corner radius. */
   padding?: number;
   radius?: number;
+  /** Something to show on the card above the title (e.g. an animated demo). */
+  illustration?: 'scratch-card';
 };
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
@@ -85,6 +87,16 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     title: 'Track every quest',
     body: 'Tap a quest’s tick box to complete it and earn XP. Done and skipped quests move to their own tabs.',
     radius: 14,
+  },
+  {
+    // Right after completing quests: show what clearing them can win.
+    id: 'scratch-reward',
+    screen: 'home',
+    icon: 'gift',
+    eyebrow: 'REWARDS',
+    title: 'Clear quests, win rewards',
+    body: 'Keep your streak going and clear quests to earn scratch cards. Scratch one to reveal vouchers, gear and more.',
+    illustration: 'scratch-card',
   },
   {
     id: 'metrics',
