@@ -90,5 +90,10 @@
   },
   "jest": {
     "preset": "jest-expo"
+  },
+  "reanimated": {
+    "staticFeatureFlags": {
+      "ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS": true
+    }
   }
 }
