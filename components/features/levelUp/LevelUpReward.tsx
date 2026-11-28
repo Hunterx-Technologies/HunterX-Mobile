@@ -1,11 +1,13 @@
 import React, { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Platform, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, G, LinearGradient, Path, RadialGradient, Stop } from 'react-native-svg';
+import { Canvas, Path as SkiaPath, Skia } from '@shopify/react-native-skia';
 import Animated, {
   Easing,
   Extrapolation,
   interpolate,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withDelay,
   withRepeat,
@@ -170,6 +172,56 @@ const Spark: React.FC<{ clock: SharedValue<number>; spark: (typeof SPARKS)[numbe
         <Path d={STAR_PATH} fill="#FFD2A8" />
       </Svg>
     </Animated.View>
+  );
+};
+
+// The star's quadratic outline (STAR_PATH) as [ctrl x, ctrl y, end x, end y] after starting at (0, -1).
+const STAR_QUADS = [
+  [0.12, -0.12, 1, 0],
+  [0.12, 0.12, 0, 1],
+  [-0.12, 0.12, -1, 0],
+  [-0.12, -0.12, 0, -1],
+];
+// Sparks fly at most this far from the badge center (plus their own size).
+const SPARK_REACH = Math.max(...SPARKS.map((s) => s.dist + s.size)) + 4;
+
+/**
+ * All the sparks as one Skia path, rebuilt on the UI thread each frame. As
+ * twelve separate moving SVG views they cost about a third of the frames in
+ * the burst on Android; one canvas draws them in a single pass.
+ */
+const SkiaSparks: React.FC<{ clock: SharedValue<number> }> = ({ clock }) => {
+  const path = useDerivedValue(() => {
+    const p = Skia.Path.Make();
+    const u = seg(clock.value, IMPACT, IMPACT + 750);
+    if (u <= 0 || u >= 1) return p;
+    const reach = cubicOut(u);
+    const grow = Math.max(0, u < 0.25 ? u / 0.25 : 1 - (u - 0.25) / 0.75);
+    for (let i = 0; i < SPARKS.length; i++) {
+      const sp = SPARKS[i];
+      const cx = SPARK_REACH + Math.cos(sp.a) * reach * sp.dist;
+      const cy = SPARK_REACH + Math.sin(sp.a) * reach * sp.dist;
+      const r = (u * sp.spin * Math.PI) / 180;
+      const k = sp.size * grow;
+      const c = Math.cos(r) * k;
+      const sn = Math.sin(r) * k;
+      // (x, y) -> center + rotate(scale(x, y)), same as translate/rotate/scale on a view.
+      p.moveTo(cx + sn, cy - c);
+      for (let j = 0; j < STAR_QUADS.length; j++) {
+        const q = STAR_QUADS[j];
+        p.quadTo(cx + c * q[0] - sn * q[1], cy + sn * q[0] + c * q[1], cx + c * q[2] - sn * q[3], cy + sn * q[2] + c * q[3]);
+      }
+      p.close();
+    }
+    return p;
+  });
+  return (
+    <Canvas
+      style={{ position: 'absolute', left: -SPARK_REACH, top: -SPARK_REACH, width: SPARK_REACH * 2, height: SPARK_REACH * 2 }}
+      pointerEvents="none"
+    >
+      <SkiaPath path={path} color="#FFD2A8" />
+    </Canvas>
   );
 };
 
@@ -349,9 +401,12 @@ const LevelBadge: React.FC<{
 
       {/* Sparks */}
       <View style={styles.sparkOrigin}>
-        {SPARKS.map((spark, i) => (
-          <Spark key={i} clock={clock} spark={spark} />
-        ))}
+        {/* Web has no Skia (CanvasKit isn't loaded), so it keeps one view per spark. */}
+        {Platform.OS === 'web' ? (
+          SPARKS.map((spark, i) => <Spark key={i} clock={clock} spark={spark} />)
+        ) : (
+          <SkiaSparks clock={clock} />
+        )}
       </View>
     </View>
   );
