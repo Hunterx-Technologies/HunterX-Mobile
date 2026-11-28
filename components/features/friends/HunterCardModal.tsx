@@ -261,15 +261,9 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
       );
     }
 
-    let primary: React.ReactNode;
-    if (relationship === 'friends') {
-      primary = (
-        <View style={[styles.friendsBadge, styles.flex1]}>
-          <Ionicons name="people" size={18} color={ORANGE} />
-          <Text style={styles.friendsBadgeText} numberOfLines={1}>Friends</Text>
-        </View>
-      );
-    } else if (relationship === 'requested') {
+    // Already friends: no "Friends" badge, Block User takes the whole row.
+    let primary: React.ReactNode = null;
+    if (relationship === 'requested') {
       primary = (
         <TouchableOpacity
           style={[styles.secondaryBtn, styles.flex1]}
@@ -288,7 +282,7 @@ export function HunterCardModal({ target, onClose, onBecameFriends }: Props) {
           )}
         </TouchableOpacity>
       );
-    } else {
+    } else if (relationship !== 'friends') {
       // none
       primary = (
         <TouchableOpacity
@@ -711,22 +705,6 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 15,
-    color: '#FFFFFF',
-  },
-  friendsBadge: {
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: 'rgba(254, 91, 1, 0.55)',
-    backgroundColor: 'rgba(24, 10, 4, 0.75)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  friendsBadgeText: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 15.5,
     color: '#FFFFFF',
   },
   friendsFooter: {
